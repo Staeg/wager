@@ -48,6 +48,24 @@ class TestSpawnOrdering:
         positions = [u.pos for u in b.units]
         assert len(positions) == len(set(positions))
 
+    def test_p1_no_ranged_in_front_column(self):
+        """No ranged P1 units should be in the frontmost column (col 5)."""
+        for seed in range(10):
+            random.seed(seed)
+            b = Battle()
+            for u in b.units:
+                if u.player == 1 and u.attack_range > 1:
+                    assert u.pos[0] < 5, f"Ranged unit {u.name} in front col 5 (seed={seed})"
+
+    def test_p2_no_ranged_in_front_column(self):
+        """No ranged P2 units should be in the frontmost column (col 11)."""
+        for seed in range(10):
+            random.seed(seed)
+            b = Battle()
+            for u in b.units:
+                if u.player == 2 and u.attack_range > 1:
+                    assert u.pos[0] > 11, f"Ranged unit {u.name} in front col 11 (seed={seed})"
+
     def test_row_variety_across_seeds(self):
         """Rows within each column should be shuffled, producing variety across seeds."""
         row_sets = []

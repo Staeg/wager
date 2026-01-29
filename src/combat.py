@@ -157,8 +157,8 @@ class Battle:
         west = [(c, r) for c in range(6) for r in range(self.ROWS)]
         east = [(c, r) for c in range(11, self.COLS) for r in range(self.ROWS)]
 
-        def _sort_positions_front_to_back(positions, descending_col):
-            """Group by column, shuffle rows within each group, flatten front-to-back."""
+        def _assign_with_range_ordering(positions, unit_list, descending_col):
+            """Assign positions front-to-back, skipping to next column when range tier changes."""
             from collections import defaultdict
             by_col = defaultdict(list)
             for c, r in positions:
@@ -166,17 +166,26 @@ class Battle:
             for col_positions in by_col.values():
                 random.shuffle(col_positions)
             sorted_cols = sorted(by_col.keys(), reverse=descending_col)
-            result = []
+
+            flat_positions = []
+            col_boundaries = []
             for col in sorted_cols:
-                result.extend(by_col[col])
-            return result
+                col_boundaries.append(len(flat_positions))
+                flat_positions.extend(by_col[col])
 
-        # P1: front = high cols (closer to enemy), melee (low range) gets front
-        west = _sort_positions_front_to_back(west, descending_col=True)
-        # P2: front = low cols (closer to enemy)
-        east = _sort_positions_front_to_back(east, descending_col=False)
+            unit_list.sort(key=lambda u: u.attack_range)
+            pos_i = 0
+            prev_range = None
+            for u in unit_list:
+                if prev_range is not None and u.attack_range != prev_range:
+                    for b in col_boundaries:
+                        if b > pos_i:
+                            pos_i = b
+                            break
+                u.pos = flat_positions[pos_i]
+                pos_i += 1
+                prev_range = u.attack_range
 
-        # Build P1 units sorted by range ascending (melee first = front)
         p1_unit_list = []
         for tup in p1_units:
             name, max_hp, damage, atk_range, count = tup[:5]
@@ -184,12 +193,9 @@ class Battle:
             heal = tup[6] if len(tup) > 6 else 0
             for _ in range(count):
                 p1_unit_list.append(Unit(name, max_hp, damage, atk_range, 1, armor, heal))
-        p1_unit_list.sort(key=lambda u: u.attack_range)
-        for i, u in enumerate(p1_unit_list):
-            u.pos = west[i]
-            self.units.append(u)
+        _assign_with_range_ordering(west, p1_unit_list, descending_col=True)
+        self.units.extend(p1_unit_list)
 
-        # Build P2 units sorted by range ascending (melee first = front)
         p2_unit_list = []
         for tup in p2_units:
             name, max_hp, damage, atk_range, count = tup[:5]
@@ -197,10 +203,8 @@ class Battle:
             heal = tup[6] if len(tup) > 6 else 0
             for _ in range(count):
                 p2_unit_list.append(Unit(name, max_hp, damage, atk_range, 2, armor, heal))
-        p2_unit_list.sort(key=lambda u: u.attack_range)
-        for i, u in enumerate(p2_unit_list):
-            u.pos = east[i]
-            self.units.append(u)
+        _assign_with_range_ordering(east, p2_unit_list, descending_col=False)
+        self.units.extend(p2_unit_list)
 
     def _new_round(self):
         alive = [u for u in self.units if u.alive]
@@ -555,6 +559,10 @@ class CombatGUI:
             self.canvas.delete("tooltip_bg")
             self._tooltip = None
 
+    def _anim_delay(self, base_ms):
+        """Scale animation delay by current speed setting (1x = 100ms auto_delay)."""
+        return max(1, int(base_ms * self.auto_delay / 100))
+
     def _animate_arrow(self, src, dst, on_done, frame=0):
         """Animate an arrow projectile from src to dst hex over several frames."""
         total_frames = 8
@@ -584,7 +592,7 @@ class CombatGUI:
             cx + 6 * math.cos(ha2), cy + 6 * math.sin(ha2),
             fill="#ffff44", tags="anim",
         )
-        self.root.after(30, lambda: self._animate_arrow(src, dst, on_done, frame + 1))
+        self.root.after(self._anim_delay(30), lambda: self._animate_arrow(src, dst, on_done, frame + 1))
 
     def _animate_slash(self, target_pos, attacker_pos, on_done, frame=0):
         """Animate a slash effect offset 25% from target toward attacker."""
@@ -621,7 +629,7 @@ class CombatGUI:
         y4 = cy - r * 0.7 * math.sin(angle2)
         self.canvas.create_line(x3, y3, x4, y4, fill=color, width=2, tags="anim")
 
-        self.root.after(40, lambda: self._animate_slash(target_pos, attacker_pos, on_done, frame + 1))
+        self.root.after(self._anim_delay(40), lambda: self._animate_slash(target_pos, attacker_pos, on_done, frame + 1))
 
     def _animate_heal(self, pos, on_done, frame=0):
         """Animate a green '+' that fades at the given hex position."""
@@ -638,7 +646,7 @@ class CombatGUI:
         self.canvas.delete("heal_anim")
         self.canvas.create_text(cx, cy, text="+", fill=green,
                                 font=("Arial", 14, "bold"), tags="heal_anim")
-        self.root.after(40, lambda: self._animate_heal(pos, on_done, frame + 1))
+        self.root.after(self._anim_delay(40), lambda: self._animate_heal(pos, on_done, frame + 1))
 
     def _play_attack_anim(self, action, on_done):
         """Play the appropriate animation for an attack action, then call on_done."""
