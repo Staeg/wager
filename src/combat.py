@@ -83,7 +83,7 @@ def bfs_path_length(start, goal, occupied, cols, rows):
 class Unit:
     _id_counter = 0
 
-    def __init__(self, name, max_hp, damage, attack_range, player, armor=0, heal=0):
+    def __init__(self, name, max_hp, damage, attack_range, player, armor=0, heal=0, sunder=0):
         Unit._id_counter += 1
         self.id = Unit._id_counter
         self.name = name
@@ -94,6 +94,7 @@ class Unit:
         self.player = player
         self.armor = armor
         self.heal = heal
+        self.sunder = sunder
         self.pos = None
         self.has_acted = False
 
@@ -115,6 +116,9 @@ class Battle:
         p1_units/p2_units: optional list of (name, max_hp, damage, range, count) tuples.
         If None, uses default hardcoded armies.
         """
+        self._init_p1_units = p1_units
+        self._init_p2_units = p2_units
+        self._init_rng_state = random.getstate()
         self.units = []
         self.turn_order = []
         self.current_index = 0
@@ -122,11 +126,12 @@ class Battle:
         self.log = []
         self.winner = None
         self.history = []
+        self._prev_round_state = None
         self._setup_armies(p1_units, p2_units)
         self._new_round()
 
     def _save_state(self):
-        unit_states = {u.id: (u.pos, u.hp, u.has_acted, u.armor, u.heal) for u in self.units}
+        unit_states = {u.id: (u.pos, u.hp, u.has_acted, u.armor, u.heal, u.sunder) for u in self.units}
         turn_ids = [u.id for u in self.turn_order]
         rng_state = random.getstate()
         self.history.append((unit_states, turn_ids, self.current_index,
@@ -138,20 +143,21 @@ class Battle:
         unit_states, turn_ids, self.current_index, self.round_num, self.log, self.winner, rng_state = self.history.pop()
         random.setstate(rng_state)
         id_to_unit = {u.id: u for u in self.units}
-        for uid, (pos, hp, acted, armor, heal) in unit_states.items():
+        for uid, (pos, hp, acted, armor, heal, sunder) in unit_states.items():
             u = id_to_unit[uid]
             u.pos = pos
             u.hp = hp
             u.has_acted = acted
             u.armor = armor
             u.heal = heal
+            u.sunder = sunder
         self.turn_order = [id_to_unit[uid] for uid in turn_ids]
 
     def _setup_armies(self, p1_units=None, p2_units=None):
         if p1_units is None:
             p1_units = [("Footman", 8, 2, 1, 10), ("Priest", 2, 1, 3, 5, 0, 1)]
         if p2_units is None:
-            p2_units = [("Skirmisher", 6, 1, 3, 10), ("Knight", 12, 1, 1, 5, 1, 0)]
+            p2_units = [("Archer", 4, 1, 4, 10), ("Knight", 12, 1, 1, 5, 1, 0)]
 
         # P1 western zone: cols 0..5, P2 eastern zone: cols 11..16
         west = [(c, r) for c in range(6) for r in range(self.ROWS)]
@@ -191,8 +197,9 @@ class Battle:
             name, max_hp, damage, atk_range, count = tup[:5]
             armor = tup[5] if len(tup) > 5 else 0
             heal = tup[6] if len(tup) > 6 else 0
+            sunder = tup[7] if len(tup) > 7 else 0
             for _ in range(count):
-                p1_unit_list.append(Unit(name, max_hp, damage, atk_range, 1, armor, heal))
+                p1_unit_list.append(Unit(name, max_hp, damage, atk_range, 1, armor, heal, sunder))
         _assign_with_range_ordering(west, p1_unit_list, descending_col=True)
         self.units.extend(p1_unit_list)
 
@@ -201,12 +208,24 @@ class Battle:
             name, max_hp, damage, atk_range, count = tup[:5]
             armor = tup[5] if len(tup) > 5 else 0
             heal = tup[6] if len(tup) > 6 else 0
+            sunder = tup[7] if len(tup) > 7 else 0
             for _ in range(count):
-                p2_unit_list.append(Unit(name, max_hp, damage, atk_range, 2, armor, heal))
+                p2_unit_list.append(Unit(name, max_hp, damage, atk_range, 2, armor, heal, sunder))
         _assign_with_range_ordering(east, p2_unit_list, descending_col=False)
         self.units.extend(p2_unit_list)
 
+    def _snapshot(self):
+        return frozenset((u.id, u.hp, u.pos, u.armor) for u in self.units if u.alive)
+
     def _new_round(self):
+        # Stalemate detection: if state unchanged from previous round end
+        snap = self._snapshot()
+        if self._prev_round_state is not None and snap == self._prev_round_state:
+            self.winner = 0  # draw
+            self.log.append("Stalemate - no progress possible. Battle is a draw!")
+            return
+        self._prev_round_state = snap
+
         alive = [u for u in self.units if u.alive]
         random.shuffle(alive)
         self.turn_order = alive
@@ -230,7 +249,7 @@ class Battle:
         """
         self._save_state()
         self.last_action = None
-        if self.winner:
+        if self.winner is not None:
             return False
 
         # check win condition
@@ -271,6 +290,8 @@ class Battle:
             target.hp -= actual
             if target.armor > 0 and actual < unit.damage:
                 self.log.append(f"{unit} attacks {target} for {actual} dmg ({target.armor} blocked by armor)")
+            elif target.armor < 0:
+                self.log.append(f"{unit} attacks {target} for {actual} dmg ({-target.armor} extra from sundered armor)")
             else:
                 self.log.append(f"{unit} attacks {target} for {actual} dmg")
             killed = not target.alive
@@ -301,6 +322,8 @@ class Battle:
                 target.hp -= actual
                 if target.armor > 0 and actual < unit.damage:
                     self.log.append(f"  {unit} attacks {target} for {actual} dmg ({target.armor} blocked by armor)")
+                elif target.armor < 0:
+                    self.log.append(f"  {unit} attacks {target} for {actual} dmg ({-target.armor} extra from sundered armor)")
                 else:
                     self.log.append(f"  {unit} attacks {target} for {actual} dmg")
                 killed = not target.alive
@@ -325,6 +348,18 @@ class Battle:
                 if self.last_action is None:
                     self.last_action = {}
                 self.last_action["heal_pos"] = heal_target.pos
+
+        # Sunder ability (reduce target armor)
+        if unit.sunder > 0 and unit.alive:
+            enemies_in_range = [e for e in self.units if e.alive and e.player != unit.player
+                                and hex_distance(unit.pos, e.pos) <= unit.attack_range]
+            if enemies_in_range:
+                sunder_target = random.choice(enemies_in_range)
+                sunder_target.armor -= unit.sunder
+                self.log.append(f"  {unit} sunders {sunder_target}'s armor by {unit.sunder} (now {sunder_target.armor})")
+                if self.last_action is None:
+                    self.last_action = {}
+                self.last_action["sunder_pos"] = sunder_target.pos
 
         unit.has_acted = True
         self.current_index += 1
@@ -401,7 +436,7 @@ class CombatGUI:
     def _load_sprites(self):
         asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
         self._sprite_imgs = {}
-        for name in ("footman", "skirmisher", "priest", "knight"):
+        for name in ("footman", "archer", "priest", "knight", "mage"):
             img = Image.open(os.path.join(asset_dir, f"{name}.png")).convert("RGBA")
             bright = img
             faded = ImageEnhance.Brightness(img).enhance(0.5)
@@ -482,8 +517,11 @@ class CombatGUI:
         p1_str = "  ".join(f"{n}:{c}" for n, c in p1_counts.items())
         p2_str = "  ".join(f"{n}:{c}" for n, c in p2_counts.items())
         self.score_var.set(f"P1 [{p1_str}]  |  P2 [{p2_str}]")
-        if b.winner:
-            self.status_var.set(f"Player {b.winner} wins!")
+        if b.winner is not None:
+            if b.winner == 0:
+                self.status_var.set("Stalemate - Draw!")
+            else:
+                self.status_var.set(f"Player {b.winner} wins!")
             if self.on_complete and not self.return_btn:
                 p1_survivors = sum(1 for u in b.units if u.alive and u.player == 1)
                 p2_survivors = sum(1 for u in b.units if u.alive and u.player == 2)
@@ -683,7 +721,8 @@ class CombatGUI:
             self.return_btn.destroy()
             self.return_btn = None
         Unit._id_counter = 0
-        self.battle = Battle()
+        random.setstate(self.battle._init_rng_state)
+        self.battle = Battle(p1_units=self.battle._init_p1_units, p2_units=self.battle._init_p2_units)
         self._draw()
 
     def _speed_down(self):

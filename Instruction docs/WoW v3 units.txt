@@ -1,13 +1,34 @@
 ﻿Wager of War units
-Player 1
 *  Footman
    * 8 Max HP
    * 2 Damage
    * 1 Range
-Full army: 10 Footmen
-Player 2
-* Skirmisher
-   * 6 Max HP
+   * 6 Value
+* Archer
+   * 4 Max HP
+   * 1 Damage
+   * 4 Range
+   * 6 Value
+* Archer
+   * 4 Max HP
+   * 1 Damage
+   * 4 Range
+   * 6 Value
+* Knight
+   * 12 Max HP
+   * 1 Damage
+   * 1 Range
+   * 12 Value
+   * Armor 1: reduce all incoming attacks by 1
+* Priest
+   * 2 Max HP
    * 1 Damage
    * 3 Range
-Full army: 16 Skirmishers
+   * 10 Value
+   * Heal 1: at the end of turn, heal random ally in range for 1
+* Mage
+   * 2 Max HP
+   * 0 damage
+   * 3 Range
+   * 20 Value
+   * Sunder 1: reduce target’s armor by 1 after attacking them
