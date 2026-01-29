@@ -156,30 +156,51 @@ class Battle:
         # P1 western zone: cols 0..5, P2 eastern zone: cols 11..16
         west = [(c, r) for c in range(6) for r in range(self.ROWS)]
         east = [(c, r) for c in range(11, self.COLS) for r in range(self.ROWS)]
-        random.shuffle(west)
-        random.shuffle(east)
 
-        wi = 0
+        def _sort_positions_front_to_back(positions, descending_col):
+            """Group by column, shuffle rows within each group, flatten front-to-back."""
+            from collections import defaultdict
+            by_col = defaultdict(list)
+            for c, r in positions:
+                by_col[c].append((c, r))
+            for col_positions in by_col.values():
+                random.shuffle(col_positions)
+            sorted_cols = sorted(by_col.keys(), reverse=descending_col)
+            result = []
+            for col in sorted_cols:
+                result.extend(by_col[col])
+            return result
+
+        # P1: front = high cols (closer to enemy), melee (low range) gets front
+        west = _sort_positions_front_to_back(west, descending_col=True)
+        # P2: front = low cols (closer to enemy)
+        east = _sort_positions_front_to_back(east, descending_col=False)
+
+        # Build P1 units sorted by range ascending (melee first = front)
+        p1_unit_list = []
         for tup in p1_units:
             name, max_hp, damage, atk_range, count = tup[:5]
             armor = tup[5] if len(tup) > 5 else 0
             heal = tup[6] if len(tup) > 6 else 0
             for _ in range(count):
-                u = Unit(name, max_hp, damage, atk_range, 1, armor, heal)
-                u.pos = west[wi]
-                wi += 1
-                self.units.append(u)
+                p1_unit_list.append(Unit(name, max_hp, damage, atk_range, 1, armor, heal))
+        p1_unit_list.sort(key=lambda u: u.attack_range)
+        for i, u in enumerate(p1_unit_list):
+            u.pos = west[i]
+            self.units.append(u)
 
-        ei = 0
+        # Build P2 units sorted by range ascending (melee first = front)
+        p2_unit_list = []
         for tup in p2_units:
             name, max_hp, damage, atk_range, count = tup[:5]
             armor = tup[5] if len(tup) > 5 else 0
             heal = tup[6] if len(tup) > 6 else 0
             for _ in range(count):
-                u = Unit(name, max_hp, damage, atk_range, 2, armor, heal)
-                u.pos = east[ei]
-                ei += 1
-                self.units.append(u)
+                p2_unit_list.append(Unit(name, max_hp, damage, atk_range, 2, armor, heal))
+        p2_unit_list.sort(key=lambda u: u.attack_range)
+        for i, u in enumerate(p2_unit_list):
+            u.pos = east[i]
+            self.units.append(u)
 
     def _new_round(self):
         alive = [u for u in self.units if u.alive]
@@ -330,8 +351,23 @@ class CombatGUI:
         self.auto_btn = tk.Button(top, text="Auto", command=self.toggle_auto, font=("Arial", 12))
         self.auto_btn.pack(side=tk.LEFT, padx=5)
 
+        # Speed controls
+        self.speed_levels = [(300, "0.3x"), (200, "0.5x"), (100, "1x"), (50, "2x"), (25, "4x")]
+        self.speed_index = 2
+        self.auto_delay = self.speed_levels[self.speed_index][0]
+
+        self.speed_down_btn = tk.Button(top, text="-", command=self._speed_down, font=("Arial", 12), width=2)
+        self.speed_down_btn.pack(side=tk.LEFT)
+        self.speed_var = tk.StringVar(value=self.speed_levels[self.speed_index][1])
+        tk.Label(top, textvariable=self.speed_var, font=("Arial", 11), width=4).pack(side=tk.LEFT)
+        self.speed_up_btn = tk.Button(top, text="+", command=self._speed_up, font=("Arial", 12), width=2)
+        self.speed_up_btn.pack(side=tk.LEFT, padx=(0, 5))
+
         self.undo_btn = tk.Button(top, text="Undo", command=self.on_undo, font=("Arial", 12))
         self.undo_btn.pack(side=tk.LEFT, padx=5)
+
+        self.skip_btn = tk.Button(top, text="Skip", command=self.on_skip, font=("Arial", 12))
+        self.skip_btn.pack(side=tk.LEFT, padx=5)
 
         self.reset_btn = tk.Button(top, text="Reset", command=self.on_reset, font=("Arial", 12))
         self.reset_btn.pack(side=tk.LEFT)
@@ -642,6 +678,25 @@ class CombatGUI:
         self.battle = Battle()
         self._draw()
 
+    def _speed_down(self):
+        if self.speed_index > 0:
+            self.speed_index -= 1
+            self.auto_delay = self.speed_levels[self.speed_index][0]
+            self.speed_var.set(self.speed_levels[self.speed_index][1])
+
+    def _speed_up(self):
+        if self.speed_index < len(self.speed_levels) - 1:
+            self.speed_index += 1
+            self.auto_delay = self.speed_levels[self.speed_index][0]
+            self.speed_var.set(self.speed_levels[self.speed_index][1])
+
+    def on_skip(self):
+        self.auto_running = False
+        self.auto_btn.config(text="Auto")
+        while self.battle.step():
+            pass
+        self._draw()
+
     def toggle_auto(self):
         self.auto_running = not self.auto_running
         self.auto_btn.config(text="Stop" if self.auto_running else "Auto")
@@ -657,7 +712,7 @@ class CombatGUI:
 
         def schedule_next():
             if cont:
-                self.root.after(100, self._auto_step)
+                self.root.after(self.auto_delay, self._auto_step)
             else:
                 self.auto_running = False
                 self.auto_btn.config(text="Auto")
