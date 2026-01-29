@@ -56,12 +56,34 @@ def bfs_next_step(start, goal, occupied, cols, rows):
     return start  # no path found
 
 
+def bfs_path_length(start, goal, occupied, cols, rows):
+    """Return the BFS path length from start to goal, avoiding occupied hexes.
+    The goal itself is allowed even if occupied. Returns a large number if no path."""
+    from collections import deque
+    if start == goal:
+        return 0
+    queue = deque()
+    queue.append((start, 0))
+    visited = {start}
+    while queue:
+        current, dist = queue.popleft()
+        for nb in hex_neighbors(current[0], current[1], cols, rows):
+            if nb in visited:
+                continue
+            visited.add(nb)
+            if nb == goal:
+                return dist + 1
+            if nb not in occupied:
+                queue.append((nb, dist + 1))
+    return 9999
+
+
 # --- Game classes ---
 
 class Unit:
     _id_counter = 0
 
-    def __init__(self, name, max_hp, damage, attack_range, player):
+    def __init__(self, name, max_hp, damage, attack_range, player, armor=0, heal=0):
         Unit._id_counter += 1
         self.id = Unit._id_counter
         self.name = name
@@ -70,6 +92,8 @@ class Unit:
         self.damage = damage
         self.attack_range = attack_range
         self.player = player
+        self.armor = armor
+        self.heal = heal
         self.pos = None
         self.has_acted = False
 
@@ -85,7 +109,12 @@ class Battle:
     COLS = 17
     ROWS = 11
 
-    def __init__(self):
+    def __init__(self, p1_units=None, p2_units=None):
+        """Initialize battle.
+
+        p1_units/p2_units: optional list of (name, max_hp, damage, range, count) tuples.
+        If None, uses default hardcoded armies.
+        """
         self.units = []
         self.turn_order = []
         self.current_index = 0
@@ -93,42 +122,64 @@ class Battle:
         self.log = []
         self.winner = None
         self.history = []
-        self._setup_armies()
+        self._setup_armies(p1_units, p2_units)
         self._new_round()
 
     def _save_state(self):
-        unit_states = {u.id: (u.pos, u.hp, u.has_acted) for u in self.units}
+        unit_states = {u.id: (u.pos, u.hp, u.has_acted, u.armor, u.heal) for u in self.units}
         turn_ids = [u.id for u in self.turn_order]
+        rng_state = random.getstate()
         self.history.append((unit_states, turn_ids, self.current_index,
-                             self.round_num, list(self.log), self.winner))
+                             self.round_num, list(self.log), self.winner, rng_state))
 
     def undo(self):
         if not self.history:
             return
-        unit_states, turn_ids, self.current_index, self.round_num, self.log, self.winner = self.history.pop()
+        unit_states, turn_ids, self.current_index, self.round_num, self.log, self.winner, rng_state = self.history.pop()
+        random.setstate(rng_state)
         id_to_unit = {u.id: u for u in self.units}
-        for uid, (pos, hp, acted) in unit_states.items():
+        for uid, (pos, hp, acted, armor, heal) in unit_states.items():
             u = id_to_unit[uid]
             u.pos = pos
             u.hp = hp
             u.has_acted = acted
+            u.armor = armor
+            u.heal = heal
         self.turn_order = [id_to_unit[uid] for uid in turn_ids]
 
-    def _setup_armies(self):
+    def _setup_armies(self, p1_units=None, p2_units=None):
+        if p1_units is None:
+            p1_units = [("Footman", 8, 2, 1, 10), ("Priest", 2, 1, 3, 5, 0, 1)]
+        if p2_units is None:
+            p2_units = [("Skirmisher", 6, 1, 3, 10), ("Knight", 12, 1, 1, 5, 1, 0)]
+
         # P1 western zone: cols 0..5, P2 eastern zone: cols 11..16
         west = [(c, r) for c in range(6) for r in range(self.ROWS)]
         east = [(c, r) for c in range(11, self.COLS) for r in range(self.ROWS)]
         random.shuffle(west)
         random.shuffle(east)
 
-        for i in range(10):
-            u = Unit("Footman", 8, 2, 1, 1)
-            u.pos = west[i]
-            self.units.append(u)
-        for i in range(10):
-            u = Unit("Skirmisher", 6, 1, 3, 2)
-            u.pos = east[i]
-            self.units.append(u)
+        wi = 0
+        for tup in p1_units:
+            name, max_hp, damage, atk_range, count = tup[:5]
+            armor = tup[5] if len(tup) > 5 else 0
+            heal = tup[6] if len(tup) > 6 else 0
+            for _ in range(count):
+                u = Unit(name, max_hp, damage, atk_range, 1, armor, heal)
+                u.pos = west[wi]
+                wi += 1
+                self.units.append(u)
+
+        ei = 0
+        for tup in p2_units:
+            name, max_hp, damage, atk_range, count = tup[:5]
+            armor = tup[5] if len(tup) > 5 else 0
+            heal = tup[6] if len(tup) > 6 else 0
+            for _ in range(count):
+                u = Unit(name, max_hp, damage, atk_range, 2, armor, heal)
+                u.pos = east[ei]
+                ei += 1
+                self.units.append(u)
 
     def _new_round(self):
         alive = [u for u in self.units if u.alive]
@@ -144,8 +195,16 @@ class Battle:
         return {u.pos for u in self.units if u.alive}
 
     def step(self):
-        """Execute one unit's turn. Returns True if battle continues."""
+        """Execute one unit's turn. Returns True if battle continues.
+
+        Also sets self.last_action to a dict describing what happened:
+            {"type": "attack", "attacker_pos": (c,r), "target_pos": (c,r), "ranged": bool, "killed": bool}
+            {"type": "move", "from": (c,r), "to": (c,r)}
+            {"type": "move_attack", "from": (c,r), "to": (c,r), "target_pos": (c,r), "ranged": bool, "killed": bool}
+            None if no action (battle over)
+        """
         self._save_state()
+        self.last_action = None
         if self.winner:
             return False
 
@@ -182,17 +241,27 @@ class Battle:
 
         if in_range:
             target = random.choice(in_range)
-            target.hp -= unit.damage
-            self.log.append(f"{unit} attacks {target} for {unit.damage} dmg")
-            if not target.alive:
+            ranged = unit.attack_range > 1
+            actual = max(0, unit.damage - target.armor)
+            target.hp -= actual
+            if target.armor > 0 and actual < unit.damage:
+                self.log.append(f"{unit} attacks {target} for {actual} dmg ({target.armor} blocked by armor)")
+            else:
+                self.log.append(f"{unit} attacks {target} for {actual} dmg")
+            killed = not target.alive
+            if killed:
                 self.log.append(f"  {target.name}(P{target.player}) dies!")
+            self.last_action = {
+                "type": "attack", "attacker_pos": unit.pos, "target_pos": target.pos,
+                "ranged": ranged, "killed": killed,
+            }
         else:
-            # move toward closest enemy
-            closest_dist = min(hex_distance(unit.pos, e.pos) for e in enemies)
-            closest = [e for e in enemies if hex_distance(unit.pos, e.pos) == closest_dist]
-            target_enemy = random.choice(closest)
-
+            # move toward closest enemy by actual path length
             occupied = self._occupied() - {unit.pos}
+            enemy_dists = [(bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e) for e in enemies]
+            closest_dist = min(d for d, _ in enemy_dists)
+            closest = [e for d, e in enemy_dists if d == closest_dist]
+            target_enemy = random.choice(closest)
             next_pos = bfs_next_step(unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS)
             old = unit.pos
             unit.pos = next_pos
@@ -202,10 +271,35 @@ class Battle:
             in_range = [e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range]
             if in_range:
                 target = random.choice(in_range)
-                target.hp -= unit.damage
-                self.log.append(f"  {unit} attacks {target} for {unit.damage} dmg")
-                if not target.alive:
+                ranged = unit.attack_range > 1
+                actual = max(0, unit.damage - target.armor)
+                target.hp -= actual
+                if target.armor > 0 and actual < unit.damage:
+                    self.log.append(f"  {unit} attacks {target} for {actual} dmg ({target.armor} blocked by armor)")
+                else:
+                    self.log.append(f"  {unit} attacks {target} for {actual} dmg")
+                killed = not target.alive
+                if killed:
                     self.log.append(f"  {target.name}(P{target.player}) dies!")
+                self.last_action = {
+                    "type": "move_attack", "from": old, "to": next_pos,
+                    "target_pos": target.pos, "ranged": ranged, "killed": killed,
+                }
+            else:
+                self.last_action = {"type": "move", "from": old, "to": next_pos}
+
+        # Heal ability
+        if unit.heal > 0 and unit.alive:
+            allies = [a for a in self.units if a.alive and a.player == unit.player
+                      and a.hp < a.max_hp and hex_distance(unit.pos, a.pos) <= unit.attack_range]
+            if allies:
+                heal_target = random.choice(allies)
+                healed = min(unit.heal, heal_target.max_hp - heal_target.hp)
+                heal_target.hp += healed
+                self.log.append(f"  {unit} heals {heal_target} for {healed} HP")
+                if self.last_action is None:
+                    self.last_action = {}
+                self.last_action["heal_pos"] = heal_target.pos
 
         unit.has_acted = True
         self.current_index += 1
@@ -217,10 +311,14 @@ class Battle:
 class CombatGUI:
     HEX_SIZE = 32
 
-    def __init__(self, root):
+    def __init__(self, root, battle=None, on_complete=None):
         self.root = root
-        root.title("Wager of War v3 - Combat")
-        self.battle = Battle()
+        try:
+            root.title("Wager of War v3 - Combat")
+        except AttributeError:
+            pass
+        self.battle = battle if battle is not None else Battle()
+        self.on_complete = on_complete
 
         # layout
         top = tk.Frame(root)
@@ -252,14 +350,18 @@ class CombatGUI:
         self.log_text = tk.Text(root, height=8, font=("Consolas", 9), state=tk.DISABLED)
         self.log_text.pack(fill=tk.X, padx=5, pady=5)
 
+        self.return_btn = None
         self.auto_running = False
+        self._tooltip = None
+        self.canvas.bind("<Motion>", self._on_hover)
+        self.canvas.bind("<Leave>", self._on_leave)
         self._load_sprites()
         self._draw()
 
     def _load_sprites(self):
         asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
         self._sprite_imgs = {}
-        for name in ("footman", "skirmisher"):
+        for name in ("footman", "skirmisher", "priest", "knight"):
             img = Image.open(os.path.join(asset_dir, f"{name}.png")).convert("RGBA")
             bright = img
             faded = ImageEnhance.Brightness(img).enhance(0.5)
@@ -314,7 +416,7 @@ class CombatGUI:
                 continue
             cx = self._hex_x(u.pos[0], u.pos[1])
             cy = self._hex_y(u.pos[0], u.pos[1])
-            sprite_name = "footman" if u.name == "Footman" else "skirmisher"
+            sprite_name = u.name.lower()
             sprite = self._get_sprite(sprite_name, u.has_acted)
             self._sprite_refs.append(sprite)
             self.canvas.create_image(cx, cy, image=sprite)
@@ -330,11 +432,30 @@ class CombatGUI:
             self.canvas.create_rectangle(bx, by, bx+bar_w*hp_frac, by+bar_h, fill=bar_color, outline="")
 
         # update status
-        p1 = sum(1 for u in b.units if u.alive and u.player == 1)
-        p2 = sum(1 for u in b.units if u.alive and u.player == 2)
-        self.score_var.set(f"P1 Footmen: {p1}  |  P2 Skirmishers: {p2}")
+        p1_counts = {}
+        p2_counts = {}
+        for u in b.units:
+            if not u.alive:
+                continue
+            d = p1_counts if u.player == 1 else p2_counts
+            d[u.name] = d.get(u.name, 0) + 1
+        p1_str = "  ".join(f"{n}:{c}" for n, c in p1_counts.items())
+        p2_str = "  ".join(f"{n}:{c}" for n, c in p2_counts.items())
+        self.score_var.set(f"P1 [{p1_str}]  |  P2 [{p2_str}]")
         if b.winner:
             self.status_var.set(f"Player {b.winner} wins!")
+            if self.on_complete and not self.return_btn:
+                p1_survivors = sum(1 for u in b.units if u.alive and u.player == 1)
+                p2_survivors = sum(1 for u in b.units if u.alive and u.player == 2)
+                self.return_btn = tk.Button(
+                    self.canvas, text="Return to Overworld", font=("Arial", 14),
+                    command=lambda: self.on_complete(b.winner, p1_survivors, p2_survivors)
+                )
+                self.canvas.create_window(
+                    self.canvas.winfo_reqwidth() // 2,
+                    self.canvas.winfo_reqheight() // 2,
+                    window=self.return_btn
+                )
         else:
             self.status_var.set(f"Round {b.round_num}")
 
@@ -346,9 +467,166 @@ class CombatGUI:
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
 
+    def _unit_at_pixel(self, px, py):
+        """Return the unit closest to pixel coords, if within hex radius."""
+        best_unit = None
+        best_dist = float("inf")
+        for u in self.battle.units:
+            if not u.alive:
+                continue
+            cx = self._hex_x(u.pos[0], u.pos[1])
+            cy = self._hex_y(u.pos[0], u.pos[1])
+            d = math.hypot(px - cx, py - cy)
+            if d < self.HEX_SIZE * 0.8 and d < best_dist:
+                best_dist = d
+                best_unit = u
+        return best_unit
+
+    def _on_hover(self, event):
+        unit = self._unit_at_pixel(event.x, event.y)
+        if unit:
+            text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
+            if unit.armor > 0:
+                text += f"  Armor:{unit.armor}"
+            if unit.heal > 0:
+                text += f"  Heal:{unit.heal}"
+            if self._tooltip is None:
+                self._tooltip = self.canvas.create_text(
+                    event.x, event.y - 20, text=text,
+                    fill="white", font=("Arial", 10, "bold"),
+                    anchor="s", tags="tooltip",
+                )
+                self._tooltip_bg = self.canvas.create_rectangle(
+                    0, 0, 0, 0, fill="#222", outline="#888", tags="tooltip_bg",
+                )
+            self.canvas.coords(self._tooltip, event.x, event.y - 20)
+            self.canvas.itemconfigure(self._tooltip, text=text)
+            bbox = self.canvas.bbox(self._tooltip)
+            if bbox:
+                self.canvas.coords(self._tooltip_bg,
+                                   bbox[0] - 4, bbox[1] - 2, bbox[2] + 4, bbox[3] + 2)
+                self.canvas.tag_raise("tooltip_bg")
+                self.canvas.tag_raise("tooltip")
+        else:
+            self._hide_tooltip()
+
+    def _on_leave(self, _event):
+        self._hide_tooltip()
+
+    def _hide_tooltip(self):
+        if self._tooltip is not None:
+            self.canvas.delete("tooltip")
+            self.canvas.delete("tooltip_bg")
+            self._tooltip = None
+
+    def _animate_arrow(self, src, dst, on_done, frame=0):
+        """Animate an arrow projectile from src to dst hex over several frames."""
+        total_frames = 8
+        if frame > total_frames:
+            self.canvas.delete("anim")
+            on_done()
+            return
+
+        t = frame / total_frames
+        sx, sy = self._hex_x(src[0], src[1]), self._hex_y(src[0], src[1])
+        dx, dy = self._hex_x(dst[0], dst[1]), self._hex_y(dst[0], dst[1])
+        cx = sx + (dx - sx) * t
+        cy = sy + (dy - sy) * t
+
+        self.canvas.delete("anim")
+        # Arrow: a line with a triangle head
+        angle = math.atan2(dy - sy, dx - sx)
+        tail_x = cx - 10 * math.cos(angle)
+        tail_y = cy - 10 * math.sin(angle)
+        self.canvas.create_line(tail_x, tail_y, cx, cy, fill="#ffff44", width=2, tags="anim")
+        # Arrowhead
+        ha1 = angle + math.radians(150)
+        ha2 = angle - math.radians(150)
+        self.canvas.create_polygon(
+            cx, cy,
+            cx + 6 * math.cos(ha1), cy + 6 * math.sin(ha1),
+            cx + 6 * math.cos(ha2), cy + 6 * math.sin(ha2),
+            fill="#ffff44", tags="anim",
+        )
+        self.root.after(30, lambda: self._animate_arrow(src, dst, on_done, frame + 1))
+
+    def _animate_slash(self, target_pos, attacker_pos, on_done, frame=0):
+        """Animate a slash effect offset 25% from target toward attacker."""
+        total_frames = 6
+        if frame > total_frames:
+            self.canvas.delete("anim")
+            on_done()
+            return
+
+        tx = self._hex_x(target_pos[0], target_pos[1])
+        ty = self._hex_y(target_pos[0], target_pos[1])
+        ax = self._hex_x(attacker_pos[0], attacker_pos[1])
+        ay = self._hex_y(attacker_pos[0], attacker_pos[1])
+        # Place slash 40% of the way from target toward attacker
+        cx = tx + (ax - tx) * 0.4
+        cy = ty + (ay - ty) * 0.4
+        self.canvas.delete("anim")
+
+        t = frame / total_frames
+        r = self.HEX_SIZE * 0.4
+        sweep = -60 + 120 * t
+        angle = math.radians(sweep)
+        x1 = cx + r * math.cos(angle)
+        y1 = cy + r * math.sin(angle)
+        x2 = cx - r * math.cos(angle)
+        y2 = cy - r * math.sin(angle)
+        gb = int(255 * (1 - t))
+        color = f"#ff{gb:02x}{gb:02x}"
+        self.canvas.create_line(x1, y1, x2, y2, fill=color, width=3, tags="anim")
+        angle2 = math.radians(sweep + 30)
+        x3 = cx + r * 0.7 * math.cos(angle2)
+        y3 = cy + r * 0.7 * math.sin(angle2)
+        x4 = cx - r * 0.7 * math.cos(angle2)
+        y4 = cy - r * 0.7 * math.sin(angle2)
+        self.canvas.create_line(x3, y3, x4, y4, fill=color, width=2, tags="anim")
+
+        self.root.after(40, lambda: self._animate_slash(target_pos, attacker_pos, on_done, frame + 1))
+
+    def _animate_heal(self, pos, on_done, frame=0):
+        """Animate a green '+' that fades at the given hex position."""
+        total_frames = 10
+        if frame > total_frames:
+            self.canvas.delete("heal_anim")
+            on_done()
+            return
+        t = frame / total_frames
+        cx = self._hex_x(pos[0], pos[1])
+        cy = self._hex_y(pos[0], pos[1]) - t * 12  # float upward
+        alpha = int(255 * (1 - t))
+        green = f"#00{alpha:02x}00"
+        self.canvas.delete("heal_anim")
+        self.canvas.create_text(cx, cy, text="+", fill=green,
+                                font=("Arial", 14, "bold"), tags="heal_anim")
+        self.root.after(40, lambda: self._animate_heal(pos, on_done, frame + 1))
+
+    def _play_attack_anim(self, action, on_done):
+        """Play the appropriate animation for an attack action, then call on_done."""
+        attacker_pos = action.get("attacker_pos", action.get("to"))
+        if action["ranged"]:
+            self._animate_arrow(attacker_pos, action["target_pos"], on_done)
+        else:
+            self._animate_slash(action["target_pos"], attacker_pos, on_done)
+
+    def _play_heal_if_needed(self, action, on_done):
+        """If action has a heal_pos, play heal animation then call on_done, else call on_done immediately."""
+        if action and action.get("heal_pos"):
+            self._animate_heal(action["heal_pos"], on_done)
+        else:
+            on_done()
+
     def on_step(self):
-        self.battle.step()
+        cont = self.battle.step()
+        action = self.battle.last_action
         self._draw()
+        if action and action.get("type") in ("attack", "move_attack"):
+            self._play_attack_anim(action, lambda: self._play_heal_if_needed(action, lambda: None))
+        else:
+            self._play_heal_if_needed(action, lambda: None)
 
     def on_undo(self):
         self.battle.undo()
@@ -357,6 +635,9 @@ class CombatGUI:
     def on_reset(self):
         self.auto_running = False
         self.auto_btn.config(text="Auto")
+        if self.return_btn:
+            self.return_btn.destroy()
+            self.return_btn = None
         Unit._id_counter = 0
         self.battle = Battle()
         self._draw()
@@ -372,11 +653,19 @@ class CombatGUI:
             return
         cont = self.battle.step()
         self._draw()
-        if cont:
-            self.root.after(150, self._auto_step)
+        action = self.battle.last_action
+
+        def schedule_next():
+            if cont:
+                self.root.after(100, self._auto_step)
+            else:
+                self.auto_running = False
+                self.auto_btn.config(text="Auto")
+
+        if action and action.get("type") in ("attack", "move_attack"):
+            self._play_attack_anim(action, lambda: self._play_heal_if_needed(action, schedule_next))
         else:
-            self.auto_running = False
-            self.auto_btn.config(text="Auto")
+            self._play_heal_if_needed(action, schedule_next)
 
 
 def main():
