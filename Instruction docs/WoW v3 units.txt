@@ -1,0 +1,13 @@
+﻿Wager of War units
+Player 1
+*  Footman
+   * 8 Max HP
+   * 2 Damage
+   * 1 Range
+Full army: 10 Footmen
+Player 2
+* Skirmisher
+   * 6 Max HP
+   * 1 Damage
+   * 3 Range
+Full army: 16 Skirmishers
