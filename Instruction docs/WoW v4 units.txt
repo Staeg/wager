@@ -25,10 +25,11 @@ Weaver
    * Push 1: moves the target back 1 hex horizontally if possible after attacking
 * Conduit: 5/2/3/10
    * Aura 1 - Amplify 1: passively increases the values of ally abilities by 1 for all allies within 1 hex
+      * Does not Amplify other Amplify effects or negative effects (such as Armor -X) and drawbacks (such as Charge Y)
 * Seeker: 3/1/4/10
    * Ramp 1: increases attack damage by 1 after successful attacks
 * Savant: 6/4/4/25
-   * Barrage 1: deals 1 damage to all enemies adjacent to attack target
+   * Splash 1: deals 1 damage to all enemies adjacent to attack target after attacking
 Artificer
 * Tincan: 11/2/1/6
 * Golem: 16/2/1/14
@@ -36,7 +37,7 @@ Artificer
 * Kitboy: 6/2/2/10
    * Repair 1: at the end of turn, heal all adjacent allies by 1
 * Artillery: 8/4/4/25
-   * Bombardment 2/6: at the end of turn, additionally deal 2 damage to a random enemy within 6 range
+   * Followup 2/6: at the end of turn, additionally deal 2 damage to a random enemy within 6 range
 Purifier
 * Penitent: 5/1/1/5
    * Rage 1: gain 1 attack damage after taking damage
