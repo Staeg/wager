@@ -562,9 +562,9 @@ class OverworldGUI:
             if self.battle_log is not None:
                 self.battle_log.insert(tk.END, msg["summary"])
                 self._battle_log_ids.append(msg["battle_id"])
-            # Close battle viewer after a delay
+            # Wait for all queued steps to finish playing, then close
             if self._viewing_battle:
-                self.root.after(1500, self._close_battle_viewer)
+                self._wait_for_battle_done()
 
         elif msg_type == "replay_data":
             self._show_replay(msg)
@@ -578,6 +578,13 @@ class OverworldGUI:
 
         elif msg_type == "error":
             self.status_var.set(f"Error: {msg['message']}")
+
+    def _wait_for_battle_done(self):
+        """Poll until the viewer GUI has finished playing all queued steps."""
+        if hasattr(self, '_viewer_gui') and (self._viewer_gui._step_queue or self._viewer_gui._playing_step):
+            self.root.after(200, self._wait_for_battle_done)
+            return
+        self.root.after(1500, self._close_battle_viewer)
 
     def _close_battle_viewer(self):
         """Close the battle viewer and return to overworld."""
