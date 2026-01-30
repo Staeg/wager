@@ -14,6 +14,20 @@ UNIT_STATS = {
 
 ARMY_BUDGET = 60
 
+PLAYER_COLORS = {
+    1: "#4488ff",
+    2: "#ff4444",
+    3: "#44cc44",
+    4: "#cc44cc",
+}
+
+PLAYER_COLORS_EXHAUSTED = {
+    1: "#223366",
+    2: "#882222",
+    3: "#226622",
+    4: "#662266",
+}
+
 def unit_count(name):
     return ARMY_BUDGET // UNIT_STATS[name]["value"]
 
@@ -95,6 +109,35 @@ class Overworld:
             ]),
         ]
 
+    def to_dict(self):
+        """Serialize overworld state to a dict."""
+        return {
+            "armies": [
+                {
+                    "player": a.player,
+                    "units": a.units,
+                    "pos": list(a.pos),
+                    "exhausted": a.exhausted,
+                }
+                for a in self.armies
+            ]
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        """Restore an Overworld from a serialized dict."""
+        ow = cls.__new__(cls)
+        ow.armies = [
+            OverworldArmy(
+                player=d["player"],
+                units=[tuple(u) for u in d["units"]],
+                pos=tuple(d["pos"]),
+                exhausted=d["exhausted"],
+            )
+            for d in data["armies"]
+        ]
+        return ow
+
     def get_army_at(self, pos):
         for a in self.armies:
             if a.pos == pos:
@@ -105,34 +148,96 @@ class Overworld:
         army.pos = new_pos
 
 
+def _deserialize_armies(army_data):
+    """Convert serialized army dicts to OverworldArmy objects."""
+    return [
+        OverworldArmy(
+            player=d["player"],
+            units=[tuple(u) for u in d["units"]],
+            pos=tuple(d["pos"]),
+            exhausted=d["exhausted"],
+        )
+        for d in army_data
+    ]
+
+
 class OverworldGUI:
     HEX_SIZE = 40
 
-    def __init__(self, root):
+    def __init__(self, root, client=None):
+        """Initialize overworld GUI.
+
+        Args:
+            root: tkinter root or frame
+            client: optional GameClient for multiplayer mode.
+                    If None, runs in local single-player mode.
+        """
         self.root = root
+        self.client = client
+        self.player_id = 1  # default for single-player
+        self.current_player = 1
+        self._multiplayer = client is not None
+
         root.title("Wager of War - Overworld")
-        self.world = Overworld()
+
+        if self._multiplayer:
+            self.world = Overworld.__new__(Overworld)
+            self.world.armies = []
+        else:
+            self.world = Overworld()
+
         self.selected_army = None
 
-        canvas_w = int(self.HEX_SIZE * 1.75 * self.world.COLS + self.HEX_SIZE + 40)
-        canvas_h = int(self.HEX_SIZE * 1.5 * self.world.ROWS + self.HEX_SIZE + 40)
-        self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="#2b3b2b")
+        # Main frame for overworld content
+        self.main_frame = tk.Frame(root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        canvas_w = int(self.HEX_SIZE * 1.75 * Overworld.COLS + self.HEX_SIZE + 40)
+        canvas_h = int(self.HEX_SIZE * 1.5 * Overworld.ROWS + self.HEX_SIZE + 40)
+
+        left_frame = tk.Frame(self.main_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH)
+
+        self.canvas = tk.Canvas(left_frame, width=canvas_w, height=canvas_h, bg="#2b3b2b")
         self.canvas.pack(padx=5, pady=5)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Motion>", self._on_hover)
         root.bind("<Escape>", self._on_escape)
         root.bind("<space>", lambda e: self._on_end_turn())
 
-        self.status_var = tk.StringVar(value="Click a P1 army to select it.")
-        tk.Label(root, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
+        self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click a P1 army to select it.")
+        tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
 
-        self.end_turn_btn = tk.Button(root, text="End Turn", font=("Arial", 12), command=self._on_end_turn)
+        self.end_turn_btn = tk.Button(left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn)
         self.end_turn_btn.pack(pady=5)
+
+        # Battle log panel (right side)
+        if self._multiplayer:
+            right_frame = tk.Frame(self.main_frame, width=250)
+            right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+            right_frame.pack_propagate(False)
+            tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
+            self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
+            self.battle_log.pack(fill=tk.BOTH, expand=True)
+            self.battle_log.bind("<Double-Button-1>", self._on_replay_click)
+            self._battle_log_ids = []  # parallel list of battle_ids
+        else:
+            self.battle_log = None
+            self._battle_log_ids = []
 
         self.tooltip = None
         self._hovered_army = None
         self.combat_frame = None
-        self._draw()
+
+        # Battle viewer state
+        self._battle_steps = []
+        self._battle_step_idx = 0
+        self._viewing_battle = False
+
+        if self._multiplayer:
+            self.client.on_message = self._on_server_message
+        else:
+            self._draw()
 
     def _hex_center(self, col, row):
         x = self.HEX_SIZE * 1.75 * col + 50
@@ -174,10 +279,10 @@ class OverworldGUI:
         # Draw armies
         for army in w.armies:
             cx, cy = self._hex_center(army.pos[0], army.pos[1])
-            if army.player == 1:
-                color = "#223366" if army.exhausted else "#4488ff"
+            if army.exhausted:
+                color = PLAYER_COLORS_EXHAUSTED.get(army.player, "#444444")
             else:
-                color = "#882222" if army.exhausted else "#ff4444"
+                color = PLAYER_COLORS.get(army.player, "#888888")
             self.canvas.create_oval(cx - 16, cy - 16, cx + 16, cy + 16, fill=color, outline="white", width=2)
             self.canvas.create_text(cx, cy, text=str(army.total_count), fill="white", font=("Arial", 12, "bold"))
 
@@ -198,7 +303,6 @@ class OverworldGUI:
         army = self.world.get_army_at(hovered) if hovered else None
 
         if army is not self._hovered_army:
-            # Army changed — destroy old tooltip and maybe create new one
             self._hovered_army = army
             if self.tooltip:
                 self.tooltip.destroy()
@@ -215,19 +319,30 @@ class OverworldGUI:
                 tk.Label(tw, text=text, justify=tk.LEFT, bg="#ffffdd",
                          font=("Arial", 10), padx=6, pady=4, relief=tk.SOLID, borderwidth=1).pack()
         elif self.tooltip:
-            # Same army — just reposition
             self.tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
 
+    def _is_my_turn(self):
+        if not self._multiplayer:
+            return True
+        return self.current_player == self.player_id
+
     def _on_click(self, event):
+        if self._viewing_battle:
+            return
         clicked = self._pixel_to_hex(event.x, event.y)
         if not clicked:
             return
 
+        my_player = self.player_id if self._multiplayer else 1
         clicked_army = self.world.get_army_at(clicked)
+
+        if not self._is_my_turn():
+            self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
+            return
 
         # No army selected yet
         if self.selected_army is None:
-            if clicked_army and clicked_army.player == 1:
+            if clicked_army and clicked_army.player == my_player:
                 if clicked_army.exhausted:
                     self.status_var.set("That army is exhausted. End Turn to ready it.")
                     return
@@ -235,7 +350,7 @@ class OverworldGUI:
                 self.status_var.set(f"Selected: {clicked_army.label}.")
                 self._draw()
             else:
-                self.status_var.set("Click a P1 army to select it.")
+                self.status_var.set(f"Click a P{my_player} army to select it.")
             return
 
         # Click the same army -> deselect
@@ -245,8 +360,8 @@ class OverworldGUI:
             self._draw()
             return
 
-        # Click another P1 army -> switch selection
-        if clicked_army and clicked_army.player == 1:
+        # Click another own army -> switch selection
+        if clicked_army and clicked_army.player == my_player:
             if clicked_army.exhausted:
                 self.status_var.set("That army is exhausted. End Turn to ready it.")
                 return
@@ -261,6 +376,17 @@ class OverworldGUI:
             self.status_var.set("Must click an adjacent hex.")
             return
 
+        if self._multiplayer:
+            # Send move to server
+            self.client.send({
+                "type": "move_army",
+                "from": list(self.selected_army.pos),
+                "to": list(clicked),
+            })
+            self.selected_army = None
+            return
+
+        # Local single-player mode
         # Adjacent enemy -> battle
         if clicked_army and clicked_army.player != self.selected_army.player:
             army = self.selected_army
@@ -283,6 +409,17 @@ class OverworldGUI:
             self._draw()
 
     def _on_end_turn(self):
+        if self._viewing_battle:
+            return
+
+        if self._multiplayer:
+            if not self._is_my_turn():
+                return
+            self.client.send({"type": "end_turn"})
+            self.selected_army = None
+            return
+
+        # Local single-player
         for army in self.world.armies:
             if army.player == 1:
                 army.exhausted = False
@@ -299,6 +436,7 @@ class OverworldGUI:
         return result
 
     def _start_battle(self, army1, army2):
+        """Start a local single-player battle."""
         p1_units = self._make_battle_units(army1)
         p2_units = self._make_battle_units(army2)
 
@@ -308,8 +446,7 @@ class OverworldGUI:
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
-        self.canvas.pack_forget()
-        self.end_turn_btn.pack_forget()
+        self.main_frame.pack_forget()
         self.status_var.set("Battle in progress!")
 
         self.combat_frame = tk.Frame(self.root)
@@ -331,7 +468,6 @@ class OverworldGUI:
                 ]
 
             if winner == 0:
-                # Draw - both armies survive with casualties
                 _update_survivors(army1, 1)
                 _update_survivors(army2, 2)
                 army1.exhausted = True
@@ -344,8 +480,7 @@ class OverworldGUI:
                 _update_survivors(army2, 2)
                 self.world.armies.remove(army1)
 
-            self.canvas.pack(padx=5, pady=5)
-            self.end_turn_btn.pack(pady=5)
+            self.main_frame.pack(fill=tk.BOTH, expand=True)
             remaining = [a for a in self.world.armies]
             p1_remaining = [a for a in remaining if a.player == 1]
             p2_remaining = [a for a in remaining if a.player == 2]
@@ -361,6 +496,135 @@ class OverworldGUI:
 
         Unit._id_counter = 0
         CombatGUI(self.combat_frame, battle=battle, on_complete=on_battle_complete)
+
+    # --- Multiplayer message handling ---
+
+    def _on_server_message(self, msg):
+        """Handle a message from the server (called from main thread via queue polling)."""
+        msg_type = msg.get("type")
+
+        if msg_type == "joined":
+            self.player_id = msg["player_id"]
+            self.status_var.set(f"You are P{self.player_id}. Waiting for players ({msg['player_count']}/{msg['needed']})...")
+
+        elif msg_type == "game_start":
+            self.player_id = msg["player_id"]
+            self.current_player = msg["current_player"]
+            self.world.armies = _deserialize_armies(msg["armies"])
+            if self._is_my_turn():
+                self.status_var.set(f"Game started! Your turn (P{self.player_id}).")
+            else:
+                self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
+            self._draw()
+
+        elif msg_type == "state_update":
+            self.world.armies = _deserialize_armies(msg["armies"])
+            self.current_player = msg["current_player"]
+            self.selected_army = None
+            status = msg.get("message", "")
+            if self._is_my_turn():
+                status += f" Your turn (P{self.player_id})."
+            else:
+                status += f" Waiting for P{self.current_player}."
+            self.status_var.set(status)
+            if not self._viewing_battle:
+                self._draw()
+
+        elif msg_type == "battle_start":
+            self._battle_steps = []
+            self._viewing_battle = True
+            self._current_battle_msg = msg
+            # Show battle in viewer mode
+            if self.tooltip:
+                self.tooltip.destroy()
+                self.tooltip = None
+            self.main_frame.pack_forget()
+
+            self.combat_frame = tk.Frame(self.root)
+            self.combat_frame.pack(fill=tk.BOTH, expand=True)
+
+            Unit._id_counter = 0
+            battle = Battle(
+                p1_units=msg["p1_units"],
+                p2_units=msg["p2_units"],
+                rng_seed=msg["rng_seed"],
+            )
+            self._viewer_battle = battle
+            self._viewer_gui = CombatGUI(
+                self.combat_frame, battle=battle, viewer_mode=True
+            )
+
+        elif msg_type == "battle_step":
+            if self._viewing_battle and hasattr(self, '_viewer_gui'):
+                self._viewer_gui.receive_step(msg["step_data"])
+
+        elif msg_type == "battle_end":
+            if self.battle_log is not None:
+                self.battle_log.insert(tk.END, msg["summary"])
+                self._battle_log_ids.append(msg["battle_id"])
+            # Close battle viewer after a delay
+            if self._viewing_battle:
+                self.root.after(1500, self._close_battle_viewer)
+
+        elif msg_type == "replay_data":
+            self._show_replay(msg)
+
+        elif msg_type == "game_over":
+            winner = msg["winner"]
+            if winner == self.player_id:
+                self.status_var.set("You win!")
+            else:
+                self.status_var.set(f"P{winner} wins the game!")
+
+        elif msg_type == "error":
+            self.status_var.set(f"Error: {msg['message']}")
+
+    def _close_battle_viewer(self):
+        """Close the battle viewer and return to overworld."""
+        if self.combat_frame:
+            self.combat_frame.destroy()
+            self.combat_frame = None
+        self._viewing_battle = False
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self._draw()
+
+    def _on_replay_click(self, event):
+        """Handle double-click on battle log to request replay."""
+        if not self.battle_log or not self.client:
+            return
+        sel = self.battle_log.curselection()
+        if sel:
+            idx = sel[0]
+            if idx < len(self._battle_log_ids):
+                self.client.send({
+                    "type": "request_replay",
+                    "battle_id": self._battle_log_ids[idx],
+                })
+
+    def _show_replay(self, msg):
+        """Show a battle replay from replay_data."""
+        if self.tooltip:
+            self.tooltip.destroy()
+            self.tooltip = None
+        self.main_frame.pack_forget()
+        self._viewing_battle = True
+
+        self.combat_frame = tk.Frame(self.root)
+        self.combat_frame.pack(fill=tk.BOTH, expand=True)
+
+        Unit._id_counter = 0
+        battle = Battle(
+            p1_units=msg["p1_units"],
+            p2_units=msg["p2_units"],
+            rng_seed=msg["rng_seed"],
+        )
+
+        def on_replay_done(winner, p1_s, p2_s):
+            self._close_battle_viewer()
+
+        gui = CombatGUI(self.combat_frame, battle=battle, on_complete=on_replay_done)
+        # Auto-play the replay
+        gui.toggle_auto()
 
     def run(self):
         self.root.mainloop()

@@ -110,14 +110,18 @@ class Battle:
     COLS = 17
     ROWS = 11
 
-    def __init__(self, p1_units=None, p2_units=None):
+    def __init__(self, p1_units=None, p2_units=None, rng_seed=None):
         """Initialize battle.
 
         p1_units/p2_units: optional list of (name, max_hp, damage, range, count) tuples.
         If None, uses default hardcoded armies.
+        rng_seed: optional int seed for deterministic battles.
         """
         self._init_p1_units = p1_units
         self._init_p2_units = p2_units
+        self.rng_seed = rng_seed
+        if rng_seed is not None:
+            random.seed(rng_seed)
         self._init_rng_state = random.getstate()
         self.units = []
         self.turn_order = []
@@ -365,30 +369,54 @@ class Battle:
         self.current_index += 1
         return True
 
+    def step_result(self):
+        """Return a serializable dict describing the last step's action and current state."""
+        result = {
+            "action": self.last_action,
+            "log": self.log[-5:],
+            "winner": self.winner,
+            "units": [
+                {
+                    "id": u.id, "name": u.name, "player": u.player,
+                    "hp": u.hp, "max_hp": u.max_hp, "pos": list(u.pos) if u.pos else None,
+                    "alive": u.alive, "has_acted": u.has_acted,
+                    "armor": u.armor, "heal": u.heal, "sunder": u.sunder,
+                    "damage": u.damage, "attack_range": u.attack_range,
+                }
+                for u in self.units
+            ],
+            "round_num": self.round_num,
+        }
+        return result
+
 
 # --- GUI ---
 
 class CombatGUI:
     HEX_SIZE = 32
 
-    def __init__(self, root, battle=None, on_complete=None):
+    def __init__(self, root, battle=None, on_complete=None, viewer_mode=False):
         self.root = root
+        self.viewer_mode = viewer_mode
         try:
             root.title("Wager of War v3 - Combat")
         except AttributeError:
             pass
         self.battle = battle if battle is not None else Battle()
         self.on_complete = on_complete
+        self._step_queue = []  # for viewer_mode: queued steps from server
+        self._playing_step = False
 
         # layout
         top = tk.Frame(root)
         top.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
 
-        self.step_btn = tk.Button(top, text="Step", command=self.on_step, font=("Arial", 12))
-        self.step_btn.pack(side=tk.LEFT)
+        if not viewer_mode:
+            self.step_btn = tk.Button(top, text="Step", command=self.on_step, font=("Arial", 12))
+            self.step_btn.pack(side=tk.LEFT)
 
-        self.auto_btn = tk.Button(top, text="Auto", command=self.toggle_auto, font=("Arial", 12))
-        self.auto_btn.pack(side=tk.LEFT, padx=5)
+            self.auto_btn = tk.Button(top, text="Auto", command=self.toggle_auto, font=("Arial", 12))
+            self.auto_btn.pack(side=tk.LEFT, padx=5)
 
         # Speed controls
         self.speed_levels = [(300, "0.3x"), (200, "0.5x"), (100, "1x"), (50, "2x"), (25, "4x")]
@@ -402,14 +430,17 @@ class CombatGUI:
         self.speed_up_btn = tk.Button(top, text="+", command=self._speed_up, font=("Arial", 12), width=2)
         self.speed_up_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        self.undo_btn = tk.Button(top, text="Undo", command=self.on_undo, font=("Arial", 12))
-        self.undo_btn.pack(side=tk.LEFT, padx=5)
+        if not viewer_mode:
+            self.undo_btn = tk.Button(top, text="Undo", command=self.on_undo, font=("Arial", 12))
+            self.undo_btn.pack(side=tk.LEFT, padx=5)
 
-        self.skip_btn = tk.Button(top, text="Skip", command=self.on_skip, font=("Arial", 12))
-        self.skip_btn.pack(side=tk.LEFT, padx=5)
+            self.skip_btn = tk.Button(top, text="Skip", command=self.on_skip, font=("Arial", 12))
+            self.skip_btn.pack(side=tk.LEFT, padx=5)
 
-        self.reset_btn = tk.Button(top, text="Reset", command=self.on_reset, font=("Arial", 12))
-        self.reset_btn.pack(side=tk.LEFT)
+            self.reset_btn = tk.Button(top, text="Reset", command=self.on_reset, font=("Arial", 12))
+            self.reset_btn.pack(side=tk.LEFT)
+        else:
+            tk.Label(top, text="[Watching Battle]", font=("Arial", 12, "italic")).pack(side=tk.LEFT, padx=10)
 
         self.status_var = tk.StringVar(value="Round 1")
         tk.Label(top, textvariable=self.status_var, font=("Arial", 12)).pack(side=tk.LEFT, padx=15)
@@ -702,7 +733,7 @@ class CombatGUI:
             on_done()
 
     def on_step(self):
-        cont = self.battle.step()
+        self.battle.step()
         action = self.battle.last_action
         self._draw()
         if action and action.get("type") in ("attack", "move_attack"):
@@ -768,6 +799,34 @@ class CombatGUI:
             self._play_attack_anim(action, lambda: self._play_heal_if_needed(action, schedule_next))
         else:
             self._play_heal_if_needed(action, schedule_next)
+
+
+    def receive_step(self, step_data):
+        """Viewer mode: receive a step from the server and play it."""
+        self._step_queue.append(step_data)
+        if not self._playing_step:
+            self._play_next_queued_step()
+
+    def _play_next_queued_step(self):
+        """Play the next queued step in viewer mode."""
+        if not self._step_queue:
+            self._playing_step = False
+            return
+        self._playing_step = True
+        self._step_queue.pop(0)
+
+        # Step the local battle to advance it
+        self.battle.step()
+        action = self.battle.last_action
+        self._draw()
+
+        def after_anim():
+            self.root.after(max(10, self.auto_delay // 2), self._play_next_queued_step)
+
+        if action and action.get("type") in ("attack", "move_attack"):
+            self._play_attack_anim(action, lambda: self._play_heal_if_needed(action, after_anim))
+        else:
+            self._play_heal_if_needed(action, after_anim)
 
 
 def main():

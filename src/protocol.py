@@ -1,0 +1,59 @@
+"""Message protocol constants and serialization helpers for multiplayer."""
+
+import json
+
+# Message types - Client -> Server
+JOIN = "join"
+MOVE_ARMY = "move_army"
+END_TURN = "end_turn"
+REQUEST_REPLAY = "request_replay"
+
+# Message types - Server -> Client
+JOINED = "joined"
+GAME_START = "game_start"
+STATE_UPDATE = "state_update"
+BATTLE_START = "battle_start"
+BATTLE_STEP = "battle_step"
+BATTLE_END = "battle_end"
+REPLAY_DATA = "replay_data"
+ERROR = "error"
+GAME_OVER = "game_over"
+
+
+def serialize_army(army):
+    """Convert an OverworldArmy to a JSON-serializable dict."""
+    return {
+        "player": army.player,
+        "units": army.units,
+        "pos": list(army.pos),
+        "exhausted": army.exhausted,
+    }
+
+
+def serialize_armies(armies):
+    """Convert a list of OverworldArmy objects to serializable list."""
+    return [serialize_army(a) for a in armies]
+
+
+def deserialize_armies(data):
+    """Convert serialized army dicts back to OverworldArmy objects."""
+    from overworld import OverworldArmy
+    armies = []
+    for d in data:
+        armies.append(OverworldArmy(
+            player=d["player"],
+            units=[tuple(u) for u in d["units"]],
+            pos=tuple(d["pos"]),
+            exhausted=d["exhausted"],
+        ))
+    return armies
+
+
+def encode(msg):
+    """Encode a message dict to JSON string."""
+    return json.dumps(msg)
+
+
+def decode(raw):
+    """Decode a JSON string to message dict."""
+    return json.loads(raw)
