@@ -1,7 +1,7 @@
 import tkinter as tk
 import math
 from dataclasses import dataclass
-from combat import Battle, CombatGUI, Unit, hex_neighbors
+from combat import Battle, CombatGUI, Unit, hex_neighbors, ABILITY_DESCRIPTIONS
 
 # Canonical unit stats: (max_hp, damage, range, armor, heal, sunder, value)
 UNIT_STATS = {
@@ -234,6 +234,8 @@ class OverworldGUI:
         self.canvas.bind("<Motion>", self._on_hover)
         root.bind("<Escape>", self._on_escape)
         root.bind("<space>", lambda e: self._on_end_turn())
+        root.bind("<KeyRelease-Shift_L>", self._on_shift_release)
+        root.bind("<KeyRelease-Shift_R>", self._on_shift_release)
 
         self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click your base to build units, or move armies.")
         tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
@@ -313,8 +315,31 @@ class OverworldGUI:
             btn.pack(fill=tk.X, padx=10, pady=2)
             self._build_buttons[name] = btn
 
+            # Ability hover tooltip for build buttons
+            ability_lines = []
+            for ab in ("armor", "heal", "sunder"):
+                if stats[ab]:
+                    ability_lines.append(f"{ab.capitalize()}: {ABILITY_DESCRIPTIONS[ab].format(value=stats[ab])}")
+            if ability_lines:
+                self._bind_build_ability_hover(btn, "\n".join(ability_lines))
+
         tk.Button(tw, text="Close", command=tw.destroy).pack(pady=5)
         self._refresh_build_panel()
+
+    def _bind_build_ability_hover(self, widget, description):
+        tip = [None]
+        def on_enter(e):
+            tip[0] = tw = tk.Toplevel(widget)
+            tw.wm_overrideredirect(True)
+            tw.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 20}")
+            tk.Label(tw, text=description, fg="white", bg="#444",
+                     font=("Arial", 9), padx=6, pady=4, justify=tk.LEFT).pack()
+        def on_leave(e):
+            if tip[0]:
+                tip[0].destroy()
+                tip[0] = None
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
 
     def _refresh_build_panel(self):
         """Update gold display and button states in the build panel."""
@@ -414,25 +439,48 @@ class OverworldGUI:
     def _on_hover(self, event):
         hovered = self._pixel_to_hex(event.x, event.y)
         army = self.world.get_army_at(hovered) if hovered else None
+        shift_held = event.state & 0x1
 
         if army is not self._hovered_army:
-            self._hovered_army = army
-            if self.tooltip:
+            if shift_held and self.tooltip:
+                # Shift held — keep existing tooltip pinned
+                pass
+            else:
+                self._hovered_army = army
+                if self.tooltip:
+                    self.tooltip.destroy()
+                    self.tooltip = None
+                if army:
+                    self.tooltip = tw = tk.Toplevel(self.root)
+                    tw.wm_overrideredirect(True)
+                    tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+                    text = f"P{army.player} Army\n" + "\n".join(
+                        f"  {count}x {name}" for name, count in army.units
+                    )
+                    if army.exhausted:
+                        text += "\n  (Exhausted)"
+                    tk.Label(tw, text=text, justify=tk.LEFT, bg="#ffffdd",
+                             font=("Arial", 10), padx=6, pady=4, relief=tk.SOLID, borderwidth=1).pack()
+        elif self.tooltip:
+            if not shift_held:
+                self.tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+
+    def _on_shift_release(self, event):
+        """Dismiss tooltip when Shift is released if cursor is no longer over the army."""
+        if self.tooltip:
+            try:
+                mx = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx()
+                my = self.canvas.winfo_pointery() - self.canvas.winfo_rooty()
+                hovered = self._pixel_to_hex(mx, my)
+                army = self.world.get_army_at(hovered) if hovered else None
+                if army is not self._hovered_army:
+                    self.tooltip.destroy()
+                    self.tooltip = None
+                    self._hovered_army = None
+            except Exception:
                 self.tooltip.destroy()
                 self.tooltip = None
-            if army:
-                self.tooltip = tw = tk.Toplevel(self.root)
-                tw.wm_overrideredirect(True)
-                tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
-                text = f"P{army.player} Army\n" + "\n".join(
-                    f"  {count}x {name}" for name, count in army.units
-                )
-                if army.exhausted:
-                    text += "\n  (Exhausted)"
-                tk.Label(tw, text=text, justify=tk.LEFT, bg="#ffffdd",
-                         font=("Arial", 10), padx=6, pady=4, relief=tk.SOLID, borderwidth=1).pack()
-        elif self.tooltip:
-            self.tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+                self._hovered_army = None
 
     def _is_my_turn(self):
         if not self._multiplayer:

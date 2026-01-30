@@ -382,6 +382,13 @@ class Battle:
 
 # --- GUI ---
 
+ABILITY_DESCRIPTIONS = {
+    "armor": "Reduces incoming damage by {value}",
+    "heal": "Heals a random ally in range for {value} HP per turn",
+    "sunder": "Reduces a random enemy's armor in range by {value} after attacking",
+}
+
+
 class CombatGUI:
     HEX_SIZE = 32
 
@@ -442,8 +449,11 @@ class CombatGUI:
         self.return_btn = None
         self.auto_running = False
         self._tooltip = None
+        self._tooltip_unit = None
         self.canvas.bind("<Motion>", self._on_hover)
         self.canvas.bind("<Leave>", self._on_leave)
+        root.bind("<KeyRelease-Shift_L>", self._on_shift_release)
+        root.bind("<KeyRelease-Shift_R>", self._on_shift_release)
         self._load_sprites()
         self._draw()
 
@@ -579,40 +589,80 @@ class CombatGUI:
 
     def _on_hover(self, event):
         unit = self._unit_at_pixel(event.x, event.y)
+        shift_held = event.state & 0x1
         if unit:
-            text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
+            if self._tooltip_unit is unit and self._tooltip is not None:
+                if not shift_held:
+                    self._tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+                return
+            self._hide_tooltip()
+            self._tooltip_unit = unit
+            self._tooltip = tw = tk.Toplevel(self.root)
+            tw.wm_overrideredirect(True)
+            tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+            tw.configure(bg="#222")
+
+            main_text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
+            tk.Label(tw, text=main_text, fg="white", bg="#222",
+                     font=("Arial", 10, "bold"), padx=6, pady=2).pack(anchor="w")
+
+            abilities = []
             if unit.armor > 0:
-                text += f"  Armor:{unit.armor}"
+                abilities.append(("armor", unit.armor))
             if unit.heal > 0:
-                text += f"  Heal:{unit.heal}"
-            if self._tooltip is None:
-                self._tooltip = self.canvas.create_text(
-                    event.x, event.y - 20, text=text,
-                    fill="white", font=("Arial", 10, "bold"),
-                    anchor="s", tags="tooltip",
-                )
-                self._tooltip_bg = self.canvas.create_rectangle(
-                    0, 0, 0, 0, fill="#222", outline="#888", tags="tooltip_bg",
-                )
-            self.canvas.coords(self._tooltip, event.x, event.y - 20)
-            self.canvas.itemconfigure(self._tooltip, text=text)
-            bbox = self.canvas.bbox(self._tooltip)
-            if bbox:
-                self.canvas.coords(self._tooltip_bg,
-                                   bbox[0] - 4, bbox[1] - 2, bbox[2] + 4, bbox[3] + 2)
-                self.canvas.tag_raise("tooltip_bg")
-                self.canvas.tag_raise("tooltip")
+                abilities.append(("heal", unit.heal))
+            if unit.sunder > 0:
+                abilities.append(("sunder", unit.sunder))
+
+            if abilities:
+                row = tk.Frame(tw, bg="#222")
+                row.pack(anchor="w", padx=4, pady=(0, 2))
+                for ability_name, value in abilities:
+                    lbl = tk.Label(row, text=f"{ability_name.capitalize()}:{value}",
+                                   fg="#aaffaa", bg="#333", font=("Arial", 9),
+                                   padx=4, pady=1, relief=tk.RAISED, borderwidth=1)
+                    lbl.pack(side=tk.LEFT, padx=2)
+                    desc = ABILITY_DESCRIPTIONS[ability_name].format(value=value)
+                    self._bind_ability_hover(lbl, tw, desc)
         else:
+            if not shift_held:
+                self._hide_tooltip()
+
+    def _bind_ability_hover(self, label, parent, description):
+        sub_tip = [None]
+        def on_enter(e):
+            sub_tip[0] = st = tk.Toplevel(parent)
+            st.wm_overrideredirect(True)
+            st.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 18}")
+            tk.Label(st, text=description, fg="white", bg="#444",
+                     font=("Arial", 9), padx=4, pady=2).pack()
+        def on_leave(e):
+            if sub_tip[0]:
+                sub_tip[0].destroy()
+                sub_tip[0] = None
+        label.bind("<Enter>", on_enter)
+        label.bind("<Leave>", on_leave)
+
+    def _on_leave(self, event):
+        shift_held = event.state & 0x1
+        if not shift_held:
             self._hide_tooltip()
 
-    def _on_leave(self, _event):
-        self._hide_tooltip()
+    def _on_shift_release(self, event):
+        # Check if cursor is still over a unit
+        try:
+            mx = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx()
+            my = self.canvas.winfo_pointery() - self.canvas.winfo_rooty()
+            if not self._unit_at_pixel(mx, my):
+                self._hide_tooltip()
+        except Exception:
+            self._hide_tooltip()
 
     def _hide_tooltip(self):
         if self._tooltip is not None:
-            self.canvas.delete("tooltip")
-            self.canvas.delete("tooltip_bg")
+            self._tooltip.destroy()
             self._tooltip = None
+            self._tooltip_unit = None
 
     def _anim_delay(self, base_ms):
         """Scale animation delay by current speed setting (1x = 100ms auto_delay)."""
