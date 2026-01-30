@@ -1,6 +1,6 @@
 import tkinter as tk
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from combat import Battle, CombatGUI, Unit, hex_neighbors
 
 # Canonical unit stats: (max_hp, damage, range, armor, heal, sunder, value)
@@ -229,11 +229,6 @@ class OverworldGUI:
         self._hovered_army = None
         self.combat_frame = None
 
-        # Battle viewer state
-        self._battle_steps = []
-        self._battle_step_idx = 0
-        self._viewing_battle = False
-
         if self._multiplayer:
             self.client.on_message = self._on_server_message
         else:
@@ -327,8 +322,6 @@ class OverworldGUI:
         return self.current_player == self.player_id
 
     def _on_click(self, event):
-        if self._viewing_battle:
-            return
         clicked = self._pixel_to_hex(event.x, event.y)
         if not clicked:
             return
@@ -409,9 +402,6 @@ class OverworldGUI:
             self._draw()
 
     def _on_end_turn(self):
-        if self._viewing_battle:
-            return
-
         if self._multiplayer:
             if not self._is_my_turn():
                 return
@@ -527,44 +517,12 @@ class OverworldGUI:
             else:
                 status += f" Waiting for P{self.current_player}."
             self.status_var.set(status)
-            if not self._viewing_battle:
-                self._draw()
-
-        elif msg_type == "battle_start":
-            self._battle_steps = []
-            self._viewing_battle = True
-            self._current_battle_msg = msg
-            # Show battle in viewer mode
-            if self.tooltip:
-                self.tooltip.destroy()
-                self.tooltip = None
-            self.main_frame.pack_forget()
-
-            self.combat_frame = tk.Frame(self.root)
-            self.combat_frame.pack(fill=tk.BOTH, expand=True)
-
-            Unit._id_counter = 0
-            battle = Battle(
-                p1_units=msg["p1_units"],
-                p2_units=msg["p2_units"],
-                rng_seed=msg["rng_seed"],
-            )
-            self._viewer_battle = battle
-            self._viewer_gui = CombatGUI(
-                self.combat_frame, battle=battle, viewer_mode=True
-            )
-
-        elif msg_type == "battle_step":
-            if self._viewing_battle and hasattr(self, '_viewer_gui'):
-                self._viewer_gui.receive_step(msg["step_data"])
+            self._draw()
 
         elif msg_type == "battle_end":
             if self.battle_log is not None:
                 self.battle_log.insert(tk.END, msg["summary"])
                 self._battle_log_ids.append(msg["battle_id"])
-            # Wait for all queued steps to finish playing, then close
-            if self._viewing_battle:
-                self._wait_for_battle_done()
 
         elif msg_type == "replay_data":
             self._show_replay(msg)
@@ -579,19 +537,11 @@ class OverworldGUI:
         elif msg_type == "error":
             self.status_var.set(f"Error: {msg['message']}")
 
-    def _wait_for_battle_done(self):
-        """Poll until the viewer GUI has finished playing all queued steps."""
-        if hasattr(self, '_viewer_gui') and (self._viewer_gui._step_queue or self._viewer_gui._playing_step):
-            self.root.after(200, self._wait_for_battle_done)
-            return
-        self.root.after(1500, self._close_battle_viewer)
-
-    def _close_battle_viewer(self):
-        """Close the battle viewer and return to overworld."""
+    def _close_replay(self):
+        """Close the replay viewer and return to overworld."""
         if self.combat_frame:
             self.combat_frame.destroy()
             self.combat_frame = None
-        self._viewing_battle = False
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self._draw()
 
@@ -609,12 +559,11 @@ class OverworldGUI:
                 })
 
     def _show_replay(self, msg):
-        """Show a battle replay from replay_data using viewer mode with server steps."""
+        """Show a battle replay by re-simulating locally with the server's seed."""
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
         self.main_frame.pack_forget()
-        self._viewing_battle = True
 
         self.combat_frame = tk.Frame(self.root)
         self.combat_frame.pack(fill=tk.BOTH, expand=True)
@@ -626,14 +575,10 @@ class OverworldGUI:
             rng_seed=msg["rng_seed"],
         )
 
-        gui = CombatGUI(
-            self.combat_frame, battle=battle, viewer_mode=True,
-            on_complete=lambda w, p1, p2: self._close_battle_viewer(),
+        CombatGUI(
+            self.combat_frame, battle=battle,
+            on_complete=lambda w, p1, p2: self._close_replay(),
         )
-        self._viewer_gui = gui
-        # Feed all recorded steps to the viewer
-        for step in msg["steps"]:
-            gui.receive_step(step)
 
     def run(self):
         self.root.mainloop()

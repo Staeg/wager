@@ -1,9 +1,9 @@
 """Dedicated WebSocket game server for multiplayer Wager of War."""
 
 import asyncio
-import json
 import random
 import argparse
+import socket
 import sys
 import os
 
@@ -16,7 +16,7 @@ from overworld import Overworld, OverworldArmy, UNIT_STATS, unit_count
 from protocol import (
     serialize_armies, encode, decode,
     JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY,
-    JOINED, GAME_START, STATE_UPDATE, BATTLE_START, BATTLE_STEP, BATTLE_END,
+    JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
     REPLAY_DATA, ERROR, GAME_OVER,
 )
 from combat import hex_neighbors
@@ -25,12 +25,11 @@ from combat import hex_neighbors
 class BattleRecord:
     """Stores a completed battle for replay."""
 
-    def __init__(self, battle_id, p1_units, p2_units, rng_seed, steps, winner, summary):
+    def __init__(self, battle_id, p1_units, p2_units, rng_seed, winner, summary):
         self.battle_id = battle_id
         self.p1_units = p1_units
         self.p2_units = p2_units
         self.rng_seed = rng_seed
-        self.steps = steps
         self.winner = winner
         self.summary = summary
 
@@ -130,7 +129,7 @@ class GameServer:
         return result
 
     async def _run_battle(self, attacker, defender):
-        """Run a battle server-side, streaming steps to combatants."""
+        """Run a battle server-side and broadcast the result."""
         battle_id = self.next_battle_id
         self.next_battle_id += 1
 
@@ -138,42 +137,11 @@ class GameServer:
         p2_units = self._make_battle_units(defender)
         rng_seed = random.randint(0, 2**31)
 
-        # Notify combatants of battle start
-        battle_start_msg = {
-            "type": BATTLE_START,
-            "battle_id": battle_id,
-            "p1_units": p1_units,
-            "p2_units": p2_units,
-            "rng_seed": rng_seed,
-            "attacker_player": attacker.player,
-            "defender_player": defender.player,
-        }
-        await self.broadcast(battle_start_msg)
-
-        # Run battle
+        # Run battle to completion
         Unit._id_counter = 0
         battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed)
-        steps = []
-
         while battle.step():
-            step_data = battle.step_result()
-            steps.append(step_data)
-            step_msg = {
-                "type": BATTLE_STEP,
-                "battle_id": battle_id,
-                "step_data": step_data,
-            }
-            await self.broadcast(step_msg)
-            await asyncio.sleep(0.05)  # pace steps
-
-        # Final step result (winner determined)
-        final = battle.step_result()
-        steps.append(final)
-        await self.broadcast({
-            "type": BATTLE_STEP,
-            "battle_id": battle_id,
-            "step_data": final,
-        })
+            pass
 
         winner = battle.winner
         p1_survivors = sum(1 for u in battle.units if u.alive and u.player == 1)
@@ -208,18 +176,17 @@ class GameServer:
         if winner == 0:
             summary = f"P{attacker.player} vs P{defender.player}: Draw"
 
-        # Record for replay
+        # Record for replay (just seed + units, lightweight)
         self.battle_history.append(BattleRecord(
             battle_id=battle_id,
             p1_units=p1_units,
             p2_units=p2_units,
             rng_seed=rng_seed,
-            steps=steps,
             winner=winner,
             summary=summary,
         ))
 
-        # Broadcast battle end
+        # Broadcast battle result
         await self.broadcast({
             "type": BATTLE_END,
             "battle_id": battle_id,
@@ -347,7 +314,6 @@ class GameServer:
                             "p1_units": record.p1_units,
                             "p2_units": record.p2_units,
                             "rng_seed": record.rng_seed,
-                            "steps": record.steps,
                         })
                     else:
                         await self.send_to(player_id, {"type": ERROR, "message": f"Battle {bid} not found"})
@@ -378,7 +344,13 @@ class GameServer:
 
     async def run(self):
         print(f"Server starting on {self.host}:{self.port}, waiting for {self.num_players} players...")
-        async with websockets.serve(self.handle_client, self.host, self.port):
+        # Create socket with SO_REUSEADDR so we can rebind immediately after restart
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen()
+        sock.setblocking(False)
+        async with websockets.serve(self.handle_client, sock=sock):
             await asyncio.Future()  # run forever
 
 
