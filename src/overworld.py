@@ -3,17 +3,39 @@ import math
 from dataclasses import dataclass
 from combat import Battle, CombatGUI, Unit, hex_neighbors, ABILITY_DESCRIPTIONS
 
-# Canonical unit stats: (max_hp, damage, range, armor, heal, sunder, value)
+# Canonical unit stats
 UNIT_STATS = {
-    "Footman": {"max_hp": 8,  "damage": 2, "range": 1, "armor": 0, "heal": 0, "sunder": 0, "value": 6},
-    "Archer":  {"max_hp": 4,  "damage": 1, "range": 4, "armor": 0, "heal": 0, "sunder": 0, "value": 6},
-    "Knight":  {"max_hp": 12, "damage": 1, "range": 1, "armor": 1, "heal": 0, "sunder": 0, "value": 12},
-    "Priest":  {"max_hp": 2,  "damage": 1, "range": 3, "armor": 0, "heal": 1, "sunder": 0, "value": 10},
-    "Mage":    {"max_hp": 2,  "damage": 0, "range": 3, "armor": 0, "heal": 0, "sunder": 1, "value": 20},
+    # Custodians (yellow/orange)
+    "Page":       {"max_hp": 3,  "damage": 1, "range": 1, "value": 2},
+    "Librarian":  {"max_hp": 2,  "damage": 0, "range": 3, "sunder": 1, "value": 12},
+    "Steward":    {"max_hp": 20, "damage": 3, "range": 1, "value": 10},
+    "Gatekeeper": {"max_hp": 32, "damage": 4, "range": 2, "undying": 2, "value": 25},
+    # Weavers (purple/blue)
+    "Apprentice": {"max_hp": 8,  "damage": 1, "range": 2, "push": 1, "value": 5},
+    "Conduit":    {"max_hp": 5,  "damage": 2, "range": 3, "amplify": 1, "value": 10},
+    "Seeker":     {"max_hp": 3,  "damage": 1, "range": 4, "ramp": 1, "value": 10},
+    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "barrage": 1, "value": 25},
+    # Artificers (gray/black)
+    "Tincan":     {"max_hp": 11, "damage": 2, "range": 1, "value": 6},
+    "Golem":      {"max_hp": 16, "damage": 2, "range": 1, "armor": 2, "value": 14},
+    "Kitboy":     {"max_hp": 6,  "damage": 2, "range": 2, "repair": 1, "value": 10},
+    "Artillery":  {"max_hp": 8,  "damage": 4, "range": 4, "bombardment": 2, "bombardment_range": 6, "value": 25},
+    # Purifiers (red/white)
+    "Penitent":   {"max_hp": 5,  "damage": 1, "range": 1, "rage": 1, "value": 5},
+    "Priest":     {"max_hp": 3,  "damage": 1, "range": 3, "heal": 1, "value": 10},
+    "Avenger":    {"max_hp": 20, "damage": 3, "range": 1, "vengeance": 1, "value": 12},
+    "Herald":     {"max_hp": 6,  "damage": 1, "range": 4, "charge": 3, "summon_count": 2, "value": 25},
 }
 
-ARMY_BUDGET = 60
-STARTING_GOLD = 60
+FACTIONS = {
+    "Custodians": ["Page", "Librarian", "Steward", "Gatekeeper"],
+    "Weavers": ["Apprentice", "Conduit", "Seeker", "Savant"],
+    "Artificers": ["Tincan", "Golem", "Kitboy", "Artillery"],
+    "Purifiers": ["Penitent", "Priest", "Avenger", "Herald"],
+}
+
+ARMY_BUDGET = 100
+STARTING_GOLD = 100
 
 PLAYER_COLORS = {
     1: "#4488ff",
@@ -185,6 +207,49 @@ def _deserialize_bases(base_data):
     ]
 
 
+ARMY_MOVE_RANGE = 3
+
+
+def _reachable_hexes(start, steps, cols, rows, occupied):
+    """Return set of hexes reachable from start within `steps` moves, avoiding occupied."""
+    from collections import deque
+    visited = {start: 0}
+    queue = deque([(start, 0)])
+    while queue:
+        pos, dist = queue.popleft()
+        if dist >= steps:
+            continue
+        for nb in hex_neighbors(pos[0], pos[1], cols, rows):
+            if nb not in visited and nb not in occupied:
+                visited[nb] = dist + 1
+                queue.append((nb, dist + 1))
+    # Remove start itself from reachable set
+    result = set(visited.keys())
+    result.discard(start)
+    return result
+
+
+def _bfs_path(start, goal, cols, rows, occupied):
+    """Return the path from start to goal avoiding occupied hexes, or None."""
+    from collections import deque
+    if start == goal:
+        return [start]
+    queue = deque([(start, [start])])
+    visited = {start}
+    while queue:
+        pos, path = queue.popleft()
+        for nb in hex_neighbors(pos[0], pos[1], cols, rows):
+            if nb in visited:
+                continue
+            visited.add(nb)
+            new_path = path + [nb]
+            if nb == goal:
+                return new_path
+            if nb not in occupied:
+                queue.append((nb, new_path))
+    return None
+
+
 class OverworldGUI:
     HEX_SIZE = 40
 
@@ -201,6 +266,7 @@ class OverworldGUI:
         self.player_id = 1  # default for single-player
         self.current_player = 1
         self._multiplayer = client is not None
+        self.faction = None
 
         root.title("Wager of War - Overworld")
 
@@ -211,6 +277,8 @@ class OverworldGUI:
             self.world.gold = {}
         else:
             self.world = Overworld()
+            # Show faction selection before building
+            self._pick_faction()
             # Auto-build P2 armies since there's no AI
             self._auto_build_p2()
 
@@ -270,15 +338,66 @@ class OverworldGUI:
         else:
             self._draw()
 
-    def _auto_build_p2(self):
-        """Auto-spend P2's gold to create armies in single-player mode."""
+    def _pick_faction(self):
+        """Show a modal dialog for the player to pick a faction."""
         import random as rng
-        names = list(UNIT_STATS.keys())
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Choose Your Faction")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(pady=10)
+
+        for faction_name, unit_names in FACTIONS.items():
+            frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=5)
+            frame.pack(fill=tk.X, padx=15, pady=5)
+            tk.Label(frame, text=faction_name, font=("Arial", 12, "bold")).pack(anchor="w")
+            for uname in unit_names:
+                s = UNIT_STATS[uname]
+                desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
+                for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                           "undying", "barrage", "repair", "bombardment",
+                           "rage", "vengeance", "charge"):
+                    if s.get(ab, 0):
+                        desc += f" {ab.capitalize()}:{s[ab]}"
+                tk.Label(frame, text=desc, font=("Arial", 9), anchor="w").pack(anchor="w")
+            tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
+                      command=lambda fn=faction_name: self._select_faction(fn, dialog)).pack(pady=5)
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{max(0,x)}+{max(0,y)}")
+        self.root.wait_window(dialog)
+
+        # Default if somehow closed without picking
+        if self.faction is None:
+            self.faction = rng.choice(list(FACTIONS.keys()))
+
+    def _select_faction(self, faction_name, dialog):
+        self.faction = faction_name
+        dialog.destroy()
+
+    def _auto_build_p2(self):
+        """Auto-spend P2's gold to create armies in single-player mode.
+        Distributes gold roughly equally across all faction unit types."""
+        import random as rng
+        # P2 gets a random faction different from player's if possible
+        other_factions = [f for f in FACTIONS if f != self.faction]
+        p2_faction = rng.choice(other_factions) if other_factions else rng.choice(list(FACTIONS.keys()))
+        names = FACTIONS[p2_faction]
+        spent = {n: 0 for n in names}
         while self.world.gold.get(2, 0) > 0:
             affordable = [n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[2]]
             if not affordable:
                 break
-            name = rng.choice(affordable)
+            # Pick the affordable unit with the least gold spent so far
+            min_spent = min(spent[n] for n in affordable)
+            candidates = [n for n in affordable if spent[n] == min_spent]
+            name = rng.choice(candidates)
+            spent[name] += UNIT_STATS[name]["value"]
             self.world.build_unit(2, name)
 
     def _update_gold_display(self):
@@ -295,21 +414,21 @@ class OverworldGUI:
         tw.title("Build Unit")
         tw.resizable(False, False)
         tw.transient(self.root)
-        tw.grab_set()
 
         self._build_gold_label = tk.Label(tw, text="", font=("Arial", 12, "bold"), fg="#B8960F")
         self._build_gold_label.pack(pady=5)
 
         self._build_buttons = {}
-        for name, stats in UNIT_STATS.items():
+        faction_units = FACTIONS.get(self.faction, list(UNIT_STATS.keys())) if self.faction else list(UNIT_STATS.keys())
+        for name in faction_units:
+            stats = UNIT_STATS[name]
             cost = stats["value"]
             text = f"{name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
-            if stats["armor"]:
-                text += f" Arm:{stats['armor']}"
-            if stats["heal"]:
-                text += f" Heal:{stats['heal']}"
-            if stats["sunder"]:
-                text += f" Sunder:{stats['sunder']}"
+            for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                       "undying", "barrage", "repair", "bombardment",
+                       "rage", "vengeance", "charge"):
+                if stats.get(ab, 0):
+                    text += f" {ab.capitalize()}:{stats[ab]}"
             btn = tk.Button(tw, text=text, font=("Arial", 10),
                             command=lambda n=name: self._do_build(n))
             btn.pack(fill=tk.X, padx=10, pady=2)
@@ -317,8 +436,10 @@ class OverworldGUI:
 
             # Ability hover tooltip for build buttons
             ability_lines = []
-            for ab in ("armor", "heal", "sunder"):
-                if stats[ab]:
+            for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                       "undying", "barrage", "repair", "bombardment",
+                       "rage", "vengeance", "charge"):
+                if stats.get(ab, 0):
                     ability_lines.append(f"{ab.capitalize()}: {ABILITY_DESCRIPTIONS[ab].format(value=stats[ab])}")
             if ability_lines:
                 self._bind_build_ability_hover(btn, "\n".join(ability_lines))
@@ -385,10 +506,17 @@ class OverworldGUI:
         self.canvas.delete("all")
         w = self.world
 
-        # Determine neighbors for selected army
+        # Determine reachable hexes for selected army
         neighbors = set()
         if self.selected_army:
-            neighbors = set(hex_neighbors(self.selected_army.pos[0], self.selected_army.pos[1], w.COLS, w.ROWS))
+            occupied = {a.pos for a in w.armies if a is not self.selected_army}
+            neighbors = _reachable_hexes(
+                self.selected_army.pos, ARMY_MOVE_RANGE, w.COLS, w.ROWS, occupied
+            )
+            # Also include hexes occupied by enemy armies (attack targets)
+            for a in w.armies:
+                if a.player != self.selected_army.player:
+                    neighbors.add(a.pos)
 
         for r in range(w.ROWS):
             for c in range(w.COLS):
@@ -563,18 +691,31 @@ class OverworldGUI:
             self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
 
-        # Check adjacency
-        neighbors = hex_neighbors(self.selected_army.pos[0], self.selected_army.pos[1], self.world.COLS, self.world.ROWS)
-        if clicked not in neighbors:
-            self.status_var.set("Right-click an adjacent hex to move.")
-            return
-
         clicked_army = self.world.get_army_at(clicked)
 
         # Cannot move onto own army
         if clicked_army and clicked_army.player == my_player:
             self.status_var.set("Cannot move onto your own army.")
             return
+
+        # Check reachability within move range
+        occupied = {a.pos for a in self.world.armies if a is not self.selected_army}
+        reachable = _reachable_hexes(
+            self.selected_army.pos, ARMY_MOVE_RANGE, self.world.COLS, self.world.ROWS, occupied
+        )
+        # Enemy army hexes are valid attack targets even if "occupied"
+        is_enemy = clicked_army and clicked_army.player != my_player
+        if clicked not in reachable and not is_enemy:
+            self.status_var.set("Too far. Right-click a highlighted hex to move.")
+            return
+        # For enemy targets, check that we can reach an adjacent hex
+        if is_enemy and clicked not in reachable:
+            # Check if any neighbor of the enemy is reachable
+            adj = hex_neighbors(clicked[0], clicked[1], self.world.COLS, self.world.ROWS)
+            adj_reachable = [h for h in adj if h in reachable or h == self.selected_army.pos]
+            if not adj_reachable:
+                self.status_var.set("Too far. Right-click a highlighted hex to move.")
+                return
 
         if self._multiplayer:
             self.client.send({
@@ -586,14 +727,14 @@ class OverworldGUI:
             return
 
         # Local single-player mode
-        # Adjacent enemy -> battle
-        if clicked_army and clicked_army.player != self.selected_army.player:
+        # Enemy -> battle
+        if is_enemy:
             army = self.selected_army
             self.selected_army = None
             self._start_battle(army, clicked_army)
             return
 
-        # Adjacent empty -> move
+        # Empty hex -> move
         army = self.selected_army
         self.selected_army = None
         self.world.move_army(army, clicked)
@@ -633,11 +774,19 @@ class OverworldGUI:
         self._draw()
 
     def _make_battle_units(self, army):
-        """Convert an army's units list into Battle-compatible tuples."""
+        """Convert an army's units list into Battle-compatible dicts."""
         result = []
         for name, count in army.units:
             s = UNIT_STATS[name]
-            result.append((name, s["max_hp"], s["damage"], s["range"], count, s["armor"], s["heal"], s["sunder"]))
+            spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
+                    "range": s["range"], "count": count}
+            # Copy all ability keys
+            for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                        "undying", "barrage", "repair", "bombardment", "bombardment_range",
+                        "rage", "vengeance", "charge", "summon_count"):
+                if s.get(key, 0):
+                    spec[key] = s[key]
+            result.append(spec)
         return result
 
     def _start_battle(self, army1, army2):
@@ -658,6 +807,9 @@ class OverworldGUI:
         self.combat_frame.pack(fill=tk.BOTH, expand=True)
 
         def on_battle_complete(winner, p1_survivors, p2_survivors):
+            if hasattr(self, '_combat_gui') and self._combat_gui:
+                self._combat_gui._close_log()
+                self._combat_gui = None
             self.combat_frame.destroy()
             self.combat_frame = None
 
@@ -703,7 +855,7 @@ class OverworldGUI:
             self._draw()
 
         Unit._id_counter = 0
-        CombatGUI(self.combat_frame, battle=battle, on_complete=on_battle_complete)
+        self._combat_gui = CombatGUI(self.combat_frame, battle=battle, on_complete=on_battle_complete)
 
     # --- Multiplayer message handling ---
 
