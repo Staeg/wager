@@ -336,9 +336,10 @@ class OverworldGUI:
         tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
         self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
         self.battle_log.pack(fill=tk.BOTH, expand=True)
-        if self._multiplayer:
-            self.battle_log.bind("<Double-Button-1>", self._on_replay_click)
+        self.battle_log.bind("<Double-Button-1>", self._on_replay_click)
         self._battle_log_ids = []  # parallel list of battle_ids
+        self._local_battle_history = {}
+        self._next_local_battle_id = 1
 
         self.tooltip = None
         self._hovered_army = None
@@ -968,10 +969,12 @@ class OverworldGUI:
         else:
             ow_p1, ow_p2 = defender, attacker
 
+        import random
         p1_units = self._make_battle_units(ow_p1)
         p2_units = self._make_battle_units(ow_p2)
+        rng_seed = random.randint(0, 2**31 - 1)
 
-        battle = Battle(p1_units=p1_units, p2_units=p2_units)
+        battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed)
 
         # Hide overworld UI
         if self.tooltip:
@@ -1030,7 +1033,15 @@ class OverworldGUI:
                 summary = f"P{ow_p1.player} vs P{ow_p2.player}: Draw"
             if self.battle_log is not None:
                 self.battle_log.insert(tk.END, summary)
-                self._battle_log_ids.append(None)
+                battle_id = self._next_local_battle_id
+                self._next_local_battle_id += 1
+                self._battle_log_ids.append(battle_id)
+                self._local_battle_history[battle_id] = {
+                    "battle_id": battle_id,
+                    "p1_units": p1_units,
+                    "p2_units": p2_units,
+                    "rng_seed": rng_seed,
+                }
 
             self.main_frame.pack(fill=tk.BOTH, expand=True)
             p1_armies = [a for a in self.world.armies if a.player == 1]
@@ -1146,16 +1157,22 @@ class OverworldGUI:
 
     def _on_replay_click(self, event):
         """Handle double-click on battle log to request replay."""
-        if not self.battle_log or not self.client:
+        if not self.battle_log:
             return
         sel = self.battle_log.curselection()
         if sel:
             idx = sel[0]
             if idx < len(self._battle_log_ids):
-                self.client.send({
-                    "type": "request_replay",
-                    "battle_id": self._battle_log_ids[idx],
-                })
+                battle_id = self._battle_log_ids[idx]
+                if self.client:
+                    self.client.send({
+                        "type": "request_replay",
+                        "battle_id": battle_id,
+                    })
+                else:
+                    record = self._local_battle_history.get(battle_id)
+                    if record:
+                        self._show_replay(record)
 
     def _show_replay(self, msg):
         """Show a battle replay by re-simulating locally with the server's seed."""

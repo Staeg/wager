@@ -156,12 +156,13 @@ class Battle:
         If None, uses default hardcoded armies.
         rng_seed: optional int seed for deterministic battles.
         """
+        if rng_seed is None:
+            rng_seed = random.SystemRandom().randint(0, 2**31 - 1)
         self._init_p1_units = p1_units
         self._init_p2_units = p2_units
         self.rng_seed = rng_seed
-        if rng_seed is not None:
-            random.seed(rng_seed)
-        self._init_rng_state = random.getstate()
+        self.rng = random.Random(rng_seed)
+        self._init_rng_state = self.rng.getstate()
         self.ROWS = self._compute_rows(p1_units, p2_units)
         self.units = []
         self.turn_order = []
@@ -217,16 +218,16 @@ class Battle:
             unit_states[u.id] = state
         turn_ids = [u.id for u in self.turn_order]
         unit_ids = [u.id for u in self.units]
-        rng_state = random.getstate()
+        rng_state = self.rng.getstate()
         self.history.append((unit_states, turn_ids, unit_ids, self.current_index,
-                             self.round_num, list(self.log), self.winner, rng_state,
-                             self._stalemate_count, self._prev_round_state))
+                               self.round_num, list(self.log), self.winner, rng_state,
+                               self._stalemate_count, self._prev_round_state))
 
     def undo(self):
         if not self.history:
             return
         unit_states, turn_ids, unit_ids, self.current_index, self.round_num, self.log, self.winner, rng_state, self._stalemate_count, self._prev_round_state = self.history.pop()
-        random.setstate(rng_state)
+        self.rng.setstate(rng_state)
         id_to_unit = {u.id: u for u in self.units}
         # Remove units that didn't exist in the saved state (summoned units)
         self.units = [id_to_unit[uid] for uid in unit_ids if uid in id_to_unit]
@@ -324,7 +325,7 @@ class Battle:
             for c, r in positions:
                 by_col[c].append((c, r))
             for col_positions in by_col.values():
-                random.shuffle(col_positions)
+                self.rng.shuffle(col_positions)
             sorted_cols = sorted(by_col.keys(), reverse=descending_col)
 
             flat_positions = []
@@ -339,7 +340,7 @@ class Battle:
             shuffled = []
             for _, group in groupby(unit_list, key=lambda u: u.attack_range):
                 tier = list(group)
-                random.shuffle(tier)
+                self.rng.shuffle(tier)
                 shuffled.extend(tier)
             unit_list[:] = shuffled
             pos_i = 0
@@ -383,7 +384,7 @@ class Battle:
         self._prev_round_state = snap
 
         alive = [u for u in self.units if u.alive]
-        random.shuffle(alive)
+        self.rng.shuffle(alive)
         self.turn_order = alive
         self.current_index = 0
         self.round_num += 1
@@ -548,7 +549,7 @@ class Battle:
         enemies_in_range = [e for e in self.units if e.alive and e.player != unit.player
                             and hex_distance(unit.pos, e.pos) <= bomb_range]
         if enemies_in_range:
-            targets = enemies_in_range if unit.bombardment_all else [random.choice(enemies_in_range)]
+            targets = enemies_in_range if unit.bombardment_all else [self.rng.choice(enemies_in_range)]
             hit_positions = []
             for bomb_target in targets:
                 actual = self._apply_damage(bomb_target, bomb_val)
@@ -584,7 +585,7 @@ class Battle:
             if allies:
                 max_hp = max(a.hp for a in allies)
                 candidates = [a for a in allies if a.hp == max_hp]
-                anchor = random.choice(candidates).pos
+                anchor = self.rng.choice(candidates).pos
         adj = hex_neighbors(anchor[0], anchor[1], self.COLS, self.ROWS)
         empty = [pos for pos in adj if pos not in occupied]
         summoned = 0
@@ -648,7 +649,7 @@ class Battle:
         in_range = [e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range]
 
         if in_range:
-            target = random.choice(in_range)
+            target = self.rng.choice(in_range)
             ranged = unit.attack_range > 1
             unit._attacked_this_turn = True
             eff_armor = self._effective_armor(target)
@@ -677,7 +678,7 @@ class Battle:
             enemy_dists = [(bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e) for e in enemies]
             closest_dist = min(d for d, _ in enemy_dists)
             closest = [e for d, e in enemy_dists if d == closest_dist]
-            target_enemy = random.choice(closest)
+            target_enemy = self.rng.choice(closest)
             next_pos = bfs_next_step(unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS)
             old = unit.pos
             unit.pos = next_pos
@@ -686,7 +687,7 @@ class Battle:
             # check if now in range
             in_range = [e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range]
             if in_range:
-                target = random.choice(in_range)
+                target = self.rng.choice(in_range)
                 ranged = unit.attack_range > 1
                 unit._attacked_this_turn = True
                 eff_armor = self._effective_armor(target)
@@ -732,7 +733,7 @@ class Battle:
                             self.last_action = {}
                         self.last_action["heal_positions"] = healed_positions
                 else:
-                    heal_target = random.choice(allies)
+                    heal_target = self.rng.choice(allies)
                     healed = min(heal_val, heal_target.max_hp - heal_target.hp)
                     heal_target.hp += healed
                     self.log.append(f"  {unit} heals {heal_target} for {healed} HP")
@@ -760,7 +761,7 @@ class Battle:
                         self.last_action["sunder_positions"] = sundered_positions
                         self.last_action["sunder_src"] = unit.pos
                 else:
-                    sunder_target = random.choice(enemies_in_range)
+                    sunder_target = self.rng.choice(enemies_in_range)
                     sunder_target.armor -= sunder_val
                     self.log.append(
                         f"  {unit} sunders {sunder_target}'s armor by {sunder_val} (now {sunder_target.armor})"
@@ -1492,8 +1493,11 @@ class CombatGUI:
             self.return_btn.destroy()
             self.return_btn = None
         Unit._id_counter = 0
-        random.setstate(self.battle._init_rng_state)
-        self.battle = Battle(p1_units=self.battle._init_p1_units, p2_units=self.battle._init_p2_units)
+        self.battle = Battle(
+            p1_units=self.battle._init_p1_units,
+            p2_units=self.battle._init_p2_units,
+            rng_seed=self.battle.rng_seed,
+        )
         self._draw()
 
     def _speed_down(self):
