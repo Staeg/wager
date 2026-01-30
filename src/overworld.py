@@ -13,6 +13,7 @@ UNIT_STATS = {
 }
 
 ARMY_BUDGET = 60
+STARTING_GOLD = 60
 
 PLAYER_COLORS = {
     1: "#4488ff",
@@ -48,66 +49,71 @@ class OverworldArmy:
         return sum(count for _, count in self.units)
 
 
+@dataclass
+class Base:
+    player: int
+    pos: tuple  # (col, row)
+    alive: bool = True
+
+
+# Base positions: center of each player's side on a 10x8 grid
+BASE_POSITIONS = {
+    1: (1, 4),
+    2: (8, 4),
+    3: (1, 3),
+    4: (8, 3),
+}
+
+
 class Overworld:
     COLS = 10
     ROWS = 8
 
-    def __init__(self):
-        # All 10 two-unit combinations, 5 per player
-        self.armies = [
-            # P1: 5 of 10 three-unit combinations
-            OverworldArmy(player=1, pos=(1, 0), units=[
-                ("Footman", unit_count("Footman")),
-                ("Archer", unit_count("Archer")),
-                ("Knight", unit_count("Knight")),
-            ]),
-            OverworldArmy(player=1, pos=(0, 2), units=[
-                ("Footman", unit_count("Footman")),
-                ("Archer", unit_count("Archer")),
-                ("Priest", unit_count("Priest")),
-            ]),
-            OverworldArmy(player=1, pos=(1, 4), units=[
-                ("Footman", unit_count("Footman")),
-                ("Archer", unit_count("Archer")),
-                ("Mage", unit_count("Mage")),
-            ]),
-            OverworldArmy(player=1, pos=(0, 6), units=[
-                ("Footman", unit_count("Footman")),
-                ("Knight", unit_count("Knight")),
-                ("Priest", unit_count("Priest")),
-            ]),
-            OverworldArmy(player=1, pos=(2, 3), units=[
-                ("Footman", unit_count("Footman")),
-                ("Knight", unit_count("Knight")),
-                ("Mage", unit_count("Mage")),
-            ]),
-            # P2: other 5 three-unit combinations
-            OverworldArmy(player=2, pos=(8, 0), units=[
-                ("Footman", unit_count("Footman")),
-                ("Priest", unit_count("Priest")),
-                ("Mage", unit_count("Mage")),
-            ]),
-            OverworldArmy(player=2, pos=(9, 2), units=[
-                ("Archer", unit_count("Archer")),
-                ("Knight", unit_count("Knight")),
-                ("Priest", unit_count("Priest")),
-            ]),
-            OverworldArmy(player=2, pos=(8, 4), units=[
-                ("Archer", unit_count("Archer")),
-                ("Knight", unit_count("Knight")),
-                ("Mage", unit_count("Mage")),
-            ]),
-            OverworldArmy(player=2, pos=(9, 6), units=[
-                ("Archer", unit_count("Archer")),
-                ("Priest", unit_count("Priest")),
-                ("Mage", unit_count("Mage")),
-            ]),
-            OverworldArmy(player=2, pos=(7, 3), units=[
-                ("Knight", unit_count("Knight")),
-                ("Priest", unit_count("Priest")),
-                ("Mage", unit_count("Mage")),
-            ]),
-        ]
+    def __init__(self, num_players=2):
+        self.armies = []
+        self.gold = {p: STARTING_GOLD for p in range(1, num_players + 1)}
+        self.bases = [Base(player=p, pos=BASE_POSITIONS[p]) for p in range(1, num_players + 1)]
+
+    def get_base_at(self, pos):
+        for b in self.bases:
+            if b.pos == pos and b.alive:
+                return b
+        return None
+
+    def get_player_base(self, player):
+        for b in self.bases:
+            if b.player == player and b.alive:
+                return b
+        return None
+
+    def build_unit(self, player, unit_name):
+        """Build a unit at the player's base. Returns error string or None on success."""
+        if unit_name not in UNIT_STATS:
+            return f"Unknown unit: {unit_name}"
+        base = self.get_player_base(player)
+        if not base:
+            return "No base"
+        cost = UNIT_STATS[unit_name]["value"]
+        if self.gold.get(player, 0) < cost:
+            return "Not enough gold"
+        self.gold[player] -= cost
+        # Find or create army at base position
+        army = self.get_army_at(base.pos)
+        if army and army.player == player:
+            # Add to existing army
+            for i, (name, count) in enumerate(army.units):
+                if name == unit_name:
+                    army.units[i] = (name, count + 1)
+                    return None
+            army.units.append((unit_name, 1))
+        else:
+            # Create new army at base
+            self.armies.append(OverworldArmy(
+                player=player,
+                units=[(unit_name, 1)],
+                pos=base.pos,
+            ))
+        return None
 
     def to_dict(self):
         """Serialize overworld state to a dict."""
@@ -120,7 +126,12 @@ class Overworld:
                     "exhausted": a.exhausted,
                 }
                 for a in self.armies
-            ]
+            ],
+            "gold": self.gold,
+            "bases": [
+                {"player": b.player, "pos": list(b.pos), "alive": b.alive}
+                for b in self.bases
+            ],
         }
 
     @classmethod
@@ -135,6 +146,11 @@ class Overworld:
                 exhausted=d["exhausted"],
             )
             for d in data["armies"]
+        ]
+        ow.gold = {int(k): v for k, v in data.get("gold", {}).items()}
+        ow.bases = [
+            Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
+            for d in data.get("bases", [])
         ]
         return ow
 
@@ -161,6 +177,14 @@ def _deserialize_armies(army_data):
     ]
 
 
+def _deserialize_bases(base_data):
+    """Convert serialized base dicts to Base objects."""
+    return [
+        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
+        for d in base_data
+    ]
+
+
 class OverworldGUI:
     HEX_SIZE = 40
 
@@ -183,10 +207,15 @@ class OverworldGUI:
         if self._multiplayer:
             self.world = Overworld.__new__(Overworld)
             self.world.armies = []
+            self.world.bases = []
+            self.world.gold = {}
         else:
             self.world = Overworld()
+            # Auto-build P2 armies since there's no AI
+            self._auto_build_p2()
 
         self.selected_army = None
+        self.build_panel = None  # track build popup
 
         # Main frame for overworld content
         self.main_frame = tk.Frame(root)
@@ -201,12 +230,17 @@ class OverworldGUI:
         self.canvas = tk.Canvas(left_frame, width=canvas_w, height=canvas_h, bg="#2b3b2b")
         self.canvas.pack(padx=5, pady=5)
         self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<Button-3>", self._on_right_click)
         self.canvas.bind("<Motion>", self._on_hover)
         root.bind("<Escape>", self._on_escape)
         root.bind("<space>", lambda e: self._on_end_turn())
 
-        self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click a P1 army to select it.")
+        self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click your base to build units, or move armies.")
         tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
+
+        self.gold_var = tk.StringVar(value="")
+        tk.Label(left_frame, textvariable=self.gold_var, font=("Arial", 11, "bold"), fg="#B8960F").pack(pady=2)
+        self._update_gold_display()
 
         self.end_turn_btn = tk.Button(left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn)
         self.end_turn_btn.pack(pady=5)
@@ -233,6 +267,79 @@ class OverworldGUI:
             self.client.on_message = self._on_server_message
         else:
             self._draw()
+
+    def _auto_build_p2(self):
+        """Auto-spend P2's gold to create armies in single-player mode."""
+        import random as rng
+        names = list(UNIT_STATS.keys())
+        while self.world.gold.get(2, 0) > 0:
+            affordable = [n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[2]]
+            if not affordable:
+                break
+            name = rng.choice(affordable)
+            self.world.build_unit(2, name)
+
+    def _update_gold_display(self):
+        my_player = self.player_id if self._multiplayer else 1
+        gold = self.world.gold.get(my_player, 0)
+        self.gold_var.set(f"Gold: {gold}")
+
+    def _show_build_panel(self):
+        """Show a popup panel for building units at the player's base."""
+        if self.build_panel:
+            self.build_panel.destroy()
+
+        self.build_panel = tw = tk.Toplevel(self.root)
+        tw.title("Build Unit")
+        tw.resizable(False, False)
+        tw.transient(self.root)
+        tw.grab_set()
+
+        self._build_gold_label = tk.Label(tw, text="", font=("Arial", 12, "bold"), fg="#B8960F")
+        self._build_gold_label.pack(pady=5)
+
+        self._build_buttons = {}
+        for name, stats in UNIT_STATS.items():
+            cost = stats["value"]
+            text = f"{name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+            if stats["armor"]:
+                text += f" Arm:{stats['armor']}"
+            if stats["heal"]:
+                text += f" Heal:{stats['heal']}"
+            if stats["sunder"]:
+                text += f" Sunder:{stats['sunder']}"
+            btn = tk.Button(tw, text=text, font=("Arial", 10),
+                            command=lambda n=name: self._do_build(n))
+            btn.pack(fill=tk.X, padx=10, pady=2)
+            self._build_buttons[name] = btn
+
+        tk.Button(tw, text="Close", command=tw.destroy).pack(pady=5)
+        self._refresh_build_panel()
+
+    def _refresh_build_panel(self):
+        """Update gold display and button states in the build panel."""
+        if not self.build_panel or not self.build_panel.winfo_exists():
+            return
+        my_player = self.player_id if self._multiplayer else 1
+        gold = self.world.gold.get(my_player, 0)
+        self._build_gold_label.config(text=f"Gold: {gold}")
+        for name, btn in self._build_buttons.items():
+            cost = UNIT_STATS[name]["value"]
+            btn.config(state=tk.NORMAL if gold >= cost else tk.DISABLED)
+
+    def _do_build(self, unit_name):
+        """Execute a build action (panel stays open)."""
+        if self._multiplayer:
+            self.client.send({"type": "build_unit", "unit_name": unit_name})
+        else:
+            err = self.world.build_unit(1, unit_name)
+            if err:
+                self.status_var.set(f"Build failed: {err}")
+            else:
+                self.status_var.set(f"Built a {unit_name}.")
+                self._update_gold_display()
+                self._draw()
+        self._refresh_build_panel()
 
     def _hex_center(self, col, row):
         x = self.HEX_SIZE * 1.75 * col + 50
@@ -270,6 +377,17 @@ class OverworldGUI:
                     outline = "#ffff00"
                     outline_width = 3
                 self.canvas.create_polygon(self._hex_polygon(cx, cy), fill=fill, outline=outline, width=outline_width)
+
+        # Draw bases (behind armies, larger square)
+        for base in getattr(w, 'bases', []):
+            if not base.alive:
+                continue
+            cx, cy = self._hex_center(base.pos[0], base.pos[1])
+            color = PLAYER_COLORS.get(base.player, "#888888")
+            s = 22
+            self.canvas.create_rectangle(cx - s, cy - s, cx + s, cy + s,
+                                         fill=color, outline="white", width=2)
+            self.canvas.create_text(cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold"))
 
         # Draw armies
         for army in w.armies:
@@ -322,6 +440,7 @@ class OverworldGUI:
         return self.current_player == self.player_id
 
     def _on_click(self, event):
+        """Left-click: select/deselect armies, open build panel on own base."""
         clicked = self._pixel_to_hex(event.x, event.y)
         if not clicked:
             return
@@ -333,6 +452,20 @@ class OverworldGUI:
             self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
 
+        # Click own base -> build panel only if no own army, or army already selected
+        clicked_base = self.world.get_base_at(clicked) if hasattr(self.world, 'bases') else None
+        if clicked_base and clicked_base.player == my_player:
+            if clicked_army and clicked_army.player == my_player:
+                if self.selected_army == clicked_army:
+                    # Already selected this army, so open build panel
+                    self._show_build_panel()
+                    return
+                # Army here but not selected yet — fall through to select it
+            else:
+                # No army on base, open build panel directly
+                self._show_build_panel()
+                return
+
         # No army selected yet
         if self.selected_army is None:
             if clicked_army and clicked_army.player == my_player:
@@ -340,7 +473,7 @@ class OverworldGUI:
                     self.status_var.set("That army is exhausted. End Turn to ready it.")
                     return
                 self.selected_army = clicked_army
-                self.status_var.set(f"Selected: {clicked_army.label}.")
+                self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
                 self._draw()
             else:
                 self.status_var.set(f"Click a P{my_player} army to select it.")
@@ -359,18 +492,43 @@ class OverworldGUI:
                 self.status_var.set("That army is exhausted. End Turn to ready it.")
                 return
             self.selected_army = clicked_army
-            self.status_var.set(f"Selected: {clicked_army.label}.")
+            self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
             self._draw()
+            return
+
+        # Left-click on non-own hex with selection: just deselect
+        self.selected_army = None
+        self.status_var.set("Selection cancelled.")
+        self._draw()
+
+    def _on_right_click(self, event):
+        """Right-click: move/attack with the selected army."""
+        if not self.selected_army:
+            return
+        clicked = self._pixel_to_hex(event.x, event.y)
+        if not clicked:
+            return
+
+        my_player = self.player_id if self._multiplayer else 1
+
+        if not self._is_my_turn():
+            self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
 
         # Check adjacency
         neighbors = hex_neighbors(self.selected_army.pos[0], self.selected_army.pos[1], self.world.COLS, self.world.ROWS)
         if clicked not in neighbors:
-            self.status_var.set("Must click an adjacent hex.")
+            self.status_var.set("Right-click an adjacent hex to move.")
+            return
+
+        clicked_army = self.world.get_army_at(clicked)
+
+        # Cannot move onto own army
+        if clicked_army and clicked_army.player == my_player:
+            self.status_var.set("Cannot move onto your own army.")
             return
 
         if self._multiplayer:
-            # Send move to server
             self.client.send({
                 "type": "move_army",
                 "from": list(self.selected_army.pos),
@@ -392,8 +550,17 @@ class OverworldGUI:
         self.selected_army = None
         self.world.move_army(army, clicked)
         army.exhausted = True
+        # Check for base destruction
+        self._check_local_base_destruction(clicked, army.player)
         self.status_var.set(f"Army moved to {clicked}.")
         self._draw()
+
+    def _check_local_base_destruction(self, pos, moving_player):
+        """Destroy enemy base at pos in single-player mode."""
+        for base in getattr(self.world, 'bases', []):
+            if base.pos == pos and base.alive and base.player != moving_player:
+                base.alive = False
+                self.status_var.set(f"P{base.player}'s base destroyed!")
 
     def _on_escape(self, event):
         if self.selected_army:
@@ -466,17 +633,20 @@ class OverworldGUI:
                 self.world.armies.remove(army2)
                 self.world.move_army(army1, army2.pos)
                 army1.exhausted = True
+                # Check base destruction at new position
+                self._check_local_base_destruction(army2.pos, army1.player)
             else:
                 _update_survivors(army2, 2)
                 self.world.armies.remove(army1)
 
             self.main_frame.pack(fill=tk.BOTH, expand=True)
-            remaining = [a for a in self.world.armies]
-            p1_remaining = [a for a in remaining if a.player == 1]
-            p2_remaining = [a for a in remaining if a.player == 2]
-            if not p1_remaining:
+            p1_armies = [a for a in self.world.armies if a.player == 1]
+            p2_armies = [a for a in self.world.armies if a.player == 2]
+            p1_bases = [b for b in self.world.bases if b.player == 1 and b.alive]
+            p2_bases = [b for b in self.world.bases if b.player == 2 and b.alive]
+            if not p1_armies and not p1_bases:
                 self.status_var.set("Player 2 wins the overworld!")
-            elif not p2_remaining:
+            elif not p2_armies and not p2_bases:
                 self.status_var.set("Player 1 wins the overworld!")
             elif winner == 0:
                 self.status_var.set("Battle ended in a stalemate. Both armies survive.")
@@ -501,14 +671,20 @@ class OverworldGUI:
             self.player_id = msg["player_id"]
             self.current_player = msg["current_player"]
             self.world.armies = _deserialize_armies(msg["armies"])
+            self.world.bases = _deserialize_bases(msg.get("bases", []))
+            self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+            self._update_gold_display()
             if self._is_my_turn():
-                self.status_var.set(f"Game started! Your turn (P{self.player_id}).")
+                self.status_var.set(f"Game started! Your turn (P{self.player_id}). Click your base to build units.")
             else:
                 self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
             self._draw()
 
         elif msg_type == "state_update":
             self.world.armies = _deserialize_armies(msg["armies"])
+            self.world.bases = _deserialize_bases(msg.get("bases", []))
+            self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+            self._update_gold_display()
             self.current_player = msg["current_player"]
             self.selected_army = None
             status = msg.get("message", "")

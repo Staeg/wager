@@ -15,10 +15,10 @@ else:
 import websockets
 
 from combat import Battle, Unit
-from overworld import Overworld, OverworldArmy, UNIT_STATS, unit_count
+from overworld import Overworld, OverworldArmy, Base, BASE_POSITIONS, UNIT_STATS, STARTING_GOLD, unit_count
 from protocol import (
-    serialize_armies, encode, decode,
-    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY,
+    serialize_armies, serialize_bases, encode, decode,
+    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT,
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
     REPLAY_DATA, ERROR, GAME_OVER,
 )
@@ -52,37 +52,8 @@ class GameServer:
         self.next_battle_id = 1
 
     def _build_world(self):
-        """Create an Overworld with armies distributed for num_players."""
-        all_names = list(UNIT_STATS.keys())
-        # Generate all C(5,3)=10 three-unit combos
-        from itertools import combinations
-        combos = list(combinations(all_names, 3))
-
-        # Starting positions per player
-        positions = {
-            1: [(0, 0), (1, 1), (2, 2), (0, 3), (1, 0)],
-            2: [(9, 0), (8, 1), (7, 2), (9, 3), (8, 0)],
-            3: [(0, 7), (1, 6), (2, 5), (0, 4), (1, 7)],
-            4: [(9, 7), (8, 6), (7, 5), (9, 4), (8, 7)],
-        }
-
-        # Distribute combos round-robin
-        armies = []
-        for i, combo in enumerate(combos):
-            player = (i % self.num_players) + 1
-            pos_list = positions[player]
-            pos_idx = sum(1 for a in armies if a.player == player)
-            if pos_idx >= len(pos_list):
-                continue  # skip if too many for this player
-            units = [(name, unit_count(name)) for name in combo]
-            armies.append(OverworldArmy(
-                player=player,
-                units=units,
-                pos=pos_list[pos_idx],
-            ))
-
-        world = Overworld.__new__(Overworld)
-        world.armies = armies
+        """Create an Overworld with bases and gold, no starting armies."""
+        world = Overworld(num_players=self.num_players)
         return world
 
     async def broadcast(self, msg):
@@ -107,13 +78,17 @@ class GameServer:
         return {
             "type": STATE_UPDATE,
             "armies": serialize_armies(self.world.armies),
+            "bases": serialize_bases(self.world.bases),
+            "gold": self.world.gold,
             "current_player": self.current_player,
             "message": message,
         }
 
     def _players_with_armies(self):
-        """Return set of player IDs that still have armies."""
-        return {a.player for a in self.world.armies}
+        """Return set of player IDs that still have armies or alive bases."""
+        players = {a.player for a in self.world.armies}
+        players |= {b.player for b in self.world.bases if b.alive}
+        return players
 
     def _next_player(self):
         """Advance to next player who still has armies."""
@@ -201,6 +176,12 @@ class GameServer:
 
         return winner
 
+    def _check_base_destruction(self, pos, moving_player):
+        """Destroy any enemy base at the given position."""
+        for base in self.world.bases:
+            if base.pos == pos and base.alive and base.player != moving_player:
+                base.alive = False
+
     async def _check_game_over(self):
         """Check if only one player remains."""
         active = self._players_with_armies()
@@ -281,6 +262,9 @@ class GameServer:
                     if target and target.player != player_id:
                         # Battle
                         await self._run_battle(army, target)
+                        # Check for base destruction at battle location
+                        if army in self.world.armies:
+                            self._check_base_destruction(army.pos, army.player)
                         if await self._check_game_over():
                             continue
                         await self.broadcast(self._state_update_msg(
@@ -290,8 +274,28 @@ class GameServer:
                         # Move
                         self.world.move_army(army, to_pos)
                         army.exhausted = True
+                        # Check for base destruction at new position
+                        self._check_base_destruction(to_pos, player_id)
+                        if await self._check_game_over():
+                            continue
                         await self.broadcast(self._state_update_msg(
                             f"P{player_id} moved army to {to_pos}."
+                        ))
+
+                elif msg_type == BUILD_UNIT:
+                    if not self.started:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Game not started"})
+                        continue
+                    if player_id != self.current_player:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
+                        continue
+                    unit_name = msg.get("unit_name", "")
+                    err = self.world.build_unit(player_id, unit_name)
+                    if err:
+                        await self.send_to(player_id, {"type": ERROR, "message": err})
+                    else:
+                        await self.broadcast(self._state_update_msg(
+                            f"P{player_id} built a {unit_name}."
                         ))
 
                 elif msg_type == END_TURN:
@@ -341,6 +345,8 @@ class GameServer:
             await self.send_to(pid, {
                 "type": GAME_START,
                 "armies": serialize_armies(self.world.armies),
+                "bases": serialize_bases(self.world.bases),
+                "gold": self.world.gold,
                 "current_player": self.current_player,
                 "player_id": pid,
             })

@@ -185,6 +185,14 @@ class Battle:
                 flat_positions.extend(by_col[col])
 
             unit_list.sort(key=lambda u: u.attack_range)
+            # Shuffle within each range tier to interleave different unit types
+            from itertools import groupby
+            shuffled = []
+            for _, group in groupby(unit_list, key=lambda u: u.attack_range):
+                tier = list(group)
+                random.shuffle(tier)
+                shuffled.extend(tier)
+            unit_list[:] = shuffled
             pos_i = 0
             prev_range = None
             for u in unit_list:

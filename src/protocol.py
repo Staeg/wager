@@ -7,6 +7,7 @@ JOIN = "join"
 MOVE_ARMY = "move_army"
 END_TURN = "end_turn"
 REQUEST_REPLAY = "request_replay"
+BUILD_UNIT = "build_unit"
 
 # Message types - Server -> Client
 JOINED = "joined"
@@ -16,6 +17,20 @@ BATTLE_END = "battle_end"
 REPLAY_DATA = "replay_data"
 ERROR = "error"
 GAME_OVER = "game_over"
+
+
+def serialize_base(base):
+    """Convert a Base to a JSON-serializable dict."""
+    return {
+        "player": base.player,
+        "pos": list(base.pos),
+        "alive": base.alive,
+    }
+
+
+def serialize_bases(bases):
+    """Convert a list of Base objects to serializable list."""
+    return [serialize_base(b) for b in bases]
 
 
 def serialize_army(army):
