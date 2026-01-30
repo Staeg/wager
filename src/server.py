@@ -15,7 +15,7 @@ else:
 import websockets
 
 from combat import Battle, Unit
-from overworld import Overworld, OverworldArmy, Base, BASE_POSITIONS, UNIT_STATS, STARTING_GOLD, unit_count
+from overworld import Overworld, UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
 from protocol import (
     serialize_armies, serialize_bases, encode, decode,
     JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT,
@@ -99,11 +99,18 @@ class GameServer:
         return active[(idx + 1) % len(active)]
 
     def _make_battle_units(self, army):
-        """Convert an OverworldArmy to Battle-compatible tuples."""
+        """Convert an OverworldArmy to Battle-compatible dicts."""
         result = []
         for name, count in army.units:
             s = UNIT_STATS[name]
-            result.append((name, s["max_hp"], s["damage"], s["range"], count, s["armor"], s["heal"], s["sunder"]))
+            spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
+                    "range": s["range"], "count": count}
+            for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                        "undying", "barrage", "repair", "bombardment", "bombardment_range",
+                        "rage", "vengeance", "charge", "summon_count"):
+                if s.get(key, 0):
+                    spec[key] = s[key]
+            result.append(spec)
         return result
 
     async def _run_battle(self, attacker, defender):
@@ -249,17 +256,28 @@ class GameServer:
                         await self.send_to(player_id, {"type": ERROR, "message": "Army is exhausted"})
                         continue
 
-                    neighbors = hex_neighbors(from_pos[0], from_pos[1], Overworld.COLS, Overworld.ROWS)
-                    if to_pos not in neighbors:
-                        await self.send_to(player_id, {"type": ERROR, "message": "Not adjacent"})
-                        continue
+                    # Check reachability within move range
+                    occupied = {a.pos for a in self.world.armies if a.pos != from_pos}
+                    reachable = _reachable_hexes(
+                        from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
+                    )
 
                     target = self.world.get_army_at(to_pos)
                     if target and target.player == player_id:
                         await self.send_to(player_id, {"type": ERROR, "message": "Cannot move onto own army"})
                         continue
 
-                    if target and target.player != player_id:
+                    is_enemy = target and target.player != player_id
+                    if to_pos not in reachable and not is_enemy:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
+                        continue
+                    if is_enemy and to_pos not in reachable:
+                        adj = hex_neighbors(to_pos[0], to_pos[1], Overworld.COLS, Overworld.ROWS)
+                        if not any(h in reachable or h == from_pos for h in adj):
+                            await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
+                            continue
+
+                    if is_enemy:
                         # Battle
                         await self._run_battle(army, target)
                         # Check for base destruction at battle location
