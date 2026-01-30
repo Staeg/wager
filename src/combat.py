@@ -2,6 +2,7 @@ import tkinter as tk
 import math
 import random
 import os
+import sys
 from PIL import Image, ImageTk, ImageEnhance
 
 # --- Hex grid utilities (offset coordinates, even-r) ---
@@ -439,7 +440,10 @@ class CombatGUI:
         self._draw()
 
     def _load_sprites(self):
-        asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
+        if getattr(sys, 'frozen', False):
+            asset_dir = os.path.join(sys._MEIPASS, "assets")
+        else:
+            asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
         self._sprite_imgs = {}
         for name in ("footman", "archer", "priest", "knight", "mage"):
             img = Image.open(os.path.join(asset_dir, f"{name}.png")).convert("RGBA")

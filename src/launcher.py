@@ -5,7 +5,10 @@ import subprocess
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(__file__))
+if getattr(sys, 'frozen', False):
+    sys.path.insert(0, sys._MEIPASS)
+else:
+    sys.path.insert(0, os.path.dirname(__file__))
 
 
 class LauncherGUI:
@@ -13,6 +16,7 @@ class LauncherGUI:
         self.root = tk.Tk()
         self.root.title("Wager of War - Multiplayer Launcher")
         self.root.resizable(False, False)
+        self._server_proc = None
 
         frame = tk.Frame(self.root, padx=20, pady=20)
         frame.pack()
@@ -63,19 +67,77 @@ class LauncherGUI:
         self.status_var = tk.StringVar(value="")
         tk.Label(frame, textvariable=self.status_var, font=("Arial", 10), fg="gray").pack()
 
+        # Server status bar (hidden until a server is started)
+        self._server_frame = tk.Frame(frame)
+        self._server_status_var = tk.StringVar(value="")
+        self._server_indicator = tk.Label(self._server_frame, textvariable=self._server_status_var,
+                                          font=("Arial", 10, "bold"), fg="green")
+        self._server_indicator.pack(side=tk.LEFT, padx=5)
+        self._stop_btn = tk.Button(self._server_frame, text="Stop Server", font=("Arial", 10),
+                                   command=self._stop_server, fg="red")
+        self._stop_btn.pack(side=tk.LEFT, padx=5)
+
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _find_server_exe(self):
+        """Locate the wager-server executable next to the launcher."""
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+            server_exe = os.path.join(exe_dir, "wager-server.exe")
+            if os.path.isfile(server_exe):
+                return [server_exe]
+        # Non-frozen: run server.py with Python
+        server_script = os.path.join(os.path.dirname(__file__), "server.py")
+        return [sys.executable, server_script]
+
     def _host_and_play(self):
         """Start a server subprocess, then connect as a client."""
         port = self.port_var.get()
         players = self.players_var.get()
 
-        # Start server in background
-        server_script = os.path.join(os.path.dirname(__file__), "server.py")
+        cmd = self._find_server_exe() + ["--players", players, "--port", port]
         self._server_proc = subprocess.Popen(
-            [sys.executable, server_script, "--players", players, "--port", port],
-            cwd=os.path.dirname(__file__),
+            cmd,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
+        self._server_frame.pack(fill=tk.X, pady=5)
+        self._server_status_var.set(f"Server running (port {port})")
+        self._server_indicator.config(fg="green")
+        self._poll_server()
+
         self.status_var.set(f"Server started on port {port}. Connecting...")
         self.root.after(500, self._connect_client)
+
+    def _poll_server(self):
+        """Periodically check if the server process is still alive."""
+        if self._server_proc is None:
+            return
+        rc = self._server_proc.poll()
+        if rc is not None:
+            self._server_status_var.set(f"Server stopped (exit code {rc})")
+            self._server_indicator.config(fg="red")
+            self._server_proc = None
+        else:
+            self.root.after(1000, self._poll_server)
+
+    def _stop_server(self):
+        """Terminate the server process."""
+        if self._server_proc is not None:
+            self._server_proc.terminate()
+            self._server_proc.wait()
+            self._server_proc = None
+        self._server_status_var.set("Server stopped")
+        self._server_indicator.config(fg="red")
+
+    def _on_close(self):
+        """Clean up server process on window close."""
+        if self._server_proc is not None:
+            self._server_proc.terminate()
+            try:
+                self._server_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._server_proc.kill()
+        self.root.destroy()
 
     def _join(self):
         """Connect to an existing server."""

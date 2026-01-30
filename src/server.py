@@ -7,7 +7,10 @@ import socket
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(__file__))
+if getattr(sys, 'frozen', False):
+    sys.path.insert(0, sys._MEIPASS)
+else:
+    sys.path.insert(0, os.path.dirname(__file__))
 
 import websockets
 
@@ -366,4 +369,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"\nServer error: {e}")
+        if getattr(sys, 'frozen', False):
+            input("Press Enter to exit...")
+        raise
