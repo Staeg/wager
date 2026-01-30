@@ -17,11 +17,12 @@ import websockets
 from combat import Battle, Unit
 from overworld import Overworld, UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
 from overworld import FACTIONS
+from upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 from protocol import (
     serialize_armies, serialize_bases, encode, decode,
-    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION,
+    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION, SELECT_UPGRADE,
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
-    REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT,
+    REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT, UPGRADE_PROMPT,
 )
 from combat import hex_neighbors
 
@@ -54,6 +55,9 @@ class GameServer:
         self.player_factions = {}  # player_id -> faction name
         self._faction_selection_order = []  # order of players to pick factions
         self._faction_selection_idx = 0  # which player is currently picking
+        self.player_upgrades = {}  # player_id -> upgrade id
+        self._upgrade_selection_order = []  # order of players to pick upgrades
+        self._upgrade_selection_idx = 0  # which player is currently picking
 
     def _build_world(self):
         """Create an Overworld with bases and gold, no starting armies."""
@@ -86,6 +90,8 @@ class GameServer:
             "gold": self.world.gold,
             "current_player": self.current_player,
             "message": message,
+            "player_factions": self.player_factions,
+            "player_upgrades": self.player_upgrades,
         }
 
     def _players_with_armies(self):
@@ -104,14 +110,22 @@ class GameServer:
 
     def _make_battle_units(self, army):
         """Convert an OverworldArmy to Battle-compatible dicts."""
+        faction = self.player_factions.get(army.player)
+        upgrade_id = self.player_upgrades.get(army.player)
+        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys()))
+        effective_stats = apply_upgrade_to_unit_stats(UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
         result = []
         for name, count in army.units:
-            s = UNIT_STATS[name]
+            s = effective_stats[name]
             spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
                     "range": s["range"], "count": count}
             for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                        "amplify_range", "aura_armor", "aura_armor_range",
+                        "retreat", "heal_all", "sunder_all",
                         "undying", "splash", "repair", "bombardment", "bombardment_range",
-                        "rage", "vengeance", "charge", "summon_count"):
+                        "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
+                        "rage", "vengeance", "charge", "summon_count",
+                        "summon_ready", "summon_target_highest"):
                 if s.get(key, 0):
                     spec[key] = s[key]
             result.append(spec)
@@ -340,12 +354,35 @@ class GameServer:
                     self.player_factions[player_id] = faction_name
                     self._faction_selection_idx += 1
                     if self._faction_selection_idx >= len(self._faction_selection_order):
-                        # All players have picked — start the game
+                        # All players have picked — start upgrade selection
                         self._faction_selection_order = []
-                        await self._start_game()
+                        await self._start_upgrade_selection()
                     else:
                         # Prompt next player
                         await self._prompt_next_faction()
+
+                elif msg_type == SELECT_UPGRADE:
+                    upgrade_id = msg.get("upgrade_id")
+                    if not self._upgrade_selection_order:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not in upgrade selection phase"})
+                        continue
+                    expected_pid = self._upgrade_selection_order[self._upgrade_selection_idx]
+                    if player_id != expected_pid:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not your turn to pick"})
+                        continue
+                    faction = self.player_factions.get(player_id)
+                    upgrade_def = get_upgrade_by_id(upgrade_id)
+                    if not faction or not upgrade_def or upgrade_def not in get_upgrades_for_faction(faction):
+                        await self.send_to(player_id, {"type": ERROR, "message": "Invalid upgrade choice"})
+                        continue
+                    self.player_upgrades[player_id] = upgrade_id
+                    self._upgrade_selection_idx += 1
+                    if self._upgrade_selection_idx >= len(self._upgrade_selection_order):
+                        # All players have picked — start the game
+                        self._upgrade_selection_order = []
+                        await self._start_game()
+                    else:
+                        await self._prompt_next_upgrade()
 
                 elif msg_type == BUILD_UNIT:
                     if not self.started:
@@ -423,6 +460,21 @@ class GameServer:
             "taken": taken,
         })
 
+    async def _start_upgrade_selection(self):
+        """Begin sequential upgrade selection after factions are chosen."""
+        self._upgrade_selection_order = sorted(self.players.keys())
+        self._upgrade_selection_idx = 0
+        await self._prompt_next_upgrade()
+
+    async def _prompt_next_upgrade(self):
+        """Send an upgrade prompt to the next player who needs to pick."""
+        pid = self._upgrade_selection_order[self._upgrade_selection_idx]
+        await self.broadcast({
+            "type": UPGRADE_PROMPT,
+            "picking_player": pid,
+            "player_factions": self.player_factions,
+        })
+
     async def _start_game(self):
         self.started = True
         self.world = self._build_world()
@@ -437,6 +489,8 @@ class GameServer:
                 "current_player": self.current_player,
                 "player_id": pid,
                 "faction": self.player_factions.get(pid),
+                "player_factions": self.player_factions,
+                "player_upgrades": self.player_upgrades,
             })
 
     async def run(self):

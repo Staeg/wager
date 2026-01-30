@@ -1,0 +1,29 @@
+﻿Upgrades
+Custodian
+* T1:
+   * Frenzy: Pages gain the ability “Ramp 1”, which lets them increase attack damage by 1 after successful attacks
+* T2:
+   * Sweeping sands: Sunder abilities now hit all enemies within range instead of randomly
+* T3:
+   * Trespassers: Stewards gain the ability “Rage 1”, which lets them gain 1 attack damage after taking damage
+Weaver
+* T1:
+   * Skirmish tactics: Apprentices gain the “Retreat” ability, which lets them move backwards after successfully attacking
+* T2:
+   * Arcane reach: Conduit “Aura 1 - Amplify 1” ability is replaced by “Aura 2 - Amplify 1”, which passively increases the values of ally abilities by 1 for all allies within 2 hexes
+* T3:
+   * Farcasting: Apprentices gain 1 range, Conduits and Seekers gain 2 range, Savants gain 3 range
+Artificer
+* T1:
+   * Corrosion: Tincans gain the “Sunder 1” ability, which lets them reduce the Armor of a random enemy in range by 1 at the end of turn
+* T2:
+   * Armor kits: Kitboys gain the ability “Aura 1 - Armor 1”, which passively increases the armor for all allies within 1 hex by 1
+* T3:
+   * Carpet bombing: Followup X/Y abilities become “Charge 2 - Bombardment X/Y” abilities, which deal X damage to all enemies in Y range every 2 turns after attacking
+Purifier
+* T1:
+   * Alacrity: Blades are now created adjacent to the highest health ally in range instead of the summoner, and they are ready instead of exhausted
+* T2:
+   * Salvation: Heal abilities now target all allies in range instead of randomly
+* T3:
+   * Bladestorm: “Charge 3 - Summon 2 Blades” abilities become “Summon 2 Blades” abilities, which causes them to trigger every turn instead of every 3 turns

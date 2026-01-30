@@ -2,6 +2,7 @@ import tkinter as tk
 import math
 from dataclasses import dataclass
 from combat import Battle, CombatGUI, Unit, hex_neighbors, ABILITY_DESCRIPTIONS
+from upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 
 # Canonical unit stats
 UNIT_STATS = {
@@ -267,6 +268,10 @@ class OverworldGUI:
         self.current_player = 1
         self._multiplayer = client is not None
         self.faction = None
+        self.player_factions = {}
+        self.player_upgrades = {}
+        self.ai_faction = None
+        self.ai_upgrade = None
 
         root.title("Wager of War - Overworld")
 
@@ -279,6 +284,15 @@ class OverworldGUI:
             self.world = Overworld()
             # Show faction selection before building
             self._pick_faction()
+            self.player_factions[1] = self.faction
+            self.ai_faction = self._choose_ai_faction()
+            if self.ai_faction:
+                self.player_factions[2] = self.ai_faction
+            # Choose upgrades after factions are set
+            self._pick_upgrade_singleplayer()
+            if self.ai_faction:
+                self.ai_upgrade = self._auto_pick_upgrade(self.ai_faction)
+                self.player_upgrades[2] = self.ai_upgrade
             # Auto-build P2 armies since there's no AI
             self._auto_build_p2()
 
@@ -316,18 +330,15 @@ class OverworldGUI:
         self.end_turn_btn.pack(pady=5)
 
         # Battle log panel (right side)
+        right_frame = tk.Frame(self.main_frame, width=250)
+        right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+        right_frame.pack_propagate(False)
+        tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
+        self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
+        self.battle_log.pack(fill=tk.BOTH, expand=True)
         if self._multiplayer:
-            right_frame = tk.Frame(self.main_frame, width=250)
-            right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
-            right_frame.pack_propagate(False)
-            tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
-            self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
-            self.battle_log.pack(fill=tk.BOTH, expand=True)
             self.battle_log.bind("<Double-Button-1>", self._on_replay_click)
-            self._battle_log_ids = []  # parallel list of battle_ids
-        else:
-            self.battle_log = None
-            self._battle_log_ids = []
+        self._battle_log_ids = []  # parallel list of battle_ids
 
         self.tooltip = None
         self._hovered_army = None
@@ -357,6 +368,7 @@ class OverworldGUI:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
                 for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                           "aura_armor", "retreat",
                            "undying", "splash", "repair", "bombardment",
                            "rage", "vengeance", "charge"):
                     if s.get(ab, 0):
@@ -380,6 +392,87 @@ class OverworldGUI:
         self.faction = faction_name
         dialog.destroy()
 
+    def _choose_ai_faction(self):
+        """Pick a single-player AI faction different from the player's if possible."""
+        import random as rng
+        other_factions = [f for f in FACTIONS if f != self.faction]
+        if other_factions:
+            return rng.choice(other_factions)
+        return rng.choice(list(FACTIONS.keys()))
+
+    def _auto_pick_upgrade(self, faction_name):
+        """Pick a random upgrade for an AI faction."""
+        import random as rng
+        upgrades = get_upgrades_for_faction(faction_name)
+        if not upgrades:
+            return None
+        return rng.choice(upgrades)["id"]
+
+    def _get_effective_unit_stats(self, player_id):
+        """Return a unit stats dict with the player's upgrade applied."""
+        faction = self.player_factions.get(player_id)
+        if not faction:
+            return UNIT_STATS
+        upgrade_id = self.player_upgrades.get(player_id)
+        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys()))
+        return apply_upgrade_to_unit_stats(UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
+
+    def _show_upgrade_dialog(self, faction_name, player_factions, on_select):
+        upgrades = get_upgrades_for_faction(faction_name)
+        if not upgrades:
+            on_select(None, None)
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Choose Your Upgrade")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Choose Your Upgrade", font=("Arial", 14, "bold")).pack(pady=8)
+        if player_factions:
+            tk.Label(dialog, text="Factions:", font=("Arial", 11, "bold")).pack(anchor="w", padx=12)
+            for pid in sorted(player_factions.keys()):
+                tk.Label(dialog, text=f"P{pid}: {player_factions[pid]}", font=("Arial", 10)).pack(anchor="w", padx=20)
+
+        for upgrade in upgrades:
+            frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
+            frame.pack(fill=tk.X, padx=15, pady=6)
+            tk.Label(frame, text=upgrade["name"], font=("Arial", 12, "bold")).pack(anchor="w")
+            tk.Label(frame, text=upgrade["description"], font=("Arial", 9), wraplength=360,
+                     justify=tk.LEFT).pack(anchor="w")
+            tk.Button(frame, text=f"Choose {upgrade['name']}", font=("Arial", 10),
+                      command=lambda u=upgrade: on_select(u["id"], dialog)).pack(pady=4)
+
+        dialog.focus_force()
+
+    def _pick_upgrade_singleplayer(self):
+        faction = self.faction
+        if not faction:
+            return
+
+        def on_select(upgrade_id, dialog):
+            self.player_upgrades[1] = upgrade_id
+            if dialog:
+                dialog.destroy()
+            if upgrade_id:
+                if hasattr(self, "status_var"):
+                    self.status_var.set(f"Upgrade selected: {get_upgrade_by_id(upgrade_id)['name']}")
+
+        self._show_upgrade_dialog(faction, self.player_factions, on_select)
+
+    def _pick_upgrade_multiplayer(self, player_factions):
+        faction = player_factions.get(self.player_id)
+        if not faction:
+            return
+
+        def on_select(upgrade_id, dialog):
+            if dialog:
+                dialog.destroy()
+            if upgrade_id:
+                self.client.send({"type": "select_upgrade", "upgrade_id": upgrade_id})
+
+        self._show_upgrade_dialog(faction, player_factions, on_select)
+
     def _pick_faction_multiplayer(self, taken):
         """Show faction picker for multiplayer, excluding already-taken factions."""
         dialog = tk.Toplevel(self.root)
@@ -401,6 +494,7 @@ class OverworldGUI:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
                 for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                           "aura_armor", "retreat",
                            "undying", "splash", "repair", "bombardment",
                            "rage", "vengeance", "charge"):
                     if s.get(ab, 0):
@@ -426,9 +520,8 @@ class OverworldGUI:
         """Auto-spend P2's gold to create armies in single-player mode.
         Distributes gold roughly equally across all faction unit types."""
         import random as rng
-        # P2 gets a random faction different from player's if possible
-        other_factions = [f for f in FACTIONS if f != self.faction]
-        p2_faction = rng.choice(other_factions) if other_factions else rng.choice(list(FACTIONS.keys()))
+        p2_faction = self.ai_faction or self._choose_ai_faction()
+        self.ai_faction = p2_faction
         names = FACTIONS[p2_faction]
         spent = {n: 0 for n in names}
         while self.world.gold.get(2, 0) > 0:
@@ -462,13 +555,16 @@ class OverworldGUI:
 
         self._build_buttons = {}
         self._build_order = []  # ordered list of unit names for hotkeys
+        my_player = self.player_id if self._multiplayer else 1
         faction_units = FACTIONS.get(self.faction, list(UNIT_STATS.keys())) if self.faction else list(UNIT_STATS.keys())
+        effective_stats = self._get_effective_unit_stats(my_player)
         for idx, name in enumerate(faction_units):
-            stats = UNIT_STATS[name]
+            stats = effective_stats[name]
             cost = stats["value"]
             hotkey = idx + 1
             text = f"[{hotkey}] {name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
             for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                       "aura_armor", "retreat",
                        "undying", "splash", "repair", "bombardment",
                        "rage", "vengeance", "charge"):
                 if stats.get(ab, 0):
@@ -486,6 +582,7 @@ class OverworldGUI:
             # Ability hover tooltip for build buttons
             ability_lines = []
             for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                       "aura_armor", "retreat",
                        "undying", "splash", "repair", "bombardment",
                        "rage", "vengeance", "charge"):
                 if stats.get(ab, 0):
@@ -844,14 +941,19 @@ class OverworldGUI:
     def _make_battle_units(self, army):
         """Convert an army's units list into Battle-compatible dicts."""
         result = []
+        effective_stats = self._get_effective_unit_stats(army.player)
         for name, count in army.units:
-            s = UNIT_STATS[name]
+            s = effective_stats[name]
             spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
                     "range": s["range"], "count": count}
             # Copy all ability keys
             for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                        "amplify_range", "aura_armor", "aura_armor_range",
+                        "retreat", "heal_all", "sunder_all",
                         "undying", "splash", "repair", "bombardment", "bombardment_range",
-                        "rage", "vengeance", "charge", "summon_count"):
+                        "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
+                        "rage", "vengeance", "charge", "summon_count",
+                        "summon_ready", "summon_target_highest"):
                 if s.get(key, 0):
                     spec[key] = s[key]
             result.append(spec)
@@ -923,6 +1025,13 @@ class OverworldGUI:
                 _update_survivors(defender, 1 if defender is ow_p1 else 2)
                 self.world.armies.remove(attacker)
 
+            summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
+            if winner == 0:
+                summary = f"P{ow_p1.player} vs P{ow_p2.player}: Draw"
+            if self.battle_log is not None:
+                self.battle_log.insert(tk.END, summary)
+                self._battle_log_ids.append(None)
+
             self.main_frame.pack(fill=tk.BOTH, expand=True)
             p1_armies = [a for a in self.world.armies if a.player == 1]
             p2_armies = [a for a in self.world.armies if a.player == 2]
@@ -961,10 +1070,24 @@ class OverworldGUI:
             else:
                 self.status_var.set(f"Waiting for P{picking} to choose a faction...")
 
+        elif msg_type == "upgrade_prompt":
+            picking = msg["picking_player"]
+            player_factions = msg.get("player_factions", {})
+            self.player_factions = {int(k): v for k, v in player_factions.items()}
+            if picking == self.player_id:
+                self.status_var.set("Choose your upgrade!")
+                self._pick_upgrade_multiplayer(self.player_factions)
+            else:
+                self.status_var.set(f"Waiting for P{picking} to choose an upgrade...")
+
         elif msg_type == "game_start":
             self.player_id = msg["player_id"]
             self.current_player = msg["current_player"]
             self.faction = msg.get("faction")
+            self.player_factions = {int(k): v for k, v in msg.get("player_factions", {}).items()}
+            if not self.faction and self.player_factions:
+                self.faction = self.player_factions.get(self.player_id)
+            self.player_upgrades = {int(k): v for k, v in msg.get("player_upgrades", {}).items()}
             self.world.armies = _deserialize_armies(msg["armies"])
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
@@ -979,6 +1102,10 @@ class OverworldGUI:
             self.world.armies = _deserialize_armies(msg["armies"])
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+            if "player_factions" in msg:
+                self.player_factions = {int(k): v for k, v in msg.get("player_factions", {}).items()}
+            if "player_upgrades" in msg:
+                self.player_upgrades = {int(k): v for k, v in msg.get("player_upgrades", {}).items()}
             self._update_gold_display()
             self._refresh_build_panel()
             self.current_player = msg["current_player"]
