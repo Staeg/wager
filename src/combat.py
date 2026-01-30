@@ -813,11 +813,11 @@ class CombatGUI:
             self._playing_step = False
             return
         self._playing_step = True
-        self._step_queue.pop(0)
+        step_data = self._step_queue.pop(0)
 
-        # Step the local battle to advance it
-        self.battle.step()
-        action = self.battle.last_action
+        # Apply server-authoritative state instead of stepping locally
+        self._apply_step_data(step_data)
+        action = step_data.get("action")
         self._draw()
 
         def after_anim():
@@ -827,6 +827,22 @@ class CombatGUI:
             self._play_attack_anim(action, lambda: self._play_heal_if_needed(action, after_anim))
         else:
             self._play_heal_if_needed(action, after_anim)
+
+    def _apply_step_data(self, step_data):
+        """Apply server-authoritative unit state to the local battle."""
+        unit_map = {u.id: u for u in self.battle.units}
+        for udata in step_data.get("units", []):
+            u = unit_map.get(udata["id"])
+            if u:
+                u.hp = udata["hp"]
+                u.pos = tuple(udata["pos"]) if udata["pos"] else None
+                u.has_acted = udata["has_acted"]
+                u.armor = udata["armor"]
+                u.heal = udata["heal"]
+                u.sunder = udata["sunder"]
+        self.battle.winner = step_data.get("winner")
+        self.battle.round_num = step_data.get("round_num", self.battle.round_num)
+        self.battle.last_action = step_data.get("action")
 
 
 def main():

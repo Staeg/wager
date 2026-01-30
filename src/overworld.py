@@ -609,7 +609,7 @@ class OverworldGUI:
                 })
 
     def _show_replay(self, msg):
-        """Show a battle replay from replay_data."""
+        """Show a battle replay from replay_data using viewer mode with server steps."""
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
@@ -626,12 +626,14 @@ class OverworldGUI:
             rng_seed=msg["rng_seed"],
         )
 
-        def on_replay_done(winner, p1_s, p2_s):
-            self._close_battle_viewer()
-
-        gui = CombatGUI(self.combat_frame, battle=battle, on_complete=on_replay_done)
-        # Auto-play the replay
-        gui.toggle_auto()
+        gui = CombatGUI(
+            self.combat_frame, battle=battle, viewer_mode=True,
+            on_complete=lambda w, p1, p2: self._close_battle_viewer(),
+        )
+        self._viewer_gui = gui
+        # Feed all recorded steps to the viewer
+        for step in msg["steps"]:
+            gui.receive_step(step)
 
     def run(self):
         self.root.mainloop()
