@@ -14,7 +14,7 @@ UNIT_STATS = {
     "Apprentice": {"max_hp": 8,  "damage": 1, "range": 2, "push": 1, "value": 5},
     "Conduit":    {"max_hp": 5,  "damage": 2, "range": 3, "amplify": 1, "value": 10},
     "Seeker":     {"max_hp": 3,  "damage": 1, "range": 4, "ramp": 1, "value": 10},
-    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "barrage": 1, "value": 25},
+    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "splash": 1, "value": 25},
     # Artificers (gray/black)
     "Tincan":     {"max_hp": 11, "damage": 2, "range": 1, "value": 6},
     "Golem":      {"max_hp": 16, "damage": 2, "range": 1, "armor": 2, "value": 14},
@@ -80,16 +80,16 @@ class Base:
 
 # Base positions: center of each player's side on a 10x8 grid
 BASE_POSITIONS = {
-    1: (1, 4),
-    2: (8, 4),
-    3: (1, 3),
-    4: (8, 3),
+    1: (1, 3),
+    2: (5, 3),
+    3: (1, 2),
+    4: (5, 2),
 }
 
 
 class Overworld:
-    COLS = 10
-    ROWS = 8
+    COLS = 7
+    ROWS = 7
 
     def __init__(self, num_players=2):
         self.armies = []
@@ -357,7 +357,7 @@ class OverworldGUI:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
                 for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                           "undying", "barrage", "repair", "bombardment",
+                           "undying", "splash", "repair", "bombardment",
                            "rage", "vengeance", "charge"):
                     if s.get(ab, 0):
                         desc += f" {ab.capitalize()}:{s[ab]}"
@@ -378,6 +378,48 @@ class OverworldGUI:
 
     def _select_faction(self, faction_name, dialog):
         self.faction = faction_name
+        dialog.destroy()
+
+    def _pick_faction_multiplayer(self, taken):
+        """Show faction picker for multiplayer, excluding already-taken factions."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Choose Your Faction")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(pady=10)
+
+        for faction_name, unit_names in FACTIONS.items():
+            is_taken = faction_name in taken
+            frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=5)
+            frame.pack(fill=tk.X, padx=15, pady=5)
+            label_text = faction_name + (" (taken)" if is_taken else "")
+            tk.Label(frame, text=label_text, font=("Arial", 12, "bold"),
+                     fg="gray" if is_taken else "black").pack(anchor="w")
+            for uname in unit_names:
+                s = UNIT_STATS[uname]
+                desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
+                for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
+                           "undying", "splash", "repair", "bombardment",
+                           "rage", "vengeance", "charge"):
+                    if s.get(ab, 0):
+                        desc += f" {ab.capitalize()}:{s[ab]}"
+                tk.Label(frame, text=desc, font=("Arial", 9), anchor="w",
+                         fg="gray" if is_taken else "black").pack(anchor="w")
+            btn = tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
+                            state=tk.DISABLED if is_taken else tk.NORMAL,
+                            command=lambda fn=faction_name, d=dialog: self._select_faction_mp(fn, d))
+            btn.pack(pady=5)
+
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{max(0,x)}+{max(0,y)}")
+
+    def _select_faction_mp(self, faction_name, dialog):
+        """Send faction selection to server in multiplayer."""
+        self.client.send({"type": "select_faction", "faction": faction_name})
         dialog.destroy()
 
     def _auto_build_p2(self):
@@ -425,7 +467,7 @@ class OverworldGUI:
             cost = stats["value"]
             text = f"{name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
             for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                       "undying", "barrage", "repair", "bombardment",
+                       "undying", "splash", "repair", "bombardment",
                        "rage", "vengeance", "charge"):
                 if stats.get(ab, 0):
                     text += f" {ab.capitalize()}:{stats[ab]}"
@@ -437,7 +479,7 @@ class OverworldGUI:
             # Ability hover tooltip for build buttons
             ability_lines = []
             for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                       "undying", "barrage", "repair", "bombardment",
+                       "undying", "splash", "repair", "bombardment",
                        "rage", "vengeance", "charge"):
                 if stats.get(ab, 0):
                     ability_lines.append(f"{ab.capitalize()}: {ABILITY_DESCRIPTIONS[ab].format(value=stats[ab])}")
@@ -782,7 +824,7 @@ class OverworldGUI:
                     "range": s["range"], "count": count}
             # Copy all ability keys
             for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                        "undying", "barrage", "repair", "bombardment", "bombardment_range",
+                        "undying", "splash", "repair", "bombardment", "bombardment_range",
                         "rage", "vengeance", "charge", "summon_count"):
                 if s.get(key, 0):
                     spec[key] = s[key]
@@ -867,9 +909,19 @@ class OverworldGUI:
             self.player_id = msg["player_id"]
             self.status_var.set(f"You are P{self.player_id}. Waiting for players ({msg['player_count']}/{msg['needed']})...")
 
+        elif msg_type == "faction_prompt":
+            picking = msg["picking_player"]
+            taken = msg.get("taken", [])
+            if picking == self.player_id:
+                self.status_var.set("Choose your faction!")
+                self._pick_faction_multiplayer(taken)
+            else:
+                self.status_var.set(f"Waiting for P{picking} to choose a faction...")
+
         elif msg_type == "game_start":
             self.player_id = msg["player_id"]
             self.current_player = msg["current_player"]
+            self.faction = msg.get("faction")
             self.world.armies = _deserialize_armies(msg["armies"])
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}

@@ -16,11 +16,12 @@ import websockets
 
 from combat import Battle, Unit
 from overworld import Overworld, UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
+from overworld import FACTIONS
 from protocol import (
     serialize_armies, serialize_bases, encode, decode,
-    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT,
+    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION,
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
-    REPLAY_DATA, ERROR, GAME_OVER,
+    REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT,
 )
 from combat import hex_neighbors
 
@@ -50,6 +51,9 @@ class GameServer:
         self.started = False
         self.battle_history = []
         self.next_battle_id = 1
+        self.player_factions = {}  # player_id -> faction name
+        self._faction_selection_order = []  # order of players to pick factions
+        self._faction_selection_idx = 0  # which player is currently picking
 
     def _build_world(self):
         """Create an Overworld with bases and gold, no starting armies."""
@@ -106,7 +110,7 @@ class GameServer:
             spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
                     "range": s["range"], "count": count}
             for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                        "undying", "barrage", "repair", "bombardment", "bombardment_range",
+                        "undying", "splash", "repair", "bombardment", "bombardment_range",
                         "rage", "vengeance", "charge", "summon_count"):
                 if s.get(key, 0):
                     spec[key] = s[key]
@@ -235,7 +239,7 @@ class GameServer:
                                 pass
 
                     if len(self.players) == self.num_players:
-                        await self._start_game()
+                        await self._start_faction_selection()
 
                 elif msg_type == MOVE_ARMY:
                     if not self.started:
@@ -300,6 +304,32 @@ class GameServer:
                             f"P{player_id} moved army to {to_pos}."
                         ))
 
+                elif msg_type == SELECT_FACTION:
+                    faction_name = msg.get("faction")
+                    if not self._faction_selection_order:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not in faction selection phase"})
+                        continue
+                    expected_pid = self._faction_selection_order[self._faction_selection_idx]
+                    if player_id != expected_pid:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not your turn to pick"})
+                        continue
+                    taken = set(self.player_factions.values())
+                    if faction_name in taken:
+                        await self.send_to(player_id, {"type": ERROR, "message": f"{faction_name} is already taken"})
+                        continue
+                    if faction_name not in FACTIONS:
+                        await self.send_to(player_id, {"type": ERROR, "message": f"Unknown faction: {faction_name}"})
+                        continue
+                    self.player_factions[player_id] = faction_name
+                    self._faction_selection_idx += 1
+                    if self._faction_selection_idx >= len(self._faction_selection_order):
+                        # All players have picked — start the game
+                        self._faction_selection_order = []
+                        await self._start_game()
+                    else:
+                        # Prompt next player
+                        await self._prompt_next_faction()
+
                 elif msg_type == BUILD_UNIT:
                     if not self.started:
                         await self.send_to(player_id, {"type": ERROR, "message": "Game not started"})
@@ -308,6 +338,11 @@ class GameServer:
                         await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
                         continue
                     unit_name = msg.get("unit_name", "")
+                    # Restrict to player's faction
+                    faction = self.player_factions.get(player_id)
+                    if faction and unit_name not in FACTIONS[faction]:
+                        await self.send_to(player_id, {"type": ERROR, "message": f"Cannot build {unit_name} — not in your faction"})
+                        continue
                     err = self.world.build_unit(player_id, unit_name)
                     if err:
                         await self.send_to(player_id, {"type": ERROR, "message": err})
@@ -354,6 +389,23 @@ class GameServer:
                     ))
                     await self._check_game_over()
 
+    async def _start_faction_selection(self):
+        """Begin sequential faction selection: P1 picks first, then P2, etc."""
+        self._faction_selection_order = sorted(self.players.keys())
+        self._faction_selection_idx = 0
+        await self._prompt_next_faction()
+
+    async def _prompt_next_faction(self):
+        """Send a faction prompt to the next player who needs to pick."""
+        pid = self._faction_selection_order[self._faction_selection_idx]
+        taken = list(self.player_factions.values())
+        # Notify all players who is picking
+        await self.broadcast({
+            "type": FACTION_PROMPT,
+            "picking_player": pid,
+            "taken": taken,
+        })
+
     async def _start_game(self):
         self.started = True
         self.world = self._build_world()
@@ -367,6 +419,7 @@ class GameServer:
                 "gold": self.world.gold,
                 "current_player": self.current_player,
                 "player_id": pid,
+                "faction": self.player_factions.get(pid),
             })
 
     async def run(self):

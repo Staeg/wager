@@ -96,7 +96,7 @@ class Unit:
 
     # All known ability keys (for save/restore)
     ABILITY_KEYS = ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                    "undying", "barrage", "repair", "bombardment", "bombardment_range",
+                    "undying", "splash", "repair", "bombardment", "bombardment_range",
                     "rage", "vengeance", "charge", "summon_count")
 
     def __init__(self, name, max_hp, damage, attack_range, player, **abilities):
@@ -450,22 +450,22 @@ class Battle:
         if self.last_action is not None:
             self.last_action["ramp_pos"] = unit.pos
 
-    def _apply_barrage(self, attacker, target):
-        """Deal barrage damage to all enemies adjacent to the attack target."""
-        barrage_val = self._effective_ability(attacker, "barrage")
-        if barrage_val <= 0:
+    def _apply_splash(self, attacker, target):
+        """Deal splash damage to all enemies adjacent to the attack target."""
+        splash_val = self._effective_ability(attacker, "splash")
+        if splash_val <= 0:
             return
         for enemy in list(self.units):
             if (enemy.alive and enemy.player != attacker.player
                     and enemy.id != target.id
                     and hex_distance(enemy.pos, target.pos) <= 1):
-                actual = self._apply_damage(enemy, barrage_val)
+                actual = self._apply_damage(enemy, splash_val)
                 if actual > 0:
-                    self.log.append(f"  Barrage hits {enemy} for {actual} dmg")
+                    self.log.append(f"  Splash hits {enemy} for {actual} dmg")
                     if self.last_action is not None:
-                        self.last_action.setdefault("barrage_positions", []).append(enemy.pos)
+                        self.last_action.setdefault("splash_positions", []).append(enemy.pos)
                     if not enemy.alive:
-                        self.log.append(f"  {enemy.name}(P{enemy.player}) dies from barrage!")
+                        self.log.append(f"  {enemy.name}(P{enemy.player}) dies from splash!")
                         self._check_vengeance(enemy)
 
     def _apply_repair(self, unit):
@@ -594,7 +594,7 @@ class Battle:
             }
             self._apply_push(unit, target)
             self._apply_ramp(unit, actual)
-            self._apply_barrage(unit, target)
+            self._apply_splash(unit, target)
         else:
             # move toward closest enemy by actual path length
             occupied = self._occupied() - {unit.pos}
@@ -629,7 +629,7 @@ class Battle:
                 }
                 self._apply_push(unit, target)
                 self._apply_ramp(unit, actual)
-                self._apply_barrage(unit, target)
+                self._apply_splash(unit, target)
             else:
                 self.last_action = {"type": "move", "from": old, "to": next_pos}
 
@@ -684,7 +684,7 @@ ABILITY_DESCRIPTIONS = {
     "ramp": "Increases damage by {value} after each successful attack",
     "amplify": "Increases adjacent allies' ability values by {value}",
     "undying": "Allies within 2 hexes lose {value} attack instead of dying",
-    "barrage": "Deals {value} damage to all enemies adjacent to the target after attacking",
+    "splash": "Deals {value} damage to all enemies adjacent to the target after attacking",
     "repair": "Heals all adjacent allies by {value} at end of turn",
     "bombardment": "Deals {value} damage to a random enemy in range at end of turn",
     "rage": "Gains {value} attack damage after taking damage",
@@ -938,7 +938,7 @@ class CombatGUI:
 
             abilities = []
             for ab_key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                           "undying", "barrage", "repair", "bombardment",
+                           "undying", "splash", "repair", "bombardment",
                            "rage", "vengeance", "charge"):
                 val = getattr(unit, ab_key, 0)
                 if val > 0 and ab_key in ABILITY_DESCRIPTIONS:
@@ -1149,17 +1149,17 @@ class CombatGUI:
         self.canvas.create_line(cx, cy, cx, y1, fill=faded, width=2, tags=tag)
         self.root.after(self._anim_delay(30), lambda: self._animate_small_arrow(pos, color, direction, tag, on_done, frame + 1))
 
-    def _animate_barrage_hit(self, pos, on_done, frame=0):
+    def _animate_splash_hit(self, pos, on_done, frame=0):
         """Animate a small red burst at the given position."""
         total_frames = 6
         if frame > total_frames:
-            self.canvas.delete("barrage_anim")
+            self.canvas.delete("splash_anim")
             on_done()
             return
         t = frame / total_frames
         cx = self._hex_x(pos[0], pos[1])
         cy = self._hex_y(pos[0], pos[1])
-        self.canvas.delete("barrage_anim")
+        self.canvas.delete("splash_anim")
         r = self.HEX_SIZE * 0.3 * (0.5 + t * 0.5)
         fade = int(255 * (1 - t))
         color = f"#ff{fade // 4:02x}{fade // 4:02x}"
@@ -1170,8 +1170,8 @@ class CombatGUI:
             y1 = cy + r * math.sin(angle)
             x2 = cx - r * math.cos(angle)
             y2 = cy - r * math.sin(angle)
-            self.canvas.create_line(x1, y1, x2, y2, fill=color, width=2, tags="barrage_anim")
-        self.root.after(self._anim_delay(35), lambda: self._animate_barrage_hit(pos, on_done, frame + 1))
+            self.canvas.create_line(x1, y1, x2, y2, fill=color, width=2, tags="splash_anim")
+        self.root.after(self._anim_delay(35), lambda: self._animate_splash_hit(pos, on_done, frame + 1))
 
     def _animate_repair_tick(self, pos, on_done, frame=0):
         """Animate a small green wrench/+ symbol at the given position."""
@@ -1310,9 +1310,9 @@ class CombatGUI:
         for vpos in action.get("vengeance_positions", []):
             anims.append(lambda done, p=vpos: self._animate_stat_arrow(p, "#ff2222", -1, "veng_anim", done))
 
-        # Barrage — red burst on each hit
-        for bpos in action.get("barrage_positions", []):
-            anims.append(lambda done, p=bpos: self._animate_barrage_hit(p, done))
+        # Splash — red burst on each hit
+        for bpos in action.get("splash_positions", []):
+            anims.append(lambda done, p=bpos: self._animate_splash_hit(p, done))
 
         # Repair — green + on each healed ally
         for rpos in action.get("repair_positions", []):

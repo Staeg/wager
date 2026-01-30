@@ -8,9 +8,11 @@ MOVE_ARMY = "move_army"
 END_TURN = "end_turn"
 REQUEST_REPLAY = "request_replay"
 BUILD_UNIT = "build_unit"
+SELECT_FACTION = "select_faction"
 
 # Message types - Server -> Client
 JOINED = "joined"
+FACTION_PROMPT = "faction_prompt"
 GAME_START = "game_start"
 STATE_UPDATE = "state_update"
 BATTLE_END = "battle_end"

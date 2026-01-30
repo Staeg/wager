@@ -310,22 +310,22 @@ class TestNewUnitAttributes:
             assert getattr(u, key) == 0
 
 
-class TestBarrage:
-    def test_barrage_hits_adjacent_enemies(self):
-        """Barrage should deal damage to enemies adjacent to the attack target."""
-        # Savant (barrage=1) attacks one of two clustered enemies
+class TestSplash:
+    def test_splash_hits_adjacent_enemies(self):
+        """Splash should deal damage to enemies adjacent to the attack target."""
+        # Savant (splash=1) attacks one of two clustered enemies
         p1 = [{"name": "Dummy", "max_hp": 50, "damage": 0, "range": 1, "count": 2}]
-        p2 = [{"name": "Savant", "max_hp": 100, "damage": 4, "range": 4, "count": 1, "barrage": 1}]
+        p2 = [{"name": "Savant", "max_hp": 100, "damage": 4, "range": 4, "count": 1, "splash": 1}]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
-        barraged = False
+        splashed = False
         for _ in range(200):
             if not b.step():
                 break
-            if any("Barrage hits" in line for line in b.log[-5:]):
-                barraged = True
+            if any("Splash hits" in line for line in b.log[-5:]):
+                splashed = True
                 break
-        # Barrage may or may not fire depending on positioning
-        assert barraged or b.winner is not None
+        # Splash may or may not fire depending on positioning
+        assert splashed or b.winner is not None
 
 
 class TestRage:
