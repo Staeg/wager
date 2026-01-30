@@ -450,7 +450,7 @@ class OverworldGUI:
     def _show_build_panel(self):
         """Show a popup panel for building units at the player's base."""
         if self.build_panel:
-            self.build_panel.destroy()
+            self._close_build_panel()
 
         self.build_panel = tw = tk.Toplevel(self.root)
         tw.title("Build Unit")
@@ -493,8 +493,15 @@ class OverworldGUI:
             if ability_lines:
                 self._bind_build_ability_hover(btn, "\n".join(ability_lines))
 
-        tk.Button(tw, text="Close", command=tw.destroy).pack(pady=5)
+        tk.Button(tw, text="Close", command=self._close_build_panel).pack(pady=5)
         self._refresh_build_panel()
+        # Also bind hotkeys on the root so they work even without build panel focus
+        self._build_hotkey_ids = []
+        for i, uname in enumerate(self._build_order):
+            bid = self.root.bind(str(i + 1), lambda e, n=uname: self._do_build(n))
+            self._build_hotkey_ids.append((str(i + 1), bid))
+        tw.protocol("WM_DELETE_WINDOW", self._close_build_panel)
+        tw.focus_force()
 
     def _bind_build_ability_hover(self, widget, description):
         tip = [None]
@@ -522,10 +529,22 @@ class OverworldGUI:
             cost = UNIT_STATS[name]["value"]
             btn.config(state=tk.NORMAL if gold >= cost else tk.DISABLED)
 
+    def _close_build_panel(self):
+        """Close the build panel and unbind root hotkeys."""
+        for key, bid in getattr(self, '_build_hotkey_ids', []):
+            self.root.unbind(key, bid)
+        self._build_hotkey_ids = []
+        if self.build_panel and self.build_panel.winfo_exists():
+            self.build_panel.destroy()
+        self.build_panel = None
+
     def _do_build(self, unit_name):
         """Execute a build action (panel stays open)."""
+        if not self.build_panel or not self.build_panel.winfo_exists():
+            return
         if self._multiplayer:
             self.client.send({"type": "build_unit", "unit_name": unit_name})
+            self._refresh_build_panel()
         else:
             err = self.world.build_unit(1, unit_name)
             if err:
@@ -533,8 +552,8 @@ class OverworldGUI:
             else:
                 self.status_var.set(f"Built a {unit_name}.")
                 self._update_gold_display()
+                self._refresh_build_panel()
                 self._draw()
-        self._refresh_build_panel()
 
     def _hex_center(self, col, row):
         x = self.HEX_SIZE * 1.75 * col + 50
@@ -880,21 +899,29 @@ class OverworldGUI:
                     if survivor_counts.get(name, 0) > 0
                 ]
 
+            # Map battle winner to overworld player
+            if winner == 1:
+                ow_winner = ow_p1.player
+            elif winner == 2:
+                ow_winner = ow_p2.player
+            else:
+                ow_winner = 0
+
             if winner == 0:
                 _update_survivors(ow_p1, 1)
                 _update_survivors(ow_p2, 2)
                 attacker.exhausted = True
-            elif winner == 1:
-                # ow_p1 won
-                _update_survivors(ow_p1, 1)
-                self.world.armies.remove(ow_p2)
-                self.world.move_army(ow_p1, ow_p2.pos)
-                ow_p1.exhausted = True
-                self._check_local_base_destruction(ow_p2.pos, ow_p1.player)
+            elif ow_winner == attacker.player:
+                # Attacker won — advance to defender's position
+                _update_survivors(attacker, 1 if attacker is ow_p1 else 2)
+                self.world.armies.remove(defender)
+                self.world.move_army(attacker, defender.pos)
+                attacker.exhausted = True
+                self._check_local_base_destruction(defender.pos, attacker.player)
             else:
-                # ow_p2 won
-                _update_survivors(ow_p2, 2)
-                self.world.armies.remove(ow_p1)
+                # Defender won — attacker is destroyed, defender stays
+                _update_survivors(defender, 1 if defender is ow_p1 else 2)
+                self.world.armies.remove(attacker)
 
             self.main_frame.pack(fill=tk.BOTH, expand=True)
             p1_armies = [a for a in self.world.armies if a.player == 1]
@@ -908,8 +935,6 @@ class OverworldGUI:
             elif winner == 0:
                 self.status_var.set("Battle ended in a stalemate. Both armies survive.")
             else:
-                # Map battle winner back to overworld player
-                ow_winner = ow_p1.player if winner == 1 else ow_p2.player
                 survivors = p1_survivors if winner == 1 else p2_survivors
                 self.status_var.set(f"Battle over. P{ow_winner} won with {survivors} survivors.")
             self._draw()
@@ -955,6 +980,7 @@ class OverworldGUI:
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
             self._update_gold_display()
+            self._refresh_build_panel()
             self.current_player = msg["current_player"]
             self.selected_army = None
             status = msg.get("message", "")

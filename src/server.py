@@ -162,18 +162,21 @@ class GameServer:
                 if survivor_counts.get(name, 0) > 0
             ]
 
+        # Determine which overworld army won/lost
         if battle_winner == 0:
             _update_survivors(ow_p1, 1)
             _update_survivors(ow_p2, 2)
             attacker.exhausted = True
-        elif battle_winner == 1:
-            _update_survivors(ow_p1, 1)
-            self.world.armies.remove(ow_p2)
-            self.world.move_army(ow_p1, ow_p2.pos)
-            ow_p1.exhausted = True
+        elif ow_winner == attacker.player:
+            # Attacker won — advance to defender's position
+            _update_survivors(attacker, 1 if attacker is ow_p1 else 2)
+            self.world.armies.remove(defender)
+            self.world.move_army(attacker, defender.pos)
+            attacker.exhausted = True
         else:
-            _update_survivors(ow_p2, 2)
-            self.world.armies.remove(ow_p1)
+            # Defender won — attacker is destroyed, defender stays
+            _update_survivors(defender, 1 if defender is ow_p1 else 2)
+            self.world.armies.remove(attacker)
 
         summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
         if battle_winner == 0:
