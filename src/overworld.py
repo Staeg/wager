@@ -461,11 +461,13 @@ class OverworldGUI:
         self._build_gold_label.pack(pady=5)
 
         self._build_buttons = {}
+        self._build_order = []  # ordered list of unit names for hotkeys
         faction_units = FACTIONS.get(self.faction, list(UNIT_STATS.keys())) if self.faction else list(UNIT_STATS.keys())
-        for name in faction_units:
+        for idx, name in enumerate(faction_units):
             stats = UNIT_STATS[name]
             cost = stats["value"]
-            text = f"{name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+            hotkey = idx + 1
+            text = f"[{hotkey}] {name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
             for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
                        "undying", "splash", "repair", "bombardment",
                        "rage", "vengeance", "charge"):
@@ -475,6 +477,11 @@ class OverworldGUI:
                             command=lambda n=name: self._do_build(n))
             btn.pack(fill=tk.X, padx=10, pady=2)
             self._build_buttons[name] = btn
+            self._build_order.append(name)
+
+        # Bind number hotkeys
+        for i, uname in enumerate(self._build_order):
+            tw.bind(str(i + 1), lambda e, n=uname: self._do_build(n))
 
             # Ability hover tooltip for build buttons
             ability_lines = []
@@ -831,10 +838,17 @@ class OverworldGUI:
             result.append(spec)
         return result
 
-    def _start_battle(self, army1, army2):
+    def _start_battle(self, attacker, defender):
         """Start a local single-player battle."""
-        p1_units = self._make_battle_units(army1)
-        p2_units = self._make_battle_units(army2)
+        # Ensure overworld player IDs match battle player IDs:
+        # lower-numbered player is always battle P1
+        if attacker.player <= defender.player:
+            ow_p1, ow_p2 = attacker, defender
+        else:
+            ow_p1, ow_p2 = defender, attacker
+
+        p1_units = self._make_battle_units(ow_p1)
+        p2_units = self._make_battle_units(ow_p2)
 
         battle = Battle(p1_units=p1_units, p2_units=p2_units)
 
@@ -867,19 +881,20 @@ class OverworldGUI:
                 ]
 
             if winner == 0:
-                _update_survivors(army1, 1)
-                _update_survivors(army2, 2)
-                army1.exhausted = True
+                _update_survivors(ow_p1, 1)
+                _update_survivors(ow_p2, 2)
+                attacker.exhausted = True
             elif winner == 1:
-                _update_survivors(army1, 1)
-                self.world.armies.remove(army2)
-                self.world.move_army(army1, army2.pos)
-                army1.exhausted = True
-                # Check base destruction at new position
-                self._check_local_base_destruction(army2.pos, army1.player)
+                # ow_p1 won
+                _update_survivors(ow_p1, 1)
+                self.world.armies.remove(ow_p2)
+                self.world.move_army(ow_p1, ow_p2.pos)
+                ow_p1.exhausted = True
+                self._check_local_base_destruction(ow_p2.pos, ow_p1.player)
             else:
-                _update_survivors(army2, 2)
-                self.world.armies.remove(army1)
+                # ow_p2 won
+                _update_survivors(ow_p2, 2)
+                self.world.armies.remove(ow_p1)
 
             self.main_frame.pack(fill=tk.BOTH, expand=True)
             p1_armies = [a for a in self.world.armies if a.player == 1]
@@ -893,7 +908,10 @@ class OverworldGUI:
             elif winner == 0:
                 self.status_var.set("Battle ended in a stalemate. Both armies survive.")
             else:
-                self.status_var.set(f"Battle over. P{winner} won with {p1_survivors if winner == 1 else p2_survivors} survivors.")
+                # Map battle winner back to overworld player
+                ow_winner = ow_p1.player if winner == 1 else ow_p2.player
+                survivors = p1_survivors if winner == 1 else p2_survivors
+                self.status_var.set(f"Battle over. P{ow_winner} won with {survivors} survivors.")
             self._draw()
 
         Unit._id_counter = 0

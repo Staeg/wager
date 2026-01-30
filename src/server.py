@@ -122,8 +122,14 @@ class GameServer:
         battle_id = self.next_battle_id
         self.next_battle_id += 1
 
-        p1_units = self._make_battle_units(attacker)
-        p2_units = self._make_battle_units(defender)
+        # Ensure lower-numbered overworld player is always battle P1
+        if attacker.player <= defender.player:
+            ow_p1, ow_p2 = attacker, defender
+        else:
+            ow_p1, ow_p2 = defender, attacker
+
+        p1_units = self._make_battle_units(ow_p1)
+        p2_units = self._make_battle_units(ow_p2)
         rng_seed = random.randint(0, 2**31)
 
         # Run battle to completion
@@ -132,9 +138,17 @@ class GameServer:
         while battle.step():
             pass
 
-        winner = battle.winner
+        battle_winner = battle.winner
         p1_survivors = sum(1 for u in battle.units if u.alive and u.player == 1)
         p2_survivors = sum(1 for u in battle.units if u.alive and u.player == 2)
+
+        # Map battle winner to overworld player
+        if battle_winner == 1:
+            ow_winner = ow_p1.player
+        elif battle_winner == 2:
+            ow_winner = ow_p2.player
+        else:
+            ow_winner = 0
 
         # Update overworld state
         def _update_survivors(army, player):
@@ -148,22 +162,22 @@ class GameServer:
                 if survivor_counts.get(name, 0) > 0
             ]
 
-        if winner == 0:
-            _update_survivors(attacker, 1)
-            _update_survivors(defender, 2)
+        if battle_winner == 0:
+            _update_survivors(ow_p1, 1)
+            _update_survivors(ow_p2, 2)
             attacker.exhausted = True
-        elif winner == 1:
-            _update_survivors(attacker, 1)
-            self.world.armies.remove(defender)
-            self.world.move_army(attacker, defender.pos)
-            attacker.exhausted = True
+        elif battle_winner == 1:
+            _update_survivors(ow_p1, 1)
+            self.world.armies.remove(ow_p2)
+            self.world.move_army(ow_p1, ow_p2.pos)
+            ow_p1.exhausted = True
         else:
-            _update_survivors(defender, 2)
-            self.world.armies.remove(attacker)
+            _update_survivors(ow_p2, 2)
+            self.world.armies.remove(ow_p1)
 
-        summary = f"P{attacker.player} vs P{defender.player}: P{winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
-        if winner == 0:
-            summary = f"P{attacker.player} vs P{defender.player}: Draw"
+        summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
+        if battle_winner == 0:
+            summary = f"P{ow_p1.player} vs P{ow_p2.player}: Draw"
 
         # Record for replay (just seed + units, lightweight)
         self.battle_history.append(BattleRecord(
@@ -171,7 +185,7 @@ class GameServer:
             p1_units=p1_units,
             p2_units=p2_units,
             rng_seed=rng_seed,
-            winner=winner,
+            winner=ow_winner,
             summary=summary,
         ))
 
@@ -179,13 +193,13 @@ class GameServer:
         await self.broadcast({
             "type": BATTLE_END,
             "battle_id": battle_id,
-            "winner": winner,
+            "winner": ow_winner,
             "attacker_player": attacker.player,
             "defender_player": defender.player,
             "summary": summary,
         })
 
-        return winner
+        return ow_winner
 
     def _check_base_destruction(self, pos, moving_player):
         """Destroy any enemy base at the given position."""
