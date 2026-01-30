@@ -15,8 +15,9 @@ else:
 import websockets
 
 from combat import Battle, Unit
-from overworld import Overworld, UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
+from overworld import Overworld, UNIT_STATS, ALL_UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
 from overworld import FACTIONS
+from heroes import get_heroes_for_faction
 from upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 from protocol import (
     serialize_armies, serialize_bases, encode, decode,
@@ -55,6 +56,7 @@ class GameServer:
         self.player_factions = {}  # player_id -> faction name
         self._faction_selection_order = []  # order of players to pick factions
         self._faction_selection_idx = 0  # which player is currently picking
+        self.player_heroes = {}  # player_id -> hero name
         self.player_upgrades = {}  # player_id -> upgrade id
         self._upgrade_selection_order = []  # order of players to pick upgrades
         self._upgrade_selection_idx = 0  # which player is currently picking
@@ -91,6 +93,7 @@ class GameServer:
             "current_player": self.current_player,
             "message": message,
             "player_factions": self.player_factions,
+            "player_heroes": self.player_heroes,
             "player_upgrades": self.player_upgrades,
         }
 
@@ -113,7 +116,7 @@ class GameServer:
         faction = self.player_factions.get(army.player)
         upgrade_id = self.player_upgrades.get(army.player)
         faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys()))
-        effective_stats = apply_upgrade_to_unit_stats(UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
+        effective_stats = apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
         result = []
         for name, count in army.units:
             s = effective_stats[name]
@@ -125,7 +128,13 @@ class GameServer:
                         "undying", "splash", "repair", "bombardment", "bombardment_range",
                         "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
                         "rage", "vengeance", "charge", "summon_count",
-                        "summon_ready", "summon_target_highest"):
+                        "summon_ready", "summon_target_highest",
+                        "harvest", "harvest_range", "lifesteal", "freeze",
+                        "shadowstep_charge",
+                        "followup_damage", "followup_range", "followup_count",
+                        "global_boost",
+                        "lament_threshold", "lament_range", "lament_damage",
+                        "aura_vengeance", "aura_vengeance_range"):
                 if s.get(key, 0):
                     spec[key] = s[key]
             result.append(spec)
@@ -352,6 +361,9 @@ class GameServer:
                         await self.send_to(player_id, {"type": ERROR, "message": f"Unknown faction: {faction_name}"})
                         continue
                     self.player_factions[player_id] = faction_name
+                    if player_id not in self.player_heroes:
+                        heroes = get_heroes_for_faction(faction_name)
+                        self.player_heroes[player_id] = random.choice(heroes) if heroes else None
                     self._faction_selection_idx += 1
                     if self._faction_selection_idx >= len(self._faction_selection_order):
                         # All players have picked — start upgrade selection
@@ -473,12 +485,17 @@ class GameServer:
             "type": UPGRADE_PROMPT,
             "picking_player": pid,
             "player_factions": self.player_factions,
+            "player_heroes": self.player_heroes,
         })
 
     async def _start_game(self):
         self.started = True
         self.world = self._build_world()
         self.current_player = 1
+
+        for pid, hero_name in self.player_heroes.items():
+            if hero_name:
+                self.world.add_unit_at_base(pid, hero_name)
 
         for pid in self.players:
             await self.send_to(pid, {
@@ -490,6 +507,7 @@ class GameServer:
                 "player_id": pid,
                 "faction": self.player_factions.get(pid),
                 "player_factions": self.player_factions,
+                "player_heroes": self.player_heroes,
                 "player_upgrades": self.player_upgrades,
             })
 

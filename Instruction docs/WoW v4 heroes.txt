@@ -1,0 +1,45 @@
+﻿Heroes for each faction. They use the standard HP/Damage/Range/Value notation, but the Value is usually irrelevant.
+Custodian
+* Watcher
+   * 30/8/1/20
+   * Armor 3
+* Neophyte
+   * 12/6/4/20
+   * Harvest 1/4: when an enemy within range 4 dies, all allies within range 4 gain 1 Max and current HP
+* Accursed
+   * 16/8/1/20
+   * Lifesteal 4: when killing an enemy, heal 4 HP
+Weaver
+* Enchantress
+   * 12/3/5/20
+   * Freeze 3: exhausts 3 random ready enemies within attack range after attacking
+* Prodigy
+   * 8/8/4/20
+   * Splash 3: deals 3 damage to all enemies adjacent to attack target after attacking
+* Scholar
+   * 16/3/5/20
+   * Bombardment 1/5: deal 1 damage to all enemies in 5 range after attacking
+Artificer
+* Outcast
+   * 16/6/2/20
+   * Charge 4 - Shadowstep: every 4 turns instead of moving normally move to a hex adjacent to the furthest enemy unit
+      * In case of ambiguity, furthest is resolved the same way closest is for normal movement
+* Mercenary
+   * 32/3/2/20
+   * Followup 3/2: at the end of turn, additionally deal 3 damage to a random enemy within 2 range
+   * Followup 3/2: at the end of turn, additionally deal 3 damage to a random enemy within 2 range
+      * Having two copies of an ability means that it should trigger twice, one after the other
+* Tactician
+   * 10/4/4/20
+   * Global Boost 1: all allied units in combat have 1 more attack damage
+Purifier
+* Maiden
+   * 8/3/5/20
+   * Lament 2/5 - Bombardment 1/5: deal 1 damage to all enemies in 5 range for every 2 allies that die within 5 range
+* Aspirant
+   * 32/4/1/20
+   * Splash 4: deals 4 damage to all enemies adjacent to attack target after attacking
+   * Armor 1
+* Apostle
+   * 12/2/3/20
+   * Aura 3 - Vengeance 1: allies within 3 range gain 1 attack damage whenever an adjacent ally dies
