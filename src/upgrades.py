@@ -254,9 +254,9 @@ def _find_matching_ability(base_stats, faction_units, match):
         return None
     for unit in faction_units:
         stats = base_stats.get(unit, {})
-        for ability in stats.get("abilities", []):
-            if all(ability.get(k) == v for k, v in match.items()):
-                return ability
+        for ability_def in stats.get("abilities", []):
+            if all(ability_def.get(k) == v for k, v in match.items()):
+                return ability_def
     return None
 
 

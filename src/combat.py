@@ -2,23 +2,29 @@ import tkinter as tk
 import math
 import random
 import os
-import sys
 from PIL import Image, ImageTk, ImageEnhance
+from .compat import get_asset_dir
 from .heroes import HERO_STATS
 from .hex import hex_distance, hex_neighbors, bfs_next_step, bfs_path_length
 
 
 # --- Game classes ---
 
-class Unit:
-    _id_counter = 0  # legacy fallback, prefer Battle-scoped IDs
 
-    def __init__(self, name, max_hp, damage, attack_range, player, abilities=None, armor=0, unit_id=None):
-        if unit_id is not None:
-            self.id = unit_id
-        else:
-            Unit._id_counter += 1
-            self.id = Unit._id_counter
+class Unit:
+    def __init__(
+        self,
+        name,
+        max_hp,
+        damage,
+        attack_range,
+        player,
+        abilities=None,
+        armor=0,
+        *,
+        unit_id,
+    ):
+        self.id = unit_id
         self.name = name
         self.max_hp = max_hp
         self.hp = max_hp
@@ -50,7 +56,14 @@ class Battle:
     MIN_ROWS = 5
     MAX_ROWS = 15
 
-    def __init__(self, p1_units=None, p2_units=None, rng_seed=None, apply_events_immediately=True, record_history=True):
+    def __init__(
+        self,
+        p1_units=None,
+        p2_units=None,
+        rng_seed=None,
+        apply_events_immediately=True,
+        record_history=True,
+    ):
         """Initialize battle.
 
         p1_units/p2_units: optional list of unit specs (tuples or dicts).
@@ -86,27 +99,31 @@ class Battle:
 
     def _compute_rows(self, p1_units, p2_units):
         """Compute map rows so the army with the most frontline units fits them in one column."""
+
         def _frontline_count(specs):
             if not specs:
                 return 0
             # Parse specs to find the minimum range tier and count those units
             parsed = []
             for spec in specs:
-                if isinstance(spec, dict):
-                    parsed.append((spec["range"], spec["count"]))
-                else:
-                    parsed.append((spec[3], spec[4]))
+                parsed.append((spec["range"], spec["count"]))
             min_range = min(r for r, _ in parsed)
             return sum(c for r, c in parsed if r == min_range)
 
-        p1_front = _frontline_count(p1_units or [
-            {"name": "Page", "range": 1, "count": 10},
-            {"name": "Librarian", "range": 3, "count": 5},
-        ])
-        p2_front = _frontline_count(p2_units or [
-            {"name": "Apprentice", "range": 2, "count": 10},
-            {"name": "Seeker", "range": 4, "count": 5},
-        ])
+        p1_front = _frontline_count(
+            p1_units
+            or [
+                {"name": "Page", "range": 1, "count": 10},
+                {"name": "Librarian", "range": 3, "count": 5},
+            ]
+        )
+        p2_front = _frontline_count(
+            p2_units
+            or [
+                {"name": "Apprentice", "range": 2, "count": 10},
+                {"name": "Seeker", "range": 4, "count": 5},
+            ]
+        )
         needed = max(p1_front, p2_front)
         return max(self.MIN_ROWS, min(self.MAX_ROWS, needed))
 
@@ -116,8 +133,11 @@ class Battle:
         unit_states = {}
         for u in self.units:
             state = {
-                "pos": u.pos, "hp": u.hp, "has_acted": u.has_acted,
-                "damage": u.damage, "_ramp_accumulated": u._ramp_accumulated,
+                "pos": u.pos,
+                "hp": u.hp,
+                "has_acted": u.has_acted,
+                "damage": u.damage,
+                "_ramp_accumulated": u._ramp_accumulated,
                 "_rage_accumulated": u._rage_accumulated,
                 "_vengeance_accumulated": u._vengeance_accumulated,
                 "_frozen_turns": u._frozen_turns,
@@ -128,14 +148,36 @@ class Battle:
         turn_ids = [u.id for u in self.turn_order]
         unit_ids = [u.id for u in self.units]
         rng_state = self.rng.getstate()
-        self.history.append((unit_states, turn_ids, unit_ids, self.current_index,
-                               self.round_num, list(self.log), self.winner, rng_state,
-                               self._stalemate_count, self._prev_round_state))
+        self.history.append(
+            (
+                unit_states,
+                turn_ids,
+                unit_ids,
+                self.current_index,
+                self.round_num,
+                list(self.log),
+                self.winner,
+                rng_state,
+                self._stalemate_count,
+                self._prev_round_state,
+            )
+        )
 
     def undo(self):
         if not self.history:
             return
-        unit_states, turn_ids, unit_ids, self.current_index, self.round_num, self.log, self.winner, rng_state, self._stalemate_count, self._prev_round_state = self.history.pop()
+        (
+            unit_states,
+            turn_ids,
+            unit_ids,
+            self.current_index,
+            self.round_num,
+            self.log,
+            self.winner,
+            rng_state,
+            self._stalemate_count,
+            self._prev_round_state,
+        ) = self.history.pop()
         self.rng.setstate(rng_state)
         id_to_unit = {u.id: u for u in self.units}
         # Remove units that didn't exist in the saved state (summoned units)
@@ -177,12 +219,20 @@ class Battle:
         """Return base armor + passive armor on self + aura armor from allies."""
         bonus = 0
         for ab in unit.abilities:
-            if ab.get("trigger") == "passive" and ab.get("effect") == "armor" and not ab.get("aura"):
+            if (
+                ab.get("trigger") == "passive"
+                and ab.get("effect") == "armor"
+                and not ab.get("aura")
+            ):
                 bonus += self._ability_value(unit, ab)
         for ally in self.units:
             if ally.alive and ally.player == unit.player and ally.id != unit.id:
                 for ab in ally.abilities:
-                    if ab.get("trigger") == "passive" and ab.get("effect") == "armor" and ab.get("aura"):
+                    if (
+                        ab.get("trigger") == "passive"
+                        and ab.get("effect") == "armor"
+                        and ab.get("aura")
+                    ):
                         aura_range = ab.get("aura", 1)
                         if hex_distance(unit.pos, ally.pos) <= aura_range:
                             bonus += self._ability_value(ally, ab)
@@ -220,11 +270,21 @@ class Battle:
         if target == "global":
             return [u for u in self.units if u.alive and u.player == unit.player]
         if effect in ("heal", "fortify", "repair"):
-            pool = [u for u in self.units if u.alive and u.player == unit.player
-                    and hex_distance(unit.pos, u.pos) <= rng]
+            pool = [
+                u
+                for u in self.units
+                if u.alive
+                and u.player == unit.player
+                and hex_distance(unit.pos, u.pos) <= rng
+            ]
         else:
-            pool = [u for u in self.units if u.alive and u.player != unit.player
-                    and hex_distance(unit.pos, u.pos) <= rng]
+            pool = [
+                u
+                for u in self.units
+                if u.alive
+                and u.player != unit.player
+                and hex_distance(unit.pos, u.pos) <= rng
+            ]
         if target == "random":
             return [self.rng.choice(pool)] if pool else []
         if target == "area":
@@ -246,61 +306,80 @@ class Battle:
         key = f"{event_type}_events"
         self.last_action.setdefault(key, []).append(event)
 
+    def _exec_ramp(self, unit, ability, context, value):
+        unit.damage += value
+        unit._ramp_accumulated += value
+        if self.last_action is not None:
+            self.last_action["ramp_pos"] = unit.pos
+
+    def _exec_push(self, unit, ability, context, value):
+        targets = self._targets_for_ability(unit, ability, context)
+        if targets:
+            self._apply_push_value(unit, targets[0], value)
+
+    def _exec_retreat(self, unit, ability, context, value):
+        tgt = context.get("target")
+        if tgt:
+            self._apply_retreat(unit, tgt)
+
+    def _exec_freeze(self, unit, ability, context, value):
+        self._apply_freeze_value(unit, value)
+
+    def _exec_summon(self, unit, ability, context, value):
+        count = ability.get("count", 1)
+        self._apply_summon(unit, count, ability)
+
+    def _exec_shadowstep(self, unit, ability, context, value):
+        pass  # handled during movement
+
+    def _exec_splash(self, unit, ability, context, value):
+        tgt = context.get("target")
+        if tgt:
+            self._queue_splash_events(unit, tgt, value)
+
+    def _exec_heal_or_fortify(self, unit, ability, context, value):
+        effect = ability.get("effect")
+        targets = self._targets_for_ability(unit, ability, context)
+        for t in targets:
+            etype = "fortify" if effect == "fortify" else "heal"
+            self._queue_event(etype, unit, t, value)
+
+    def _exec_repair(self, unit, ability, context, value):
+        targets = self._targets_for_ability(unit, ability, context)
+        for t in targets:
+            self._queue_event("repair", unit, t, value)
+
+    def _exec_sunder(self, unit, ability, context, value):
+        targets = self._targets_for_ability(unit, ability, context)
+        for t in targets:
+            self._queue_event("sunder", unit, t, value, {"source_pos": unit.pos})
+
+    def _exec_strike(self, unit, ability, context, value):
+        targets = self._targets_for_ability(unit, ability, context)
+        for t in targets:
+            self._queue_event("strike", unit, t, value, {"source_pos": unit.pos})
+
+    _ABILITY_DISPATCH = {
+        "ramp": _exec_ramp,
+        "push": _exec_push,
+        "retreat": _exec_retreat,
+        "freeze": _exec_freeze,
+        "summon": _exec_summon,
+        "shadowstep": _exec_shadowstep,
+        "splash": _exec_splash,
+        "heal": _exec_heal_or_fortify,
+        "fortify": _exec_heal_or_fortify,
+        "repair": _exec_repair,
+        "sunder": _exec_sunder,
+        "strike": _exec_strike,
+    }
+
     def _execute_ability(self, unit, ability, context):
         effect = ability.get("effect")
         value = self._ability_value(unit, ability)
-        if effect == "ramp":
-            unit.damage += value
-            unit._ramp_accumulated += value
-            if self.last_action is not None:
-                self.last_action["ramp_pos"] = unit.pos
-            return
-        if effect == "push":
-            targets = self._targets_for_ability(unit, ability, context)
-            if targets:
-                self._apply_push_value(unit, targets[0], value)
-            return
-        if effect == "retreat":
-            tgt = context.get("target")
-            if tgt:
-                self._apply_retreat(unit, tgt)
-            return
-        if effect == "freeze":
-            self._apply_freeze_value(unit, value)
-            return
-        if effect == "summon":
-            count = ability.get("count", 1)
-            self._apply_summon(unit, count, ability)
-            return
-        if effect == "shadowstep":
-            # handled during movement
-            return
-        if effect == "splash":
-            tgt = context.get("target")
-            if tgt:
-                self._queue_splash_events(unit, tgt, value)
-            return
-        if effect in ("heal", "fortify"):
-            targets = self._targets_for_ability(unit, ability, context)
-            for t in targets:
-                etype = "fortify" if effect == "fortify" else "heal"
-                self._queue_event(etype, unit, t, value)
-            return
-        if effect == "repair":
-            targets = self._targets_for_ability(unit, ability, context)
-            for t in targets:
-                self._queue_event("repair", unit, t, value)
-            return
-        if effect == "sunder":
-            targets = self._targets_for_ability(unit, ability, context)
-            for t in targets:
-                self._queue_event("sunder", unit, t, value, {"source_pos": unit.pos})
-            return
-        if effect == "strike":
-            targets = self._targets_for_ability(unit, ability, context)
-            for t in targets:
-                self._queue_event("strike", unit, t, value, {"source_pos": unit.pos})
-            return
+        handler = self._ABILITY_DISPATCH.get(effect)
+        if handler:
+            handler(self, unit, ability, context, value)
 
     def _trigger_abilities(self, unit, trigger, context):
         for idx, ability in enumerate(unit.abilities):
@@ -315,51 +394,64 @@ class Battle:
             self._apply_queued_events()
 
     def _parse_unit_spec(self, spec, player):
-        """Parse a unit spec (tuple or dict) into Unit instances.
+        """Parse a unit spec dict into Unit instances.
 
-        Tuple format (legacy): (name, max_hp, damage, range, count, ...)
-        Dict format: {"name": str, "max_hp": int, "damage": int, "range": int, "count": int, ...abilities}
+        Dict format: {"name": str, "max_hp": int, "damage": int, "range": int, "count": int, ...}
         """
         units = []
-        if isinstance(spec, dict):
-            name = spec["name"]
-            max_hp = spec["max_hp"]
-            damage = spec["damage"]
-            atk_range = spec["range"]
-            count = spec["count"]
-            abilities = spec.get("abilities", [])
-            armor = spec.get("armor", 0)
-            for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player,
-                                  abilities=abilities, armor=armor, unit_id=self._next_unit_id()))
-        else:
-            tup = spec
-            name, max_hp, damage, atk_range, count = tup[:5]
-            # Legacy positional: armor, heal, sunder, push, ramp, amplify
-            legacy_keys = ("armor", "heal", "sunder", "push", "ramp", "amplify")
-            abilities = []
-            armor = 0
-            for i, key in enumerate(legacy_keys):
-                if len(tup) > 5 + i:
-                    if key == "armor":
-                        armor = tup[5 + i]
-                    elif tup[5 + i]:
-                        abilities.append({"trigger": "periodic", "effect": key, "value": tup[5 + i]})
-            for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player,
-                                  abilities=abilities, armor=armor, unit_id=self._next_unit_id()))
+        name = spec["name"]
+        max_hp = spec["max_hp"]
+        damage = spec["damage"]
+        atk_range = spec["range"]
+        count = spec["count"]
+        abilities = spec.get("abilities", [])
+        armor = spec.get("armor", 0)
+        for _ in range(count):
+            units.append(
+                Unit(
+                    name,
+                    max_hp,
+                    damage,
+                    atk_range,
+                    player,
+                    abilities=abilities,
+                    armor=armor,
+                    unit_id=self._next_unit_id(),
+                )
+            )
         return units
 
     def _setup_armies(self, p1_units=None, p2_units=None):
         if p1_units is None:
             p1_units = [
                 {"name": "Page", "max_hp": 3, "damage": 1, "range": 1, "count": 10},
-                {"name": "Librarian", "max_hp": 2, "damage": 0, "range": 3, "count": 5, "sunder": 1},
+                {
+                    "name": "Librarian",
+                    "max_hp": 2,
+                    "damage": 0,
+                    "range": 3,
+                    "count": 5,
+                    "sunder": 1,
+                },
             ]
         if p2_units is None:
             p2_units = [
-                {"name": "Apprentice", "max_hp": 8, "damage": 1, "range": 2, "count": 10, "push": 1},
-                {"name": "Seeker", "max_hp": 3, "damage": 1, "range": 4, "count": 5, "ramp": 1},
+                {
+                    "name": "Apprentice",
+                    "max_hp": 8,
+                    "damage": 1,
+                    "range": 2,
+                    "count": 10,
+                    "push": 1,
+                },
+                {
+                    "name": "Seeker",
+                    "max_hp": 3,
+                    "damage": 1,
+                    "range": 4,
+                    "count": 5,
+                    "ramp": 1,
+                },
             ]
 
         # P1 western zone: cols 0..5, P2 eastern zone: cols 11..16
@@ -406,13 +498,6 @@ class Battle:
                 pos_i += 1
                 prev_range = u.attack_range
 
-            # Count frontline units (first column with units)
-            first_col_count = 0
-            for ci in range(len(sorted_cols)):
-                if units_per_col.get(ci, 0) > 0:
-                    first_col_count = units_per_col[ci]
-                    break
-
             # Second pass: build positions for each column
             flat_positions = []
             for ci, col in enumerate(sorted_cols):
@@ -420,15 +505,19 @@ class Battle:
                 if k == 0:
                     continue
                 rows_in_col = sorted(r for _, r in by_col[col])
-                is_frontline = (ci == 0 or units_per_col.get(ci - 1, 0) == 0)
+                is_frontline = ci == 0 or units_per_col.get(ci - 1, 0) == 0
                 if is_frontline or k >= num_rows:
                     # Frontline or overflow: center-pack
                     mid = num_rows // 2
-                    selected = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
+                    selected = sorted(
+                        rows_in_col, key=lambda r: abs(r - rows_in_col[mid])
+                    )[:k]
                 else:
                     # Backline: tighter center-pack to reduce spread
                     mid = num_rows // 2
-                    selected = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
+                    selected = sorted(
+                        rows_in_col, key=lambda r: abs(r - rows_in_col[mid])
+                    )[:k]
                 selected.sort()
                 col_positions = [(col, r) for r in selected]
                 self.rng.shuffle(col_positions)
@@ -451,7 +540,11 @@ class Battle:
         self.units.extend(p2_unit_list)
 
     def _snapshot(self):
-        return frozenset((u.id, u.hp, u.pos, u.armor, u.damage, len(self.units)) for u in self.units if u.alive)
+        return frozenset(
+            (u.id, u.hp, u.pos, u.armor, u.damage, len(self.units))
+            for u in self.units
+            if u.alive
+        )
 
     def _new_round(self):
         # Stalemate detection: require 3 consecutive identical rounds
@@ -489,16 +582,24 @@ class Battle:
             for ally in self.units:
                 if ally.alive and ally.player == target.player and ally.id != target.id:
                     for ab in ally.abilities:
-                        if ab.get("trigger") == "passive" and ab.get("effect") == "undying":
+                        if (
+                            ab.get("trigger") == "passive"
+                            and ab.get("effect") == "undying"
+                        ):
                             aura_range = ab.get("aura", 2)
                             if hex_distance(target.pos, ally.pos) <= aura_range:
                                 undying_val = self._ability_value(ally, ab)
                                 if target.damage >= undying_val:
                                     target.damage -= undying_val
-                                    self.log.append(f"  {target} saved by Undying! Loses {undying_val} dmg (now {target.damage})")
+                                    self.log.append(
+                                        f"  {target} saved by Undying! Loses {undying_val} dmg (now {target.damage})"
+                                    )
                                     if self.last_action is not None:
-                                        self.last_action.setdefault("undying_saves", []).append(
-                                            {"target": target.pos, "source": ally.pos})
+                                        self.last_action.setdefault(
+                                            "undying_saves", []
+                                        ).append(
+                                            {"target": target.pos, "source": ally.pos}
+                                        )
                                     return 0
         target.hp -= actual
         if target.alive and actual > 0:
@@ -515,7 +616,11 @@ class Battle:
                 continue
             # Lament: ally deaths within range
             for idx, ab in enumerate(unit.abilities):
-                if ab.get("trigger") == "lament" and unit.player == dead_unit.player and unit.id != dead_unit.id:
+                if (
+                    ab.get("trigger") == "lament"
+                    and unit.player == dead_unit.player
+                    and unit.id != dead_unit.id
+                ):
                     rng = ab.get("range", 1)
                     if hex_distance(unit.pos, dead_unit.pos) <= rng:
                         if self._charge_ready(unit, idx, ab):
@@ -533,15 +638,23 @@ class Battle:
                     aura_range = ab.get("aura", 0)
                     inner_range = ab.get("range", 1)
                     for ally in self.units:
-                        if (ally.alive and ally.player == unit.player and ally.id != dead_unit.id
-                                and hex_distance(ally.pos, unit.pos) <= aura_range
-                                and hex_distance(ally.pos, dead_unit.pos) <= inner_range):
+                        if (
+                            ally.alive
+                            and ally.player == unit.player
+                            and ally.id != dead_unit.id
+                            and hex_distance(ally.pos, unit.pos) <= aura_range
+                            and hex_distance(ally.pos, dead_unit.pos) <= inner_range
+                        ):
                             value = self._ability_value(unit, ab)
                             ally.damage += value
                             ally._vengeance_accumulated += value
-                            self.log.append(f"  {ally} gains {value} dmg from Aura Lament (now {ally.damage})")
+                            self.log.append(
+                                f"  {ally} gains {value} dmg from Aura Lament (now {ally.damage})"
+                            )
                             if self.last_action is not None:
-                                self.last_action.setdefault("vengeance_positions", []).append(ally.pos)
+                                self.last_action.setdefault(
+                                    "vengeance_positions", []
+                                ).append(ally.pos)
 
     def _apply_push_value(self, attacker, target, push_val):
         """Push target N hexes horizontally away from attacker after attacking."""
@@ -589,9 +702,15 @@ class Battle:
         """Exhaust random ready enemies within attack range after attacking."""
         if freeze_count <= 0:
             return
-        candidates = [e for e in self.units if e.alive and e.player != unit.player
-                      and e._frozen_turns == 0 and not e.has_acted
-                      and hex_distance(unit.pos, e.pos) <= unit.attack_range]
+        candidates = [
+            e
+            for e in self.units
+            if e.alive
+            and e.player != unit.player
+            and e._frozen_turns == 0
+            and not e.has_acted
+            and hex_distance(unit.pos, e.pos) <= unit.attack_range
+        ]
         if not candidates:
             return
         count = min(freeze_count, len(candidates))
@@ -607,8 +726,13 @@ class Battle:
         occupied = self._occupied()
         anchor = unit.pos
         if ability.get("summon_target") == "highest":
-            allies = [a for a in self.units if a.alive and a.player == unit.player
-                      and hex_distance(unit.pos, a.pos) <= unit.attack_range]
+            allies = [
+                a
+                for a in self.units
+                if a.alive
+                and a.player == unit.player
+                and hex_distance(unit.pos, a.pos) <= unit.attack_range
+            ]
             if allies:
                 max_hp = max(a.hp for a in allies)
                 candidates = [a for a in allies if a.hp == max_hp]
@@ -620,7 +744,15 @@ class Battle:
             if not empty:
                 break
             pos = empty.pop(0)
-            blade = Unit("Blade", 1, 2, 1, unit.player, abilities=[], unit_id=self._next_unit_id())
+            blade = Unit(
+                "Blade",
+                1,
+                2,
+                1,
+                unit.player,
+                abilities=[],
+                unit_id=self._next_unit_id(),
+            )
             blade.pos = pos
             blade.has_acted = not ability.get("summon_ready", False)
             blade.summoner_id = unit.id
@@ -631,24 +763,92 @@ class Battle:
 
     def _queue_splash_events(self, attacker, target, amount):
         for enemy in list(self.units):
-            if (enemy.alive and enemy.player != attacker.player
-                    and enemy.id != target.id
-                    and hex_distance(enemy.pos, target.pos) <= 1):
+            if (
+                enemy.alive
+                and enemy.player != attacker.player
+                and enemy.id != target.id
+                and hex_distance(enemy.pos, target.pos) <= 1
+            ):
                 self._queue_event("splash", attacker, enemy, amount)
 
     def _shadowstep_destination(self, unit, enemies, occupied):
         """Find a hex adjacent to the furthest enemy unit."""
         if not enemies:
             return None
-        distances = [(bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e) for e in enemies]
+        distances = [
+            (bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e)
+            for e in enemies
+        ]
         furthest_dist = max(d for d, _ in distances)
         furthest = [e for d, e in distances if d == furthest_dist]
         target_enemy = self.rng.choice(furthest)
-        adj = hex_neighbors(target_enemy.pos[0], target_enemy.pos[1], self.COLS, self.ROWS)
+        adj = hex_neighbors(
+            target_enemy.pos[0], target_enemy.pos[1], self.COLS, self.ROWS
+        )
         empty = [pos for pos in adj if pos not in occupied]
         if not empty:
             return None
         return self.rng.choice(empty)
+
+    def _event_heal(self, target, source, amount):
+        healed = min(amount, target.max_hp - target.hp)
+        if healed <= 0:
+            return
+        target.hp += healed
+        if source:
+            self.log.append(f"  {source} heals {target} for {healed} HP")
+
+    def _event_fortify(self, target, source, amount):
+        target.max_hp += amount
+        target.hp += amount
+        if source:
+            self.log.append(f"  {source} fortifies {target} for +{amount} HP")
+
+    def _event_repair(self, target, source, amount):
+        healed = min(amount, target.max_hp - target.hp)
+        if healed <= 0:
+            return
+        target.hp += healed
+        if source:
+            self.log.append(f"  {source} repairs {target} for {healed} HP")
+
+    def _event_sunder(self, target, source, amount):
+        target.armor -= amount
+        if source:
+            self.log.append(
+                f"  {source} sunders {target}'s armor by {amount} (now {target.armor})"
+            )
+
+    def _event_splash(self, target, source, amount):
+        actual = self._apply_damage(target, amount, source_unit=source)
+        if actual > 0:
+            self.log.append(f"  Splash hits {target} for {actual} dmg")
+            if not target.alive:
+                self.log.append(f"  {target.name}(P{target.player}) dies from splash!")
+
+    def _event_bombardment(self, target, source, amount):
+        actual = self._apply_damage(target, amount, source_unit=source)
+        if actual > 0 and source:
+            self.log.append(f"  {source} bombards {target} for {actual} dmg")
+            if not target.alive:
+                self.log.append(
+                    f"  {target.name}(P{target.player}) dies from bombardment!"
+                )
+
+    def _event_strike(self, target, source, amount):
+        actual = self._apply_damage(target, amount, source_unit=source)
+        if actual > 0 and source:
+            self.log.append(f"  {source} strikes {target} for {actual} dmg")
+
+    _EVENT_DISPATCH = {
+        "heal": _event_heal,
+        "fortify": _event_fortify,
+        "repair": _event_repair,
+        "sunder": _event_sunder,
+        "splash": _event_splash,
+        "bombardment": _event_bombardment,
+        "strike": _event_strike,
+    }
 
     def apply_effect_event(self, event):
         etype = event.get("type")
@@ -658,58 +858,22 @@ class Battle:
         source = next((u for u in self.units if u.id == source_id), None)
         if not target or not target.alive:
             return
-        if etype == "heal":
-            amount = event.get("amount", 0)
-            healed = min(amount, target.max_hp - target.hp)
-            if healed <= 0:
-                return
-            target.hp += healed
-            if source:
-                self.log.append(f"  {source} heals {target} for {healed} HP")
-        elif etype == "fortify":
-            amount = event.get("amount", 0)
-            target.max_hp += amount
-            target.hp += amount
-            if source:
-                self.log.append(f"  {source} fortifies {target} for +{amount} HP")
-        elif etype == "repair":
-            amount = event.get("amount", 0)
-            healed = min(amount, target.max_hp - target.hp)
-            if healed <= 0:
-                return
-            target.hp += healed
-            if source:
-                self.log.append(f"  {source} repairs {target} for {healed} HP")
-        elif etype == "sunder":
-            amount = event.get("amount", 0)
-            target.armor -= amount
-            if source:
-                self.log.append(
-                    f"  {source} sunders {target}'s armor by {amount} (now {target.armor})"
-                )
-        elif etype == "splash":
-            amount = event.get("amount", 0)
-            actual = self._apply_damage(target, amount, source_unit=source)
-            if actual > 0:
-                self.log.append(f"  Splash hits {target} for {actual} dmg")
-                if not target.alive:
-                    self.log.append(f"  {target.name}(P{target.player}) dies from splash!")
-        elif etype in ("bombardment", "strike"):
-            amount = event.get("amount", 0)
-            actual = self._apply_damage(target, amount, source_unit=source)
-            if actual > 0 and source:
-                if etype == "bombardment":
-                    self.log.append(f"  {source} bombards {target} for {actual} dmg")
-                    if not target.alive:
-                        self.log.append(f"  {target.name}(P{target.player}) dies from bombardment!")
-                else:
-                    self.log.append(f"  {source} strikes {target} for {actual} dmg")
+        handler = self._EVENT_DISPATCH.get(etype)
+        if handler:
+            handler(self, target, source, event.get("amount", 0))
 
     def _apply_queued_events(self):
         if not self.last_action:
             return
-        keys = ("heal_events", "fortify_events", "sunder_events",
-                "splash_events", "repair_events", "bombardment_events", "strike_events")
+        keys = (
+            "heal_events",
+            "fortify_events",
+            "sunder_events",
+            "splash_events",
+            "repair_events",
+            "bombardment_events",
+            "strike_events",
+        )
         while True:
             for key in keys:
                 events = self.last_action.get(key, [])
@@ -725,8 +889,15 @@ class Battle:
     def apply_all_events(self, action):
         if not action:
             return
-        keys = ("heal_events", "fortify_events", "sunder_events",
-                "splash_events", "repair_events", "bombardment_events", "strike_events")
+        keys = (
+            "heal_events",
+            "fortify_events",
+            "sunder_events",
+            "splash_events",
+            "repair_events",
+            "bombardment_events",
+            "strike_events",
+        )
         while True:
             applied_any = False
             for key in keys:
@@ -741,6 +912,7 @@ class Battle:
                     idx += 1
             if not applied_any:
                 break
+
     def step(self):
         """Execute one unit's turn. Returns True if battle continues.
 
@@ -792,7 +964,9 @@ class Battle:
             return False
 
         # find enemies in range
-        in_range = [e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range]
+        in_range = [
+            e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range
+        ]
 
         if in_range:
             target = self.rng.choice(in_range)
@@ -802,33 +976,47 @@ class Battle:
             attack_damage = unit.damage + self._global_boost_bonus(unit.player)
             actual = self._apply_damage(target, attack_damage, source_unit=unit)
             if eff_armor > 0 and actual < attack_damage:
-                self.log.append(f"{unit} attacks {target} for {actual} dmg ({eff_armor} blocked by armor)")
+                self.log.append(
+                    f"{unit} attacks {target} for {actual} dmg ({eff_armor} blocked by armor)"
+                )
             elif eff_armor < 0:
-                self.log.append(f"{unit} attacks {target} for {actual} dmg ({-eff_armor} extra from sundered armor)")
+                self.log.append(
+                    f"{unit} attacks {target} for {actual} dmg ({-eff_armor} extra from sundered armor)"
+                )
             else:
                 self.log.append(f"{unit} attacks {target} for {actual} dmg")
             killed = not target.alive
             if killed:
                 self.log.append(f"  {target.name}(P{target.player}) dies!")
             self.last_action = {
-                "type": "attack", "attacker_pos": unit.pos, "target_pos": target.pos,
-                "ranged": ranged, "killed": killed,
+                "type": "attack",
+                "attacker_pos": unit.pos,
+                "target_pos": target.pos,
+                "ranged": ranged,
+                "killed": killed,
             }
             self._trigger_abilities(unit, "onhit", {"target": target, "damage": actual})
         else:
             # move toward closest enemy by actual path length
             occupied = self._occupied() - {unit.pos}
-            enemy_dists = [(bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e) for e in enemies]
+            enemy_dists = [
+                (bfs_path_length(unit.pos, e.pos, occupied, self.COLS, self.ROWS), e)
+                for e in enemies
+            ]
             closest_dist = min(d for d, _ in enemy_dists)
             closest = [e for d, e in enemy_dists if d == closest_dist]
             target_enemy = self.rng.choice(closest)
-            next_pos = bfs_next_step(unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS)
+            next_pos = bfs_next_step(
+                unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS
+            )
             old = unit.pos
             shadowstepped = False
             for idx, ab in enumerate(unit.abilities):
                 if ab.get("trigger") == "periodic" and ab.get("effect") == "shadowstep":
                     if self._charge_ready(unit, idx, ab):
-                        shadow_pos = self._shadowstep_destination(unit, enemies, occupied)
+                        shadow_pos = self._shadowstep_destination(
+                            unit, enemies, occupied
+                        )
                         if shadow_pos:
                             unit.pos = shadow_pos
                             shadowstepped = True
@@ -840,7 +1028,9 @@ class Battle:
             moved_to = unit.pos
 
             # check if now in range
-            in_range = [e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range]
+            in_range = [
+                e for e in enemies if hex_distance(unit.pos, e.pos) <= unit.attack_range
+            ]
             if in_range:
                 target = self.rng.choice(in_range)
                 ranged = unit.attack_range > 1
@@ -849,19 +1039,29 @@ class Battle:
                 attack_damage = unit.damage + self._global_boost_bonus(unit.player)
                 actual = self._apply_damage(target, attack_damage, source_unit=unit)
                 if eff_armor > 0 and actual < attack_damage:
-                    self.log.append(f"  {unit} attacks {target} for {actual} dmg ({eff_armor} blocked by armor)")
+                    self.log.append(
+                        f"  {unit} attacks {target} for {actual} dmg ({eff_armor} blocked by armor)"
+                    )
                 elif eff_armor < 0:
-                    self.log.append(f"  {unit} attacks {target} for {actual} dmg ({-eff_armor} extra from sundered armor)")
+                    self.log.append(
+                        f"  {unit} attacks {target} for {actual} dmg ({-eff_armor} extra from sundered armor)"
+                    )
                 else:
                     self.log.append(f"  {unit} attacks {target} for {actual} dmg")
                 killed = not target.alive
                 if killed:
                     self.log.append(f"  {target.name}(P{target.player}) dies!")
                 self.last_action = {
-                    "type": "move_attack", "from": old, "to": moved_to,
-                    "target_pos": target.pos, "ranged": ranged, "killed": killed,
+                    "type": "move_attack",
+                    "from": old,
+                    "to": moved_to,
+                    "target_pos": target.pos,
+                    "ranged": ranged,
+                    "killed": killed,
                 }
-                self._trigger_abilities(unit, "onhit", {"target": target, "damage": actual})
+                self._trigger_abilities(
+                    unit, "onhit", {"target": target, "damage": actual}
+                )
             else:
                 self.last_action = {"type": "move", "from": old, "to": moved_to}
 
@@ -873,8 +1073,8 @@ class Battle:
         return True
 
 
-
 # --- GUI ---
+
 
 def format_ability(ability, include_self_target=False):
     parts = []
@@ -959,13 +1159,9 @@ def describe_ability(ability):
     if effect == "boost":
         return f"All allied units gain +{value} attack damage."
     if effect == "undying":
-        return (
-            f"Allies within {aura} range that would die instead lose {value} attack damage."
-        )
+        return f"Allies within {aura} range that would die instead lose {value} attack damage."
     if effect == "lament_aura":
-        return (
-            f"Allies within {aura} range gain {value} attack damage when an ally within {rng} of them dies."
-        )
+        return f"Allies within {aura} range gain {value} attack damage when an ally within {rng} of them dies."
     if effect == "ramp":
         return f"{prefix}gain {value} attack damage."
     if effect == "push":
@@ -975,7 +1171,9 @@ def describe_ability(ability):
     if effect == "freeze":
         return f"{prefix}exhaust {value} random ready enemies within attack range."
     if effect == "splash":
-        return f"{prefix}deal {value} damage to enemies adjacent to the attacked target."
+        return (
+            f"{prefix}deal {value} damage to enemies adjacent to the attacked target."
+        )
     if effect in ("heal", "repair"):
         verb = "heal" if effect == "heal" else "repair"
         if target == "self":
@@ -992,7 +1190,9 @@ def describe_ability(ability):
         if target == "random":
             return f"{prefix}reduce armor of a random enemy within {range_text} by {value}."
         if target == "area":
-            return f"{prefix}reduce armor of all enemies within {range_text} by {value}."
+            return (
+                f"{prefix}reduce armor of all enemies within {range_text} by {value}."
+            )
         if target == "target":
             return f"{prefix}reduce armor of the attacked enemy by {value}."
     if effect == "strike":
@@ -1007,7 +1207,9 @@ def describe_ability(ability):
         target_hint = "adjacent to the summoner"
         if ability.get("summon_target") == "highest":
             target_hint = f"adjacent to the highest-health ally within {range_text}"
-        ready_hint = "They are ready." if ability.get("summon_ready") else "They are exhausted."
+        ready_hint = (
+            "They are ready." if ability.get("summon_ready") else "They are exhausted."
+        )
         return f"{prefix}summon {count_val} Blade{'s' if count_val != 1 else ''} {target_hint}. {ready_hint}"
     if effect == "shadowstep":
         return f"{prefix}teleport adjacent to the furthest enemy instead of moving."
@@ -1017,16 +1219,26 @@ def describe_ability(ability):
 
 def bind_keyword_hover(label, parent, description):
     sub_tip = [None]
+
     def on_enter(e):
         sub_tip[0] = st = tk.Toplevel(parent)
         st.wm_overrideredirect(True)
         st.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 18}")
-        tk.Label(st, text=description, fg="white", bg="#444",
-                 font=("Arial", 9), padx=4, pady=2).pack()
+        tk.Label(
+            st,
+            text=description,
+            fg="white",
+            bg="#444",
+            font=("Arial", 9),
+            padx=4,
+            pady=2,
+        ).pack()
+
     def on_leave(e):
         if sub_tip[0]:
             sub_tip[0].destroy()
             sub_tip[0] = None
+
     label.bind("<Enter>", on_enter)
     label.bind("<Leave>", on_leave)
 
@@ -1034,7 +1246,14 @@ def bind_keyword_hover(label, parent, description):
 class CombatGUI:
     HEX_SIZE = 32
 
-    def __init__(self, root, battle=None, on_complete=None, attacker_player=None, defender_player=None):
+    def __init__(
+        self,
+        root,
+        battle=None,
+        on_complete=None,
+        attacker_player=None,
+        defender_player=None,
+    ):
         self.root = root
         try:
             root.title("Wager of War v3 - Combat")
@@ -1050,45 +1269,73 @@ class CombatGUI:
         top = tk.Frame(root)
         top.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
 
-        self.step_btn = tk.Button(top, text="Step", command=self.on_step, font=("Arial", 12))
+        self.step_btn = tk.Button(
+            top, text="Step", command=self.on_step, font=("Arial", 12)
+        )
         self.step_btn.pack(side=tk.LEFT)
 
-        self.auto_btn = tk.Button(top, text="Auto", command=self.toggle_auto, font=("Arial", 12))
+        self.auto_btn = tk.Button(
+            top, text="Auto", command=self.toggle_auto, font=("Arial", 12)
+        )
         self.auto_btn.pack(side=tk.LEFT, padx=5)
 
         # Speed controls
-        self.speed_levels = [(300, "0.3x"), (200, "0.5x"), (100, "1x"), (50, "2x"), (25, "4x")]
+        self.speed_levels = [
+            (300, "0.3x"),
+            (200, "0.5x"),
+            (100, "1x"),
+            (50, "2x"),
+            (25, "4x"),
+        ]
         self.speed_index = 2
         self.auto_delay = self.speed_levels[self.speed_index][0]
 
-        self.speed_down_btn = tk.Button(top, text="-", command=self._speed_down, font=("Arial", 12), width=2)
+        self.speed_down_btn = tk.Button(
+            top, text="-", command=self._speed_down, font=("Arial", 12), width=2
+        )
         self.speed_down_btn.pack(side=tk.LEFT)
         self.speed_var = tk.StringVar(value=self.speed_levels[self.speed_index][1])
-        tk.Label(top, textvariable=self.speed_var, font=("Arial", 11), width=4).pack(side=tk.LEFT)
-        self.speed_up_btn = tk.Button(top, text="+", command=self._speed_up, font=("Arial", 12), width=2)
+        tk.Label(top, textvariable=self.speed_var, font=("Arial", 11), width=4).pack(
+            side=tk.LEFT
+        )
+        self.speed_up_btn = tk.Button(
+            top, text="+", command=self._speed_up, font=("Arial", 12), width=2
+        )
         self.speed_up_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        self.undo_btn = tk.Button(top, text="Undo", command=self.on_undo, font=("Arial", 12))
+        self.undo_btn = tk.Button(
+            top, text="Undo", command=self.on_undo, font=("Arial", 12)
+        )
         self.undo_btn.pack(side=tk.LEFT, padx=5)
 
-        self.skip_btn = tk.Button(top, text="Skip", command=self.on_skip, font=("Arial", 12))
+        self.skip_btn = tk.Button(
+            top, text="Skip", command=self.on_skip, font=("Arial", 12)
+        )
         self.skip_btn.pack(side=tk.LEFT, padx=5)
 
-        self.reset_btn = tk.Button(top, text="Reset", command=self.on_reset, font=("Arial", 12))
+        self.reset_btn = tk.Button(
+            top, text="Reset", command=self.on_reset, font=("Arial", 12)
+        )
         self.reset_btn.pack(side=tk.LEFT)
 
         self.status_var = tk.StringVar(value="Round 1")
-        tk.Label(top, textvariable=self.status_var, font=("Arial", 12)).pack(side=tk.LEFT, padx=15)
+        tk.Label(top, textvariable=self.status_var, font=("Arial", 12)).pack(
+            side=tk.LEFT, padx=15
+        )
 
         self.score_var = tk.StringVar()
-        tk.Label(top, textvariable=self.score_var, font=("Arial", 11)).pack(side=tk.RIGHT)
+        tk.Label(top, textvariable=self.score_var, font=("Arial", 11)).pack(
+            side=tk.RIGHT
+        )
 
         canvas_w = self._hex_x(self.battle.COLS, 0) + self.HEX_SIZE + 20
         canvas_h = self._hex_y(0, self.battle.ROWS) + self.HEX_SIZE + 20
         self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="#2b2b2b")
         self.canvas.pack(padx=5, pady=5)
 
-        self.log_btn = tk.Button(top, text="Log", command=self._toggle_log, font=("Arial", 12))
+        self.log_btn = tk.Button(
+            top, text="Log", command=self._toggle_log, font=("Arial", 12)
+        )
         self.log_btn.pack(side=tk.LEFT, padx=5)
 
         self._log_window = None
@@ -1106,20 +1353,43 @@ class CombatGUI:
         self._draw()
 
     def _load_sprites(self):
-        if getattr(sys, 'frozen', False):
-            asset_dir = os.path.join(sys._MEIPASS, "assets")
-        else:
-            asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
+        asset_dir = get_asset_dir()
         self._sprite_imgs = {}
-        for name in ("footman", "archer", "priest", "knight", "mage",
-                     "page", "librarian", "steward", "gatekeeper",
-                     "apprentice", "conduit", "seeker", "savant",
-                     "tincan", "golem", "kitboy", "artillery",
-                     "penitent", "avenger", "herald", "blade",
-                     "watcher", "neophyte", "accursed",
-                     "enchantress", "prodigy", "scholar",
-                     "outcast", "mercenary", "tactician",
-                     "maiden", "aspirant", "apostle"):
+        for name in (
+            "footman",
+            "archer",
+            "priest",
+            "knight",
+            "mage",
+            "page",
+            "librarian",
+            "steward",
+            "gatekeeper",
+            "apprentice",
+            "conduit",
+            "seeker",
+            "savant",
+            "tincan",
+            "golem",
+            "kitboy",
+            "artillery",
+            "penitent",
+            "avenger",
+            "herald",
+            "blade",
+            "watcher",
+            "neophyte",
+            "accursed",
+            "enchantress",
+            "prodigy",
+            "scholar",
+            "outcast",
+            "mercenary",
+            "tactician",
+            "maiden",
+            "aspirant",
+            "apostle",
+        ):
             img = Image.open(os.path.join(asset_dir, f"{name}.png")).convert("RGBA")
             bright = img
             faded = ImageEnhance.Brightness(img).enhance(0.5)
@@ -1165,7 +1435,9 @@ class CombatGUI:
                     fill = "#5c3a3a"
                 else:
                     fill = "#3a3a3a"
-                self.canvas.create_polygon(self._hex_polygon(cx, cy), fill=fill, outline="#555")
+                self.canvas.create_polygon(
+                    self._hex_polygon(cx, cy), fill=fill, outline="#555"
+                )
 
         # draw aura glows behind units
         for u in b.units:
@@ -1188,12 +1460,18 @@ class CombatGUI:
                 # Draw faint highlight on all hexes within aura range
                 for r2 in range(b.ROWS):
                     for c2 in range(b.COLS):
-                        if hex_distance(u.pos, (c2, r2)) <= aura_range and (c2, r2) != u.pos:
+                        if (
+                            hex_distance(u.pos, (c2, r2)) <= aura_range
+                            and (c2, r2) != u.pos
+                        ):
                             ax = self._hex_x(c2, r2)
                             ay = self._hex_y(c2, r2)
                             self.canvas.create_polygon(
                                 self._hex_polygon(ax, ay),
-                                fill="", outline=aura_color, width=2, stipple="gray25",
+                                fill="",
+                                outline=aura_color,
+                                width=2,
+                                stipple="gray25",
                             )
 
         # draw units
@@ -1214,11 +1492,21 @@ class CombatGUI:
             bar_w = self.HEX_SIZE * 0.7
             bar_h = 4
             hp_frac = u.hp / u.max_hp
-            bx = cx - bar_w/2
+            bx = cx - bar_w / 2
             by = cy - 18
-            self.canvas.create_rectangle(bx, by, bx+bar_w, by+bar_h, fill="#333", outline="")
-            bar_color = "#44ff44" if hp_frac > 0.5 else "#ffaa00" if hp_frac > 0.25 else "#ff4444"
-            self.canvas.create_rectangle(bx, by, bx+bar_w*hp_frac, by+bar_h, fill=bar_color, outline="")
+            self.canvas.create_rectangle(
+                bx, by, bx + bar_w, by + bar_h, fill="#333", outline=""
+            )
+            bar_color = (
+                "#44ff44"
+                if hp_frac > 0.5
+                else "#ffaa00"
+                if hp_frac > 0.25
+                else "#ff4444"
+            )
+            self.canvas.create_rectangle(
+                bx, by, bx + bar_w * hp_frac, by + bar_h, fill=bar_color, outline=""
+            )
 
         # update status
         p1_counts = {}
@@ -1230,8 +1518,12 @@ class CombatGUI:
             d[u.name] = d.get(u.name, 0) + 1
         p1_str = "  ".join(f"{n}:{c}" for n, c in p1_counts.items())
         p2_str = "  ".join(f"{n}:{c}" for n, c in p2_counts.items())
-        left_label = f"Attacker: {self.attacker_player}" if self.attacker_player else "Attacker"
-        right_label = f"Defender: {self.defender_player}" if self.defender_player else "Defender"
+        left_label = (
+            f"Attacker: {self.attacker_player}" if self.attacker_player else "Attacker"
+        )
+        right_label = (
+            f"Defender: {self.defender_player}" if self.defender_player else "Defender"
+        )
         self.score_var.set(f"{left_label} [{p1_str}]  |  {right_label} [{p2_str}]")
         if b.winner is not None:
             if b.winner == 0:
@@ -1243,13 +1535,17 @@ class CombatGUI:
                     p1_survivors = sum(1 for u in b.units if u.alive and u.player == 1)
                     p2_survivors = sum(1 for u in b.units if u.alive and u.player == 2)
                     self.return_btn = tk.Button(
-                        self.canvas, text="Return to Overworld", font=("Arial", 14),
-                        command=lambda: self.on_complete(b.winner, p1_survivors, p2_survivors)
+                        self.canvas,
+                        text="Return to Overworld",
+                        font=("Arial", 14),
+                        command=lambda: self.on_complete(
+                            b.winner, p1_survivors, p2_survivors
+                        ),
                     )
                 self.canvas.create_window(
                     self.canvas.winfo_reqwidth() // 2,
                     self.canvas.winfo_reqheight() // 2,
-                    window=self.return_btn
+                    window=self.return_btn,
                 )
         else:
             self.status_var.set(f"Round {b.round_num}")
@@ -1265,14 +1561,22 @@ class CombatGUI:
         x = cx - self.HEX_SIZE * 0.65
         y = cy - self.HEX_SIZE * 0.85
         points = [
-            x + 0, y + 6,
-            x + 2, y + 0,
-            x + 4, y + 6,
-            x + 6, y + 0,
-            x + 8, y + 6,
-            x + 10, y + 2,
-            x + 10, y + 10,
-            x + 0, y + 10,
+            x + 0,
+            y + 6,
+            x + 2,
+            y + 0,
+            x + 4,
+            y + 6,
+            x + 6,
+            y + 0,
+            x + 8,
+            y + 6,
+            x + 10,
+            y + 2,
+            x + 10,
+            y + 10,
+            x + 0,
+            y + 10,
         ]
         self.canvas.create_polygon(points, fill="#f1d44c", outline="#b48b1a")
 
@@ -1297,7 +1601,9 @@ class CombatGUI:
         if unit:
             if self._tooltip_unit is unit and self._tooltip is not None:
                 if not shift_held:
-                    self._tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+                    self._tooltip.wm_geometry(
+                        f"+{event.x_root + 15}+{event.y_root + 10}"
+                    )
                 return
             self._hide_tooltip()
             self._tooltip_unit = unit
@@ -1307,8 +1613,15 @@ class CombatGUI:
             tw.configure(bg="#222")
 
             main_text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
-            tk.Label(tw, text=main_text, fg="white", bg="#222",
-                     font=("Arial", 10, "bold"), padx=6, pady=2).pack(anchor="w")
+            tk.Label(
+                tw,
+                text=main_text,
+                fg="white",
+                bg="#222",
+                font=("Arial", 10, "bold"),
+                padx=6,
+                pady=2,
+            ).pack(anchor="w")
 
             if unit.abilities:
                 row = tk.Frame(tw, bg="#222")
@@ -1316,9 +1629,17 @@ class CombatGUI:
                 for ability in unit.abilities:
                     text = format_ability(ability)
                     description = describe_ability(ability)
-                    lbl = tk.Label(row, text=text,
-                                   fg="#aaffaa", bg="#333", font=("Arial", 9),
-                                   padx=4, pady=1, relief=tk.RAISED, borderwidth=1)
+                    lbl = tk.Label(
+                        row,
+                        text=text,
+                        fg="#aaffaa",
+                        bg="#333",
+                        font=("Arial", 9),
+                        padx=4,
+                        pady=1,
+                        relief=tk.RAISED,
+                        borderwidth=1,
+                    )
                     lbl.pack(side=tk.LEFT, padx=2)
                     self._bind_ability_hover(lbl, tw, description)
         else:
@@ -1407,17 +1728,26 @@ class CombatGUI:
         angle = math.atan2(dy - sy, dx - sx)
         tail_x = cx - 10 * math.cos(angle)
         tail_y = cy - 10 * math.sin(angle)
-        self.canvas.create_line(tail_x, tail_y, cx, cy, fill="#ffff44", width=2, tags="anim")
+        self.canvas.create_line(
+            tail_x, tail_y, cx, cy, fill="#ffff44", width=2, tags="anim"
+        )
         # Arrowhead
         ha1 = angle + math.radians(150)
         ha2 = angle - math.radians(150)
         self.canvas.create_polygon(
-            cx, cy,
-            cx + 6 * math.cos(ha1), cy + 6 * math.sin(ha1),
-            cx + 6 * math.cos(ha2), cy + 6 * math.sin(ha2),
-            fill="#ffff44", tags="anim",
+            cx,
+            cy,
+            cx + 6 * math.cos(ha1),
+            cy + 6 * math.sin(ha1),
+            cx + 6 * math.cos(ha2),
+            cy + 6 * math.sin(ha2),
+            fill="#ffff44",
+            tags="anim",
         )
-        self.root.after(self._anim_delay(30), lambda: self._animate_arrow(src, dst, on_done, frame + 1))
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_arrow(src, dst, on_done, frame + 1),
+        )
 
     def _animate_slash(self, target_pos, attacker_pos, on_done, frame=0):
         """Animate a slash effect offset 25% from target toward attacker."""
@@ -1454,7 +1784,10 @@ class CombatGUI:
         y4 = cy - r * 0.7 * math.sin(angle2)
         self.canvas.create_line(x3, y3, x4, y4, fill=color, width=2, tags="anim")
 
-        self.root.after(self._anim_delay(40), lambda: self._animate_slash(target_pos, attacker_pos, on_done, frame + 1))
+        self.root.after(
+            self._anim_delay(40),
+            lambda: self._animate_slash(target_pos, attacker_pos, on_done, frame + 1),
+        )
 
     def _animate_heal(self, pos, on_done, frame=0):
         """Animate a green '+' that fades at the given hex position."""
@@ -1469,9 +1802,12 @@ class CombatGUI:
         alpha = int(255 * (1 - t))
         green = f"#00{alpha:02x}00"
         self.canvas.delete("heal_anim")
-        self.canvas.create_text(cx, cy, text="+", fill=green,
-                                font=("Arial", 14, "bold"), tags="heal_anim")
-        self.root.after(self._anim_delay(40), lambda: self._animate_heal(pos, on_done, frame + 1))
+        self.canvas.create_text(
+            cx, cy, text="+", fill=green, font=("Arial", 14, "bold"), tags="heal_anim"
+        )
+        self.root.after(
+            self._anim_delay(40), lambda: self._animate_heal(pos, on_done, frame + 1)
+        )
 
     def _animate_small_arrow(self, pos, color, direction, tag, on_done, frame=0):
         """Animate a small arrow (up or down) at the given hex position.
@@ -1491,10 +1827,14 @@ class CombatGUI:
         self.canvas.create_line(cx, cy, cx, y1, fill=color, width=2, tags=tag)
         # Arrowhead
         self.canvas.create_polygon(
-            cx, y1,
-            cx - 4, y1 + 5 * direction,
-            cx + 4, y1 + 5 * direction,
-            fill=color, tags=tag,
+            cx,
+            y1,
+            cx - 4,
+            y1 + 5 * direction,
+            cx + 4,
+            y1 + 5 * direction,
+            fill=color,
+            tags=tag,
         )
         # Fade text label
         r_val = int(int(color[1:3], 16) * alpha_frac)
@@ -1502,7 +1842,12 @@ class CombatGUI:
         b_val = int(int(color[5:7], 16) * alpha_frac)
         faded = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
         self.canvas.create_line(cx, cy, cx, y1, fill=faded, width=2, tags=tag)
-        self.root.after(self._anim_delay(30), lambda: self._animate_small_arrow(pos, color, direction, tag, on_done, frame + 1))
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_small_arrow(
+                pos, color, direction, tag, on_done, frame + 1
+            ),
+        )
 
     def _animate_splash_hit(self, pos, on_done, frame=0):
         """Animate a small red burst at the given position."""
@@ -1525,8 +1870,13 @@ class CombatGUI:
             y1 = cy + r * math.sin(angle)
             x2 = cx - r * math.cos(angle)
             y2 = cy - r * math.sin(angle)
-            self.canvas.create_line(x1, y1, x2, y2, fill=color, width=2, tags="splash_anim")
-        self.root.after(self._anim_delay(35), lambda: self._animate_splash_hit(pos, on_done, frame + 1))
+            self.canvas.create_line(
+                x1, y1, x2, y2, fill=color, width=2, tags="splash_anim"
+            )
+        self.root.after(
+            self._anim_delay(35),
+            lambda: self._animate_splash_hit(pos, on_done, frame + 1),
+        )
 
     def _animate_repair_tick(self, pos, on_done, frame=0):
         """Animate a small green wrench/+ symbol at the given position."""
@@ -1541,9 +1891,13 @@ class CombatGUI:
         fade = int(200 * (1 - t))
         color = f"#00{max(80, fade):02x}00"
         self.canvas.delete("repair_anim")
-        self.canvas.create_text(cx, cy, text="+", fill=color,
-                                font=("Arial", 10, "bold"), tags="repair_anim")
-        self.root.after(self._anim_delay(30), lambda: self._animate_repair_tick(pos, on_done, frame + 1))
+        self.canvas.create_text(
+            cx, cy, text="+", fill=color, font=("Arial", 10, "bold"), tags="repair_anim"
+        )
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_repair_tick(pos, on_done, frame + 1),
+        )
 
     def _animate_sunder_arrow(self, target_pos, source_pos, on_done, frame=0):
         """Animate a small black down-arrow shifted toward source."""
@@ -1564,10 +1918,18 @@ class CombatGUI:
         fade = int(200 * (1 - t))
         color = f"#{fade // 3:02x}{fade // 3:02x}{fade // 3:02x}"
         # Down arrow
-        self.canvas.create_line(cx, cy - 8, cx, cy, fill=color, width=2, tags="sunder_anim")
-        self.canvas.create_polygon(cx, cy + 2, cx - 4, cy - 3, cx + 4, cy - 3,
-                                   fill=color, tags="sunder_anim")
-        self.root.after(self._anim_delay(30), lambda: self._animate_sunder_arrow(target_pos, source_pos, on_done, frame + 1))
+        self.canvas.create_line(
+            cx, cy - 8, cx, cy, fill=color, width=2, tags="sunder_anim"
+        )
+        self.canvas.create_polygon(
+            cx, cy + 2, cx - 4, cy - 3, cx + 4, cy - 3, fill=color, tags="sunder_anim"
+        )
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_sunder_arrow(
+                target_pos, source_pos, on_done, frame + 1
+            ),
+        )
 
     def _animate_bombardment_arrow(self, src, dst, on_done, frame=0):
         """Animate a differently-colored arrow (orange) from src to dst."""
@@ -1585,18 +1947,29 @@ class CombatGUI:
         angle = math.atan2(dy - sy, dx - sx)
         tail_x = cx - 10 * math.cos(angle)
         tail_y = cy - 10 * math.sin(angle)
-        self.canvas.create_line(tail_x, tail_y, cx, cy, fill="#ff8800", width=2, tags="bomb_anim")
+        self.canvas.create_line(
+            tail_x, tail_y, cx, cy, fill="#ff8800", width=2, tags="bomb_anim"
+        )
         ha1 = angle + math.radians(150)
         ha2 = angle - math.radians(150)
         self.canvas.create_polygon(
-            cx, cy,
-            cx + 6 * math.cos(ha1), cy + 6 * math.sin(ha1),
-            cx + 6 * math.cos(ha2), cy + 6 * math.sin(ha2),
-            fill="#ff8800", tags="bomb_anim",
+            cx,
+            cy,
+            cx + 6 * math.cos(ha1),
+            cy + 6 * math.sin(ha1),
+            cx + 6 * math.cos(ha2),
+            cy + 6 * math.sin(ha2),
+            fill="#ff8800",
+            tags="bomb_anim",
         )
-        self.root.after(self._anim_delay(30), lambda: self._animate_bombardment_arrow(src, dst, on_done, frame + 1))
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_bombardment_arrow(src, dst, on_done, frame + 1),
+        )
 
-    def _animate_stat_arrow(self, pos, color, direction, tag, on_done, source_pos=None, frame=0):
+    def _animate_stat_arrow(
+        self, pos, color, direction, tag, on_done, source_pos=None, frame=0
+    ):
         """Animate a small colored arrow at pos, optionally shifted toward source_pos.
         direction: -1 for up (buff), +1 for down (debuff)."""
         total_frames = 8
@@ -1620,15 +1993,24 @@ class CombatGUI:
         r_c = int(int(color[1:3], 16) * fade)
         g_c = int(int(color[3:5], 16) * fade)
         b_c = int(int(color[5:7], 16) * fade)
-        faded = f"#{max(0,r_c):02x}{max(0,g_c):02x}{max(0,b_c):02x}"
+        faded = f"#{max(0, r_c):02x}{max(0, g_c):02x}{max(0, b_c):02x}"
         self.canvas.create_line(px, cy, px, y_tip, fill=faded, width=2, tags=tag)
         self.canvas.create_polygon(
-            px, y_tip + (-3 if direction == -1 else 3) * (-1),
-            px - 4, y_tip + 5 * (-direction),
-            px + 4, y_tip + 5 * (-direction),
-            fill=faded, tags=tag,
+            px,
+            y_tip + (-3 if direction == -1 else 3) * (-1),
+            px - 4,
+            y_tip + 5 * (-direction),
+            px + 4,
+            y_tip + 5 * (-direction),
+            fill=faded,
+            tags=tag,
         )
-        self.root.after(self._anim_delay(30), lambda: self._animate_stat_arrow(pos, color, direction, tag, on_done, source_pos, frame + 1))
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_stat_arrow(
+                pos, color, direction, tag, on_done, source_pos, frame + 1
+            ),
+        )
 
     def _chain_anims(self, anim_fns, final_done):
         """Run a list of animation functions in sequence. Each fn takes on_done callback."""
@@ -1639,6 +2021,55 @@ class CombatGUI:
         rest = anim_fns[1:]
         first(lambda: self._chain_anims(rest, final_done))
 
+    def _make_sunder_anim(self, event):
+        pos = event["pos"]
+        src = event.get("source_pos")
+
+        def anim(done):
+            self._animate_stat_arrow(
+                pos,
+                "#444444",
+                1,
+                "sunder_anim",
+                lambda: self._apply_event(event, done),
+                source_pos=src,
+            )
+
+        return anim
+
+    def _make_stat_arrow_anim(self, pos, color, direction, tag):
+        def anim(done):
+            self._animate_stat_arrow(pos, color, direction, tag, done)
+
+        return anim
+
+    def _make_splash_anim(self, event):
+        pos = event["pos"]
+
+        def anim(done):
+            self._animate_splash_hit(pos, lambda: self._apply_event(event, done))
+
+        return anim
+
+    def _make_repair_anim(self, event):
+        pos = event["pos"]
+
+        def anim(done):
+            self._animate_repair_tick(pos, lambda: self._apply_event(event, done))
+
+        return anim
+
+    def _make_bombardment_anim(self, event):
+        src = event.get("source_pos")
+        dst = event["pos"]
+
+        def anim(done):
+            self._animate_bombardment_arrow(
+                src, dst, lambda: self._apply_event(event, done)
+            )
+
+        return anim
+
     def _play_ability_anims(self, action, on_done):
         """Play visual effects for all abilities that triggered this step."""
         if not action:
@@ -1646,55 +2077,33 @@ class CombatGUI:
             return
         anims = []
 
-        # Sunder — black down-arrow on target shifted toward source
         for event in action.get("sunder_events", []):
-            spos = event["pos"]
-            ssrc = event.get("source_pos")
-            anims.append(lambda done, s=spos, r=ssrc, e=event: self._animate_stat_arrow(
-                s, "#444444", 1, "sunder_anim", lambda: self._apply_event(e, done), source_pos=r
-            ))
+            anims.append(self._make_sunder_anim(event))
 
-        # Ramp — red up-arrow on unit
         if action.get("ramp_pos"):
-            rpos = action["ramp_pos"]
-            anims.append(lambda done, p=rpos: self._animate_stat_arrow(p, "#ff4444", -1, "ramp_anim", done))
+            anims.append(
+                self._make_stat_arrow_anim(
+                    action["ramp_pos"], "#ff4444", -1, "ramp_anim"
+                )
+            )
 
-        # Rage — red up-arrow on each raging unit
         for rpos in action.get("rage_positions", []):
-            anims.append(lambda done, p=rpos: self._animate_stat_arrow(p, "#ff6644", -1, "rage_anim", done))
+            anims.append(self._make_stat_arrow_anim(rpos, "#ff6644", -1, "rage_anim"))
 
-        # Vengeance — red up-arrow on each vengeance unit
         for vpos in action.get("vengeance_positions", []):
-            anims.append(lambda done, p=vpos: self._animate_stat_arrow(p, "#ff2222", -1, "veng_anim", done))
+            anims.append(self._make_stat_arrow_anim(vpos, "#ff2222", -1, "veng_anim"))
 
-        # Splash — red burst on each hit
         for event in action.get("splash_events", []):
-            bpos = event["pos"]
-            anims.append(lambda done, p=bpos, e=event: self._animate_splash_hit(
-                p, lambda: self._apply_event(e, done)
-            ))
+            anims.append(self._make_splash_anim(event))
 
-        # Repair — green + on each healed ally
         for event in action.get("repair_events", []):
-            rpos = event["pos"]
-            anims.append(lambda done, p=rpos, e=event: self._animate_repair_tick(
-                p, lambda: self._apply_event(e, done)
-            ))
+            anims.append(self._make_repair_anim(event))
 
-        # Bombardment — orange arrow from source to target
         for event in action.get("bombardment_events", []):
-            bsrc = event.get("source_pos")
-            bdst = event["pos"]
-            anims.append(lambda done, s=bsrc, d=bdst, e=event: self._animate_bombardment_arrow(
-                s, d, lambda: self._apply_event(e, done)
-            ))
-        # Strike — orange arrow from source to target
+            anims.append(self._make_bombardment_anim(event))
+
         for event in action.get("strike_events", []):
-            bsrc = event.get("source_pos")
-            bdst = event["pos"]
-            anims.append(lambda done, s=bsrc, d=bdst, e=event: self._animate_bombardment_arrow(
-                s, d, lambda: self._apply_event(e, done)
-            ))
+            anims.append(self._make_bombardment_anim(event))
 
         self._chain_anims(anims, on_done)
 
@@ -1718,9 +2127,11 @@ class CombatGUI:
         anims = []
         for event in events:
             pos = event["pos"]
-            anims.append(lambda done, p=pos, e=event: self._animate_heal(
-                p, lambda: self._apply_event(e, done)
-            ))
+            anims.append(
+                lambda done, p=pos, e=event: self._animate_heal(
+                    p, lambda: self._apply_event(e, done)
+                )
+            )
         self._chain_anims(anims, on_done)
 
     def _apply_event(self, event, on_done):
@@ -1731,18 +2142,24 @@ class CombatGUI:
 
     def _play_post_attack_anims(self, action, on_done):
         """Chain: heal -> ability effects."""
+
         def finalize():
             self._apply_all_events(action)
             self._draw()
             on_done()
-        self._play_heal_if_needed(action, lambda: self._play_ability_anims(action, finalize))
+
+        self._play_heal_if_needed(
+            action, lambda: self._play_ability_anims(action, finalize)
+        )
 
     def on_step(self):
         self.battle.step()
         action = self.battle.last_action
         self._draw()
         if action and action.get("type") in ("attack", "move_attack"):
-            self._play_attack_anim(action, lambda: self._play_post_attack_anims(action, lambda: None))
+            self._play_attack_anim(
+                action, lambda: self._play_post_attack_anims(action, lambda: None)
+            )
         else:
             self._play_post_attack_anims(action, lambda: None)
 
@@ -1807,7 +2224,9 @@ class CombatGUI:
                 self.auto_btn.config(text="Auto")
 
         if action and action.get("type") in ("attack", "move_attack"):
-            self._play_attack_anim(action, lambda: self._play_post_attack_anims(action, schedule_next))
+            self._play_attack_anim(
+                action, lambda: self._play_post_attack_anims(action, schedule_next)
+            )
         else:
             self._play_post_attack_anims(action, schedule_next)
 
@@ -1816,6 +2235,7 @@ def main():
     root = tk.Tk()
     CombatGUI(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

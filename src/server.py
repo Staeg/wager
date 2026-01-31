@@ -6,11 +6,8 @@ import argparse
 import socket
 import json
 import sys
-from .compat import setup_frozen_path
-
-setup_frozen_path()
-
 import websockets
+from .compat import setup_frozen_path
 
 from .combat import Battle
 from .overworld import (
@@ -56,6 +53,8 @@ from .protocol import (
     UPGRADE_PROMPT,
     OBJECTIVE_REWARD_PROMPT,
 )
+
+setup_frozen_path()
 
 
 class BattleRecord:
