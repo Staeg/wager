@@ -82,11 +82,12 @@ class BattleRecord:
 
 
 class GameServer:
-    def __init__(self, num_players=2, host="0.0.0.0", port=8765):
+    def __init__(self, num_players=2, host="0.0.0.0", port=8765, upgrade_mode="none"):
         self.num_players = num_players
         self.total_players = 4
         self.host = host
         self.port = port
+        self.upgrade_mode = upgrade_mode
         self.players = {}  # player_id -> websocket
         self.player_names = {}  # player_id -> name
         self.next_player_id = 1
@@ -942,6 +943,21 @@ class GameServer:
 
     async def _start_upgrade_selection(self):
         """Begin sequential upgrade selection after factions are chosen."""
+        if self.upgrade_mode == "none":
+            self._assign_ai_upgrades()
+            await self._start_game()
+            return
+        if self.upgrade_mode == "random":
+            self._assign_ai_upgrades()
+            for pid in self.players:
+                faction = self.player_factions.get(pid)
+                if not faction:
+                    continue
+                upgrades = get_upgrades_for_faction(faction)
+                if upgrades:
+                    self.player_upgrades[pid] = [random.choice(upgrades)["id"]]
+            await self._start_game()
+            return
         self._upgrade_selection_order = sorted(self.players.keys())
         self._upgrade_selection_idx = 0
         if not self._upgrade_selection_order:
@@ -1021,9 +1037,20 @@ def main():
     )
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8765, help="Port to listen on")
+    parser.add_argument(
+        "--upgrade-mode",
+        choices=("none", "random", "choose"),
+        default="none",
+        help="Starting upgrades: none, random, or choose",
+    )
     args = parser.parse_args()
 
-    server = GameServer(num_players=args.players, host=args.host, port=args.port)
+    server = GameServer(
+        num_players=args.players,
+        host=args.host,
+        port=args.port,
+        upgrade_mode=args.upgrade_mode,
+    )
     asyncio.run(server.run())
 
 

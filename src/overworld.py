@@ -603,7 +603,7 @@ ARMY_MOVE_RANGE = 3
 class OverworldGUI:
     HEX_SIZE = 40
 
-    def __init__(self, root, client=None):
+    def __init__(self, root, client=None, upgrade_mode="none"):
         """Initialize overworld GUI.
 
         Args:
@@ -613,6 +613,7 @@ class OverworldGUI:
         """
         self.root = root
         self.client = client
+        self.upgrade_mode = upgrade_mode
         self.player_id = 1  # default for single-player
         self.current_player = 1
         self._multiplayer = client is not None
@@ -996,6 +997,13 @@ class OverworldGUI:
         faction = self.faction
         if not faction:
             return
+        if self.upgrade_mode == "none":
+            return
+        if self.upgrade_mode == "random":
+            upgrade_id = self._auto_pick_upgrade(faction)
+            if upgrade_id:
+                self.player_upgrades[1] = [upgrade_id]
+            return
 
         def on_select(upgrade_id, dialog):
             self.player_upgrades[1] = [upgrade_id]
@@ -1014,6 +1022,13 @@ class OverworldGUI:
     def _pick_upgrade_multiplayer(self, player_factions):
         faction = player_factions.get(self.player_id)
         if not faction:
+            return
+        if self.upgrade_mode == "none":
+            return
+        if self.upgrade_mode == "random":
+            upgrade_id = self._auto_pick_upgrade(faction)
+            if upgrade_id:
+                self.client.send({"type": SELECT_UPGRADE, "upgrade_id": upgrade_id})
             return
 
         def on_select(upgrade_id, dialog):
