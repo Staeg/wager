@@ -115,6 +115,9 @@ class GameServer:
             except websockets.ConnectionClosed:
                 pass
 
+    async def _broadcast_state(self, message=""):
+        await self.broadcast(self._state_update_msg(message))
+
     async def send_to(self, player_id, msg):
         """Send message to a specific player."""
         ws = self.players.get(player_id)
@@ -380,10 +383,8 @@ class GameServer:
                 self._check_base_destruction(army.pos, army.player)
             if await self._check_game_over():
                 return
-            await self.broadcast(
-                self._state_update_msg(
-                    f"Battle resolved between P{army.player} and P{target.player}."
-                )
+            await self._broadcast_state(
+                f"Battle resolved between P{army.player} and P{target.player}."
             )
         elif target and target.player == player_id:
             self.world.merge_armies(target, army)
@@ -394,7 +395,7 @@ class GameServer:
             status = f"P{player_id} combined armies at {to_pos}."
             if gained:
                 status = f"P{player_id} combined armies and collected {gained} gold."
-            await self.broadcast(self._state_update_msg(status))
+            await self._broadcast_state(status)
         else:
             self.world.move_army(army, to_pos)
             army.exhausted = True
@@ -405,7 +406,7 @@ class GameServer:
             status = f"P{player_id} moved army to {to_pos}."
             if gained:
                 status = f"P{player_id} moved army and collected {gained} gold."
-            await self.broadcast(self._state_update_msg(status))
+            await self._broadcast_state(status)
 
     async def _handle_split_move(self, player_id, msg):
         validation = await self._validate_move_request(player_id, msg)
@@ -459,10 +460,8 @@ class GameServer:
                 self._check_base_destruction(moving_army.pos, moving_army.player)
             if await self._check_game_over():
                 return
-            await self.broadcast(
-                self._state_update_msg(
-                    f"Battle resolved between P{moving_army.player} and P{target.player}."
-                )
+            await self._broadcast_state(
+                f"Battle resolved between P{moving_army.player} and P{target.player}."
             )
         elif target and target.player == player_id:
             self.world.merge_armies(target, moving_army)
@@ -473,7 +472,7 @@ class GameServer:
             status = f"P{player_id} combined armies at {to_pos}."
             if gained:
                 status = f"P{player_id} combined armies and collected {gained} gold."
-            await self.broadcast(self._state_update_msg(status))
+            await self._broadcast_state(status)
         else:
             self.world.armies.append(moving_army)
             self.world.move_army(moving_army, to_pos)
@@ -485,7 +484,7 @@ class GameServer:
             status = f"P{player_id} moved army to {to_pos}."
             if gained:
                 status = f"P{player_id} moved army and collected {gained} gold."
-            await self.broadcast(self._state_update_msg(status))
+            await self._broadcast_state(status)
 
     async def _handle_select_faction(self, player_id, msg):
         faction_name = msg.get("faction")
@@ -587,9 +586,7 @@ class GameServer:
         if err:
             await self.send_to(player_id, {"type": ERROR, "message": err})
         else:
-            await self.broadcast(
-                self._state_update_msg(f"P{player_id} built a {unit_name}.")
-            )
+            await self._broadcast_state(f"P{player_id} built a {unit_name}.")
 
     async def _handle_end_turn(self, player_id, msg):
         if player_id != self.current_player:
@@ -599,10 +596,8 @@ class GameServer:
             if army.player == self.current_player:
                 army.exhausted = False
         self.current_player = self._next_player()
-        await self.broadcast(
-            self._state_update_msg(
-                f"P{player_id} ended turn. P{self.current_player}'s turn."
-            )
+        await self._broadcast_state(
+            f"P{player_id} ended turn. P{self.current_player}'s turn."
         )
 
     async def _handle_request_replay(self, player_id, msg):
@@ -671,9 +666,7 @@ class GameServer:
             if player_id and player_id in self.players:
                 del self.players[player_id]
                 if self.started:
-                    await self.broadcast(
-                        self._state_update_msg(f"P{player_id} disconnected.")
-                    )
+                    await self._broadcast_state(f"P{player_id} disconnected.")
                     await self._check_game_over()
 
     async def _start_faction_selection(self):
