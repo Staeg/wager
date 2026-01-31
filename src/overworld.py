@@ -1853,14 +1853,18 @@ class OverworldGUI:
     def _msg_upgrade_prompt(self, msg):
         picking = msg["picking_player"]
         player_factions = msg.get("player_factions", {})
-        self.player_factions = {int(k): v for k, v in player_factions.items()}
+        self.player_factions = self._coerce_int_keys(player_factions)
         player_heroes = msg.get("player_heroes", {})
-        self.player_heroes = {int(k): v for k, v in player_heroes.items()}
+        self.player_heroes = self._coerce_int_keys(player_heroes)
         if picking == self.player_id:
             self.status_var.set("Choose your upgrade!")
             self._pick_upgrade_multiplayer(self.player_factions)
         else:
             self.status_var.set(f"Waiting for P{picking} to choose an upgrade...")
+
+    @staticmethod
+    def _coerce_int_keys(mapping):
+        return {int(k): v for k, v in (mapping or {}).items()}
 
     def _apply_world_state(self, msg):
         self.world.armies = deserialize_armies(msg["armies"])
@@ -1868,17 +1872,11 @@ class OverworldGUI:
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
         self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
         if "player_factions" in msg:
-            self.player_factions = {
-                int(k): v for k, v in msg.get("player_factions", {}).items()
-            }
+            self.player_factions = self._coerce_int_keys(msg.get("player_factions", {}))
         if "player_heroes" in msg:
-            self.player_heroes = {
-                int(k): v for k, v in msg.get("player_heroes", {}).items()
-            }
+            self.player_heroes = self._coerce_int_keys(msg.get("player_heroes", {}))
         if "player_upgrades" in msg:
-            self.player_upgrades = {
-                int(k): v for k, v in msg.get("player_upgrades", {}).items()
-            }
+            self.player_upgrades = self._coerce_int_keys(msg.get("player_upgrades", {}))
 
     def _msg_game_start(self, msg):
         self.player_id = msg["player_id"]
