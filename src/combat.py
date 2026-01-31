@@ -283,6 +283,7 @@ class Battle:
                 if u.alive
                 and u.player == unit.player
                 and hex_distance(unit.pos, u.pos) <= rng
+                and (effect != "heal" or u.hp < u.max_hp)
             ]
         else:
             pool = [

@@ -1,6 +1,17 @@
 """Helpers for structured ability definitions."""
 
-def ability(trigger, effect, target=None, value=None, range=None, aura=None, count=None, charge=None, amplify=True):
+
+def ability(
+    trigger,
+    effect,
+    target=None,
+    value=None,
+    range=None,
+    aura=None,
+    count=None,
+    charge=None,
+    amplify=True,
+):
     data = {
         "trigger": trigger,
         "effect": effect,

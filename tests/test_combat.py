@@ -5,8 +5,8 @@ from src.ability_defs import ability
 from src.combat import Battle, CombatGUI
 
 
-
 # --- Range-based spawn ordering ---
+
 
 class TestSpawnOrdering:
     def test_p1_melee_in_front(self):
@@ -57,7 +57,9 @@ class TestSpawnOrdering:
             b = Battle()
             for u in b.units:
                 if u.player == 1 and u.attack_range > 1:
-                    assert u.pos[0] < 5, f"Ranged unit {u.name} in front col 5 (seed={seed})"
+                    assert u.pos[0] < 5, (
+                        f"Ranged unit {u.name} in front col 5 (seed={seed})"
+                    )
 
     def test_p2_longest_range_not_in_front_column(self):
         """Longest-range P2 units should not be in the frontmost column (col 11)."""
@@ -67,7 +69,9 @@ class TestSpawnOrdering:
             max_range = max(u.attack_range for u in b.units if u.player == 2)
             for u in b.units:
                 if u.player == 2 and u.attack_range == max_range and max_range > 2:
-                    assert u.pos[0] > 11, f"Longest-range unit {u.name} in front col 11 (seed={seed})"
+                    assert u.pos[0] > 11, (
+                        f"Longest-range unit {u.name} in front col 11 (seed={seed})"
+                    )
 
     def test_row_variety_across_seeds(self):
         """Rows within each column should be shuffled, producing variety across seeds."""
@@ -81,6 +85,7 @@ class TestSpawnOrdering:
 
 
 # --- Skip ---
+
 
 class TestSkip:
     def test_skip_produces_winner(self):
@@ -115,6 +120,7 @@ class TestSkip:
 
 
 # --- Speed controls (GUI) ---
+
 
 @pytest.fixture(scope="session")
 def tk_root():
@@ -169,6 +175,7 @@ class TestSpeedControls:
 
 # --- Skip button (GUI) ---
 
+
 class TestGUISkip:
     def test_skip_ends_battle(self, gui):
         gui.on_skip()
@@ -196,15 +203,24 @@ class TestGUISkip:
 
 # --- New ability tests ---
 
+
 class TestPush:
     def test_push_moves_target(self):
         """A unit with push should move the target away horizontally after attacking."""
         # Apprentice (push=1) attacks a Page
-        p1 = [("Page", 3, 1, 1, 1)]
-        p2 = [{
-            "name": "Apprentice", "max_hp": 8, "damage": 1, "range": 2, "count": 1,
-            "abilities": [ability("onhit", "push", target="target", value=1, amplify=False)],
-        }]
+        p1 = [{"name": "Page", "max_hp": 3, "damage": 1, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Apprentice",
+                "max_hp": 8,
+                "damage": 1,
+                "range": 2,
+                "count": 1,
+                "abilities": [
+                    ability("onhit", "push", target="target", value=1, amplify=False)
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         # Run until an attack with push happens
         pushed = False
@@ -220,28 +236,48 @@ class TestPush:
     def test_push_blocked_by_occupied(self):
         """Push should not move target into an occupied hex."""
         # Two Pages side by side, Apprentice pushes one into the other's hex
-        p1 = [("Page", 30, 0, 1, 2)]  # Two pages, no damage so they survive
-        p2 = [{
-            "name": "Apprentice", "max_hp": 80, "damage": 1, "range": 2, "count": 1,
-            "abilities": [ability("onhit", "push", target="target", value=1, amplify=False)],
-        }]
+        p1 = [
+            {"name": "Page", "max_hp": 30, "damage": 0, "range": 1, "count": 2}
+        ]  # Two pages, no damage so they survive
+        p2 = [
+            {
+                "name": "Apprentice",
+                "max_hp": 80,
+                "damage": 1,
+                "range": 2,
+                "count": 1,
+                "abilities": [
+                    ability("onhit", "push", target="target", value=1, amplify=False)
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=42)
         # All positions should remain valid (no overlaps)
         for _ in range(100):
             if not b.step():
                 break
             alive_positions = [u.pos for u in b.units if u.alive]
-            assert len(alive_positions) == len(set(alive_positions)), "Push created overlapping positions"
+            assert len(alive_positions) == len(set(alive_positions)), (
+                "Push created overlapping positions"
+            )
 
 
 class TestRamp:
     def test_ramp_increases_damage(self):
         """A unit with ramp should increase damage after each successful attack."""
-        p1 = [("Page", 100, 0, 1, 1)]  # Tanky target, 0 damage
-        p2 = [{
-            "name": "Seeker", "max_hp": 100, "damage": 1, "range": 4, "count": 1,
-            "abilities": [ability("onhit", "ramp", target="self", value=1)],
-        }]
+        p1 = [
+            {"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}
+        ]  # Tanky target, 0 damage
+        p2 = [
+            {
+                "name": "Seeker",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 4,
+                "count": 1,
+                "abilities": [ability("onhit", "ramp", target="self", value=1)],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         seeker = [u for u in b.units if u.name == "Seeker"][0]
         initial_damage = seeker.damage
@@ -255,11 +291,17 @@ class TestRamp:
 
     def test_ramp_undo(self):
         """Undo should restore ramp-accumulated damage."""
-        p1 = [("Page", 100, 0, 1, 1)]
-        p2 = [{
-            "name": "Seeker", "max_hp": 100, "damage": 1, "range": 4, "count": 1,
-            "abilities": [ability("onhit", "ramp", target="self", value=1)],
-        }]
+        p1 = [{"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Seeker",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 4,
+                "count": 1,
+                "abilities": [ability("onhit", "ramp", target="self", value=1)],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         seeker = [u for u in b.units if u.name == "Seeker"][0]
         # Step until ramp triggers
@@ -277,14 +319,24 @@ class TestAmplify:
     def test_amplify_boosts_adjacent_ability(self):
         """Amplify should increase adjacent allies' ability values."""
         # Conduit (amplify=1) next to Seeker (ramp=1) -> effective ramp=2
-        p1 = [("Page", 100, 0, 1, 1)]
+        p1 = [{"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
         p2 = [
             {
-                "name": "Conduit", "max_hp": 100, "damage": 2, "range": 3, "count": 1,
-                "abilities": [ability("passive", "amplify", value=1, aura=1, amplify=False)],
+                "name": "Conduit",
+                "max_hp": 100,
+                "damage": 2,
+                "range": 3,
+                "count": 1,
+                "abilities": [
+                    ability("passive", "amplify", value=1, aura=1, amplify=False)
+                ],
             },
             {
-                "name": "Seeker", "max_hp": 100, "damage": 1, "range": 4, "count": 1,
+                "name": "Seeker",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 4,
+                "count": 1,
                 "abilities": [ability("onhit", "ramp", target="self", value=1)],
             },
         ]
@@ -293,26 +345,36 @@ class TestAmplify:
         conduit = [u for u in b.units if u.name == "Conduit"][0]
         # Check effective ability when adjacent
         from src.hex import hex_distance
+
         if hex_distance(seeker.pos, conduit.pos) <= 1:
-            ramp_ability = next(ab for ab in seeker.abilities if ab.get("effect") == "ramp")
+            ramp_ability = next(
+                ab for ab in seeker.abilities if ab.get("effect") == "ramp"
+            )
             eff = b._ability_value(seeker, ramp_ability)
-            assert eff == 2, f"Expected effective ramp=2 (1 base + 1 amplify), got {eff}"
+            assert eff == 2, (
+                f"Expected effective ramp=2 (1 base + 1 amplify), got {eff}"
+            )
 
     def test_amplify_not_self(self):
         """Amplify should not boost the unit's own abilities."""
-        p1 = [("Page", 100, 0, 1, 1)]
-        p2 = [{
-            "name": "Test", "max_hp": 100, "damage": 2, "range": 3, "count": 1,
-            "abilities": [
-                ability("passive", "amplify", value=1, aura=1, amplify=False),
-                ability("onhit", "ramp", target="self", value=1),
-            ],
-        }]
+        p1 = [{"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Test",
+                "max_hp": 100,
+                "damage": 2,
+                "range": 3,
+                "count": 1,
+                "abilities": [
+                    ability("passive", "amplify", value=1, aura=1, amplify=False),
+                    ability("onhit", "ramp", target="self", value=1),
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         unit = [u for u in b.units if u.name == "Test"][0]
         ramp_ability = next(ab for ab in unit.abilities if ab.get("effect") == "ramp")
         assert b._ability_value(unit, ramp_ability) == 1
-
 
 
 class TestSplash:
@@ -320,10 +382,16 @@ class TestSplash:
         """Splash should deal damage to enemies adjacent to the attack target."""
         # Savant (splash=1) attacks one of two clustered enemies
         p1 = [{"name": "Dummy", "max_hp": 50, "damage": 0, "range": 1, "count": 2}]
-        p2 = [{
-            "name": "Savant", "max_hp": 100, "damage": 4, "range": 4, "count": 1,
-            "abilities": [ability("onhit", "splash", target="target", value=1)],
-        }]
+        p2 = [
+            {
+                "name": "Savant",
+                "max_hp": 100,
+                "damage": 4,
+                "range": 4,
+                "count": 1,
+                "abilities": [ability("onhit", "splash", target="target", value=1)],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         splashed = False
         for _ in range(200):
@@ -340,10 +408,16 @@ class TestWounded:
     def test_wounded_increases_damage_on_hit(self):
         """Wounded should increase damage when the unit takes damage."""
         p1 = [{"name": "Attacker", "max_hp": 100, "damage": 1, "range": 1, "count": 1}]
-        p2 = [{
-            "name": "Penitent", "max_hp": 100, "damage": 1, "range": 1, "count": 1,
-            "abilities": [ability("wounded", "ramp", target="self", value=1)],
-        }]
+        p2 = [
+            {
+                "name": "Penitent",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 1,
+                "count": 1,
+                "abilities": [ability("wounded", "ramp", target="self", value=1)],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         penitent = [u for u in b.units if u.name == "Penitent"][0]
         initial_dmg = penitent.damage
@@ -352,7 +426,9 @@ class TestWounded:
                 break
             if penitent._ramp_accumulated > 0:
                 break
-        assert penitent.damage > initial_dmg, "Wounded should increase damage after taking damage"
+        assert penitent.damage > initial_dmg, (
+            "Wounded should increase damage after taking damage"
+        )
 
 
 class TestLament:
@@ -362,8 +438,14 @@ class TestLament:
         p1 = [{"name": "Killer", "max_hp": 100, "damage": 100, "range": 1, "count": 1}]
         p2 = [
             {
-                "name": "Avenger", "max_hp": 100, "damage": 3, "range": 1, "count": 1,
-                "abilities": [ability("lament", "ramp", target="self", value=1, range=2)],
+                "name": "Avenger",
+                "max_hp": 100,
+                "damage": 3,
+                "range": 1,
+                "count": 1,
+                "abilities": [
+                    ability("lament", "ramp", target="self", value=1, range=2)
+                ],
             },
             {"name": "Fodder", "max_hp": 1, "damage": 0, "range": 1, "count": 3},
         ]
@@ -388,8 +470,14 @@ class TestRepair:
         p1 = [{"name": "Attacker", "max_hp": 100, "damage": 1, "range": 4, "count": 1}]
         p2 = [
             {
-                "name": "Kitboy", "max_hp": 100, "damage": 2, "range": 2, "count": 1,
-                "abilities": [ability("periodic", "repair", target="area", value=1, range=1)],
+                "name": "Kitboy",
+                "max_hp": 100,
+                "damage": 2,
+                "range": 2,
+                "count": 1,
+                "abilities": [
+                    ability("periodic", "repair", target="area", value=1, range=1)
+                ],
             },
             {"name": "Buddy", "max_hp": 100, "damage": 0, "range": 1, "count": 1},
         ]
@@ -408,10 +496,18 @@ class TestStrike:
     def test_strike_deals_extra_damage(self):
         """Strike should deal extra damage at end of turn."""
         p1 = [{"name": "Dummy", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
-        p2 = [{
-            "name": "Artillery", "max_hp": 100, "damage": 4, "range": 4, "count": 1,
-            "abilities": [ability("periodic", "strike", target="random", value=2, range=6)],
-        }]
+        p2 = [
+            {
+                "name": "Artillery",
+                "max_hp": 100,
+                "damage": 4,
+                "range": 4,
+                "count": 1,
+                "abilities": [
+                    ability("periodic", "strike", target="random", value=2, range=6)
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         struck = False
         for _ in range(200):
@@ -427,10 +523,25 @@ class TestChargeSummon:
     def test_summon_creates_blades(self):
         """Charge/Summon should create Blade units every N turns."""
         p1 = [{"name": "Dummy", "max_hp": 200, "damage": 0, "range": 1, "count": 1}]
-        p2 = [{
-            "name": "Herald", "max_hp": 100, "damage": 1, "range": 4, "count": 1,
-            "abilities": [ability("periodic", "summon", target="self", count=2, charge=3, amplify=False)],
-        }]
+        p2 = [
+            {
+                "name": "Herald",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 4,
+                "count": 1,
+                "abilities": [
+                    ability(
+                        "periodic",
+                        "summon",
+                        target="self",
+                        count=2,
+                        charge=3,
+                        amplify=False,
+                    )
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         summoned = False
         for _ in range(300):
@@ -446,10 +557,25 @@ class TestChargeSummon:
     def test_summoned_blades_are_exhausted(self):
         """Summoned Blades should be created exhausted."""
         p1 = [{"name": "Dummy", "max_hp": 200, "damage": 0, "range": 1, "count": 1}]
-        p2 = [{
-            "name": "Herald", "max_hp": 100, "damage": 1, "range": 4, "count": 1,
-            "abilities": [ability("periodic", "summon", target="self", count=2, charge=3, amplify=False)],
-        }]
+        p2 = [
+            {
+                "name": "Herald",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 4,
+                "count": 1,
+                "abilities": [
+                    ability(
+                        "periodic",
+                        "summon",
+                        target="self",
+                        count=2,
+                        charge=3,
+                        amplify=False,
+                    )
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         for _ in range(300):
             if not b.step():
@@ -468,8 +594,14 @@ class TestUndying:
         p1 = [{"name": "Killer", "max_hp": 100, "damage": 100, "range": 1, "count": 1}]
         p2 = [
             {
-                "name": "Gatekeeper", "max_hp": 100, "damage": 4, "range": 1, "count": 1,
-                "abilities": [ability("passive", "undying", value=2, aura=3, amplify=False)],
+                "name": "Gatekeeper",
+                "max_hp": 100,
+                "damage": 4,
+                "range": 1,
+                "count": 1,
+                "abilities": [
+                    ability("passive", "undying", value=2, aura=3, amplify=False)
+                ],
             },
             {"name": "Warrior", "max_hp": 3, "damage": 5, "range": 1, "count": 3},
         ]
@@ -490,11 +622,28 @@ class TestUndying:
 class TestDictUnitSpec:
     def test_dict_spec_creates_units(self):
         """Dict-based unit specs should work for Battle construction."""
-        p1 = [{"name": "Test", "max_hp": 10, "damage": 2, "range": 1, "count": 3, "armor": 1}]
-        p2 = [{
-            "name": "Foe", "max_hp": 5, "damage": 1, "range": 2, "count": 2,
-            "abilities": [ability("onhit", "push", target="target", value=1, amplify=False)],
-        }]
+        p1 = [
+            {
+                "name": "Test",
+                "max_hp": 10,
+                "damage": 2,
+                "range": 1,
+                "count": 3,
+                "armor": 1,
+            }
+        ]
+        p2 = [
+            {
+                "name": "Foe",
+                "max_hp": 5,
+                "damage": 1,
+                "range": 2,
+                "count": 2,
+                "abilities": [
+                    ability("onhit", "push", target="target", value=1, amplify=False)
+                ],
+            }
+        ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         tests = [u for u in b.units if u.name == "Test"]
         foes = [u for u in b.units if u.name == "Foe"]
@@ -503,3 +652,149 @@ class TestDictUnitSpec:
         assert all(u.armor == 1 for u in tests)
         for foe in foes:
             assert any(ab.get("effect") == "push" for ab in foe.abilities)
+
+
+class TestArmor:
+    def test_armor_reduces_damage(self):
+        """Armor should reduce incoming damage."""
+        p1 = [{"name": "Attacker", "max_hp": 100, "damage": 3, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Tank",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 1,
+                "count": 1,
+                "armor": 2,
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        tank = [u for u in b.units if u.name == "Tank"][0]
+        for _ in range(50):
+            if not b.step():
+                break
+            if tank.hp < 100:
+                # Took 3-2=1 damage, not 3
+                assert tank.hp >= 99
+                break
+
+
+class TestHeal:
+    def test_heal_restores_hp(self):
+        """Heal should restore HP to damaged allies."""
+        p1 = [{"name": "Attacker", "max_hp": 100, "damage": 1, "range": 4, "count": 1}]
+        p2 = [
+            {
+                "name": "Healer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 3,
+                "count": 1,
+                "abilities": [
+                    ability("periodic", "heal", target="random", value=3, range=3)
+                ],
+            },
+            {"name": "Buddy", "max_hp": 100, "damage": 0, "range": 1, "count": 1},
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        healed = False
+        for _ in range(300):
+            if not b.step():
+                break
+            if any("heals" in line for line in b.log[-5:]):
+                healed = True
+                break
+        assert healed, "Heal should trigger"
+
+
+class TestFortify:
+    def test_fortify_increases_max_hp(self):
+        """Fortify should increase max HP and current HP."""
+        p1 = [{"name": "Attacker", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Fortifier",
+                "max_hp": 50,
+                "damage": 1,
+                "range": 3,
+                "count": 1,
+                "abilities": [ability("periodic", "fortify", target="self", value=2)],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        fort = [u for u in b.units if u.name == "Fortifier"][0]
+        initial_max = fort.max_hp
+        for _ in range(200):
+            if not b.step():
+                break
+            if fort.max_hp > initial_max:
+                break
+        assert fort.max_hp > initial_max, "Fortify should increase max HP"
+        assert fort.hp > initial_max, "Fortify should also increase current HP"
+
+
+class TestSunder:
+    def test_sunder_reduces_armor(self):
+        """Sunder should reduce target's armor."""
+        p1 = [
+            {
+                "name": "Tank",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 1,
+                "count": 1,
+                "armor": 5,
+            }
+        ]
+        p2 = [
+            {
+                "name": "Sunderer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 3,
+                "count": 1,
+                "abilities": [
+                    ability(
+                        "periodic",
+                        "sunder",
+                        target="random",
+                        value=1,
+                        range=3,
+                        amplify=False,
+                    )
+                ],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        tank = [u for u in b.units if u.name == "Tank"][0]
+        for _ in range(200):
+            if not b.step():
+                break
+            if tank.armor < 5:
+                break
+        assert tank.armor < 5, "Sunder should reduce armor"
+
+
+class TestFreeze:
+    def test_freeze_exhausts_enemy(self):
+        """Freeze should exhaust random ready enemies."""
+        p1 = [{"name": "Target", "max_hp": 100, "damage": 0, "range": 1, "count": 3}]
+        p2 = [
+            {
+                "name": "Freezer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 2,
+                "count": 1,
+                "abilities": [ability("onhit", "freeze", target="self", value=1)],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        frozen = False
+        for _ in range(200):
+            if not b.step():
+                break
+            if any("frozen" in line for line in b.log[-5:]):
+                frozen = True
+                break
+        assert frozen, "Freeze should trigger"
