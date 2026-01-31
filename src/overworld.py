@@ -1862,35 +1862,7 @@ class OverworldGUI:
         else:
             self.status_var.set(f"Waiting for P{picking} to choose an upgrade...")
 
-    def _msg_game_start(self, msg):
-        self.player_id = msg["player_id"]
-        self.current_player = msg["current_player"]
-        self.faction = msg.get("faction")
-        self.player_factions = {
-            int(k): v for k, v in msg.get("player_factions", {}).items()
-        }
-        self.player_heroes = {
-            int(k): v for k, v in msg.get("player_heroes", {}).items()
-        }
-        if not self.faction and self.player_factions:
-            self.faction = self.player_factions.get(self.player_id)
-        self.player_upgrades = {
-            int(k): v for k, v in msg.get("player_upgrades", {}).items()
-        }
-        self.world.armies = deserialize_armies(msg["armies"])
-        self.world.bases = deserialize_bases(msg.get("bases", []))
-        self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
-        self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
-        self._update_gold_display()
-        if self._is_my_turn():
-            self.status_var.set(
-                f"Game started! Your turn (P{self.player_id}). Click your base to build units."
-            )
-        else:
-            self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
-        self._draw()
-
-    def _msg_state_update(self, msg):
+    def _apply_world_state(self, msg):
         self.world.armies = deserialize_armies(msg["armies"])
         self.world.bases = deserialize_bases(msg.get("bases", []))
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
@@ -1907,6 +1879,25 @@ class OverworldGUI:
             self.player_upgrades = {
                 int(k): v for k, v in msg.get("player_upgrades", {}).items()
             }
+
+    def _msg_game_start(self, msg):
+        self.player_id = msg["player_id"]
+        self.current_player = msg["current_player"]
+        self.faction = msg.get("faction")
+        self._apply_world_state(msg)
+        if not self.faction and self.player_factions:
+            self.faction = self.player_factions.get(self.player_id)
+        self._update_gold_display()
+        if self._is_my_turn():
+            self.status_var.set(
+                f"Game started! Your turn (P{self.player_id}). Click your base to build units."
+            )
+        else:
+            self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
+        self._draw()
+
+    def _msg_state_update(self, msg):
+        self._apply_world_state(msg)
         self._update_gold_display()
         self._refresh_build_panel()
         self.current_player = msg["current_player"]
