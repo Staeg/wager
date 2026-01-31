@@ -9,7 +9,6 @@ T = (0, 0, 0, 0)  # transparent
 
 def make_footman():
     """16x16 pixel art: armored melee soldier with sword and shield."""
-    W = (255, 255, 255, 255)
     B = (30, 30, 30, 255)
     BL = (60, 100, 200, 255)      # blue armor
     BD = (40, 70, 150, 255)       # dark blue
