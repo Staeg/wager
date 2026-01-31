@@ -7,8 +7,6 @@ import os
 
 if getattr(sys, 'frozen', False):
     sys.path.insert(0, sys._MEIPASS)
-else:
-    sys.path.insert(0, os.path.dirname(__file__))
 
 
 class LauncherGUI:
@@ -145,7 +143,7 @@ class LauncherGUI:
 
     def _connect_client(self):
         """Create a GameClient and switch to overworld GUI."""
-        from client import GameClient
+        from .client import GameClient
         from .overworld import OverworldGUI
 
         host = self.host_var.get()

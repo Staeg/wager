@@ -5,110 +5,20 @@ import os
 import sys
 from PIL import Image, ImageTk, ImageEnhance
 from .heroes import HERO_STATS
-
-# --- Hex grid utilities (offset coordinates, even-r) ---
-
-def offset_to_cube(col, row):
-    x = col - (row - (row % 2)) // 2
-    z = row
-    y = -x - z
-    return x, y, z
-
-def cube_distance(a, b):
-    return max(abs(a[0]-b[0]), abs(a[1]-b[1]), abs(a[2]-b[2]))
-
-def hex_distance(c1, c2):
-    return cube_distance(offset_to_cube(*c1), offset_to_cube(*c2))
-
-def hex_neighbors(col, row, cols, rows):
-    parity = row % 2
-    if parity == 0:
-        dirs = [(1,0),(-1,0),(0,-1),(0,1),(-1,-1),(-1,1)]
-    else:
-        dirs = [(1,0),(-1,0),(0,-1),(0,1),(1,-1),(1,1)]
-    results = []
-    for dc, dr in dirs:
-        nc, nr = col+dc, row+dr
-        if 0 <= nc < cols and 0 <= nr < rows:
-            results.append((nc, nr))
-    return results
-
-
-# --- Pathfinding (BFS on hex grid, avoiding occupied hexes) ---
-
-def bfs_next_step(start, goal, occupied, cols, rows):
-    """Return the next hex to move to from start toward goal, avoiding occupied hexes.
-    If no full path exists, moves to the unoccupied neighbor closest to goal by hex distance."""
-    from collections import deque
-    if start == goal:
-        return start
-    def _neighbor_priority(current, nb):
-        current_dist = hex_distance(current, goal)
-        next_dist = hex_distance(nb, goal)
-        closer = 0 if next_dist < current_dist else 1
-        horizontal = 0 if nb[1] == current[1] else 1
-        return (closer, horizontal, next_dist)
-    queue = deque()
-    queue.append((start, [start]))
-    visited = {start}
-    while queue:
-        current, path = queue.popleft()
-        neighbors = hex_neighbors(current[0], current[1], cols, rows)
-        neighbors.sort(key=lambda nb: _neighbor_priority(current, nb))
-        for nb in neighbors:
-            if nb in visited:
-                continue
-            visited.add(nb)
-            new_path = path + [nb]
-            if nb == goal:
-                return new_path[1]
-            if nb not in occupied:
-                queue.append((nb, new_path))
-    # No full path found — move to the adjacent unoccupied hex closest to goal
-    best = start
-    best_dist = hex_distance(start, goal)
-    best_horizontal = 1
-    for nb in hex_neighbors(start[0], start[1], cols, rows):
-        if nb not in occupied:
-            d = hex_distance(nb, goal)
-            horiz = 0 if nb[1] == start[1] else 1
-            if d < best_dist or (d == best_dist and horiz < best_horizontal):
-                best_dist = d
-                best_horizontal = horiz
-                best = nb
-    return best
-
-
-def bfs_path_length(start, goal, occupied, cols, rows):
-    """Return the BFS path length from start to goal, avoiding occupied hexes.
-    The goal itself is allowed even if occupied. Returns a large number if no path."""
-    from collections import deque
-    if start == goal:
-        return 0
-    queue = deque()
-    queue.append((start, 0))
-    visited = {start}
-    while queue:
-        current, dist = queue.popleft()
-        for nb in hex_neighbors(current[0], current[1], cols, rows):
-            if nb in visited:
-                continue
-            visited.add(nb)
-            if nb == goal:
-                return dist + 1
-            if nb not in occupied:
-                queue.append((nb, dist + 1))
-    return 9999
+from .hex import hex_distance, hex_neighbors, bfs_next_step, bfs_path_length
 
 
 # --- Game classes ---
 
 class Unit:
-    _id_counter = 0
+    _id_counter = 0  # legacy fallback, prefer Battle-scoped IDs
 
-    def __init__(self, name, max_hp, damage, attack_range, player, abilities=None, armor=0):
-        Unit._id_counter += 1
-        self.id = Unit._id_counter
+    def __init__(self, name, max_hp, damage, attack_range, player, abilities=None, armor=0, unit_id=None):
+        if unit_id is not None:
+            self.id = unit_id
+        else:
+            Unit._id_counter += 1
+            self.id = Unit._id_counter
         self.name = name
         self.max_hp = max_hp
         self.hp = max_hp
@@ -140,7 +50,7 @@ class Battle:
     MIN_ROWS = 5
     MAX_ROWS = 15
 
-    def __init__(self, p1_units=None, p2_units=None, rng_seed=None, apply_events_immediately=True):
+    def __init__(self, p1_units=None, p2_units=None, rng_seed=None, apply_events_immediately=True, record_history=True):
         """Initialize battle.
 
         p1_units/p2_units: optional list of unit specs (tuples or dicts).
@@ -154,7 +64,9 @@ class Battle:
         self.rng_seed = rng_seed
         self.rng = random.Random(rng_seed)
         self._init_rng_state = self.rng.getstate()
+        self._unit_id_counter = 0
         self.apply_events_immediately = apply_events_immediately
+        self._record_history = record_history
         self.ROWS = self._compute_rows(p1_units, p2_units)
         self.units = []
         self.turn_order = []
@@ -167,6 +79,10 @@ class Battle:
         self._stalemate_count = 0
         self._setup_armies(p1_units, p2_units)
         self._new_round()
+
+    def _next_unit_id(self):
+        self._unit_id_counter += 1
+        return self._unit_id_counter
 
     def _compute_rows(self, p1_units, p2_units):
         """Compute map rows so the army with the most frontline units fits them in one column."""
@@ -195,6 +111,8 @@ class Battle:
         return max(self.MIN_ROWS, min(self.MAX_ROWS, needed))
 
     def _save_state(self):
+        if not self._record_history:
+            return
         unit_states = {}
         for u in self.units:
             state = {
@@ -396,8 +314,7 @@ class Battle:
         if self.apply_events_immediately:
             self._apply_queued_events()
 
-    @staticmethod
-    def _parse_unit_spec(spec, player):
+    def _parse_unit_spec(self, spec, player):
         """Parse a unit spec (tuple or dict) into Unit instances.
 
         Tuple format (legacy): (name, max_hp, damage, range, count, ...)
@@ -413,7 +330,8 @@ class Battle:
             abilities = spec.get("abilities", [])
             armor = spec.get("armor", 0)
             for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player, abilities=abilities, armor=armor))
+                units.append(Unit(name, max_hp, damage, atk_range, player,
+                                  abilities=abilities, armor=armor, unit_id=self._next_unit_id()))
         else:
             tup = spec
             name, max_hp, damage, atk_range, count = tup[:5]
@@ -428,7 +346,8 @@ class Battle:
                     elif tup[5 + i]:
                         abilities.append({"trigger": "periodic", "effect": key, "value": tup[5 + i]})
             for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player, abilities=abilities, armor=armor))
+                units.append(Unit(name, max_hp, damage, atk_range, player,
+                                  abilities=abilities, armor=armor, unit_id=self._next_unit_id()))
         return units
 
     def _setup_armies(self, p1_units=None, p2_units=None):
@@ -666,7 +585,7 @@ class Battle:
             if not empty:
                 break
             pos = empty.pop(0)
-            blade = Unit("Blade", 1, 2, 1, unit.player, abilities=[])
+            blade = Unit("Blade", 1, 2, 1, unit.player, abilities=[], unit_id=self._next_unit_id())
             blade.pos = pos
             blade.has_acted = not ability.get("summon_ready", False)
             blade.summoner_id = unit.id
@@ -1774,7 +1693,6 @@ class CombatGUI:
         if self.return_btn:
             self.return_btn.destroy()
             self.return_btn = None
-        Unit._id_counter = 0
         self.battle = Battle(
             p1_units=self.battle._init_p1_units,
             p2_units=self.battle._init_p2_units,

@@ -5,18 +5,17 @@ import random
 import argparse
 import socket
 import sys
-import os
-
 if getattr(sys, 'frozen', False):
     sys.path.insert(0, sys._MEIPASS)
-else:
-    sys.path.insert(0, os.path.dirname(__file__))
 
 import websockets
 
-from .combat import Battle, Unit
-from .overworld import Overworld, UNIT_STATS, ALL_UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
-from .overworld import FACTIONS
+from .combat import Battle
+from .overworld import (
+    Overworld, UNIT_STATS, ALL_UNIT_STATS, ARMY_MOVE_RANGE,
+    FACTIONS, make_battle_units, update_survivors,
+)
+from .hex import hex_neighbors, reachable_hexes
 from .heroes import get_heroes_for_faction
 from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 from .protocol import (
@@ -25,7 +24,6 @@ from .protocol import (
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
     REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT, UPGRADE_PROMPT,
 )
-from .combat import hex_neighbors
 
 
 class BattleRecord:
@@ -91,7 +89,7 @@ class GameServer:
             "bases": serialize_bases(self.world.bases),
             "gold": self.world.gold,
             "gold_piles": [
-                {"pos": list(p["pos"]), "value": p["value"]}
+                {"pos": list(p.pos), "value": p.value}
                 for p in getattr(self.world, "gold_piles", [])
             ],
             "current_player": self.current_player,
@@ -115,22 +113,13 @@ class GameServer:
         idx = active.index(self.current_player) if self.current_player in active else -1
         return active[(idx + 1) % len(active)]
 
-    def _make_battle_units(self, army):
-        """Convert an OverworldArmy to Battle-compatible dicts."""
-        faction = self.player_factions.get(army.player)
-        upgrade_id = self.player_upgrades.get(army.player)
+    def _get_effective_stats(self, player):
+        """Return unit stats with the player's upgrade applied."""
+        faction = self.player_factions.get(player)
+        upgrade_id = self.player_upgrades.get(player)
         from .heroes import HEROES_BY_FACTION
         faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction, [])
-        effective_stats = apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
-        result = []
-        for name, count in army.units:
-            s = effective_stats[name]
-            spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
-                    "range": s["range"], "count": count,
-                    "abilities": s.get("abilities", []),
-                    "armor": s.get("armor", 0)}
-            result.append(spec)
-        return result
+        return apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
 
     async def _run_battle(self, attacker, defender):
         """Run a battle server-side and broadcast the result."""
@@ -143,13 +132,12 @@ class GameServer:
         else:
             ow_p1, ow_p2 = defender, attacker
 
-        p1_units = self._make_battle_units(ow_p1)
-        p2_units = self._make_battle_units(ow_p2)
+        p1_units = make_battle_units(ow_p1, self._get_effective_stats(ow_p1.player))
+        p2_units = make_battle_units(ow_p2, self._get_effective_stats(ow_p2.player))
         rng_seed = random.randint(0, 2**31)
 
         # Run battle to completion
-        Unit._id_counter = 0
-        battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed)
+        battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed, record_history=False)
         while battle.step():
             pass
 
@@ -165,33 +153,21 @@ class GameServer:
         else:
             ow_winner = 0
 
-        # Update overworld state
-        def _update_survivors(army, player):
-            survivor_counts = {}
-            for u in battle.units:
-                if u.alive and u.player == player:
-                    survivor_counts[u.name] = survivor_counts.get(u.name, 0) + 1
-            army.units = [
-                (name, survivor_counts.get(name, 0))
-                for name, _ in army.units
-                if survivor_counts.get(name, 0) > 0
-            ]
-
         # Determine which overworld army won/lost
         if battle_winner == 0:
-            _update_survivors(ow_p1, 1)
-            _update_survivors(ow_p2, 2)
+            update_survivors(ow_p1, battle, 1)
+            update_survivors(ow_p2, battle, 2)
             attacker.exhausted = True
         elif ow_winner == attacker.player:
             # Attacker won — advance to defender's position
-            _update_survivors(attacker, 1 if attacker is ow_p1 else 2)
+            update_survivors(attacker, battle, 1 if attacker is ow_p1 else 2)
             self.world.armies.remove(defender)
             self.world.move_army(attacker, defender.pos)
             attacker.exhausted = True
             self.world.collect_gold_at(defender.pos, attacker.player)
         else:
             # Defender won — attacker is destroyed, defender stays
-            _update_survivors(defender, 1 if defender is ow_p1 else 2)
+            update_survivors(defender, battle, 1 if defender is ow_p1 else 2)
             self.world.armies.remove(attacker)
 
         summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
@@ -296,7 +272,7 @@ class GameServer:
                     target = self.world.get_army_at(to_pos)
                     # Check reachability within move range
                     occupied = {a.pos for a in self.world.armies if a.pos != from_pos and a is not target}
-                    reachable = _reachable_hexes(
+                    reachable = reachable_hexes(
                         from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
                     )
 
@@ -510,7 +486,7 @@ class GameServer:
                 "bases": serialize_bases(self.world.bases),
                 "gold": self.world.gold,
                 "gold_piles": [
-                    {"pos": list(p["pos"]), "value": p["value"]}
+                    {"pos": list(p.pos), "value": p.value}
                     for p in getattr(self.world, "gold_piles", [])
                 ],
                 "current_player": self.current_player,

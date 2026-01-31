@@ -5,7 +5,9 @@ import random
 import sys
 from dataclasses import dataclass
 from PIL import Image, ImageTk
-from .combat import Battle, CombatGUI, Unit, hex_neighbors, format_ability, describe_ability
+from .combat import Battle, CombatGUI, format_ability, describe_ability
+from .hex import hex_neighbors, reachable_hexes
+from .protocol import deserialize_armies, deserialize_bases
 from .ability_defs import ability
 from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
 from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
@@ -87,6 +89,32 @@ def _ability_descriptions(stats):
     return [describe_ability(ab) for ab in stats.get("abilities", [])]
 
 
+def make_battle_units(army, effective_stats):
+    """Convert an OverworldArmy's unit list into Battle-compatible dicts."""
+    result = []
+    for name, count in army.units:
+        s = effective_stats[name]
+        spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
+                "range": s["range"], "count": count,
+                "abilities": s.get("abilities", []),
+                "armor": s.get("armor", 0)}
+        result.append(spec)
+    return result
+
+
+def update_survivors(army, battle, battle_player):
+    """Update an OverworldArmy's unit list to reflect battle survivors."""
+    survivor_counts = {}
+    for u in battle.units:
+        if u.alive and u.player == battle_player:
+            survivor_counts[u.name] = survivor_counts.get(u.name, 0) + 1
+    army.units = [
+        (name, survivor_counts.get(name, 0))
+        for name, _ in army.units
+        if survivor_counts.get(name, 0) > 0
+    ]
+
+
 @dataclass
 class OverworldArmy:
     player: int
@@ -110,6 +138,12 @@ class Base:
     alive: bool = True
 
 
+@dataclass
+class GoldPile:
+    pos: tuple  # (col, row)
+    value: int
+
+
 # Base positions: center of each player's side on a 10x8 grid
 BASE_POSITIONS = {
     1: (1, 3),
@@ -123,7 +157,11 @@ class Overworld:
     COLS = 7
     ROWS = 7
 
-    def __init__(self, num_players=2):
+    def __init__(self, num_players=2, rng_seed=None):
+        if rng_seed is None:
+            rng_seed = random.SystemRandom().randint(0, 2**31 - 1)
+        self.rng_seed = rng_seed
+        self.rng = random.Random(rng_seed)
         self.armies = []
         self.gold = {p: STARTING_GOLD for p in range(1, num_players + 1)}
         self.bases = [Base(player=p, pos=BASE_POSITIONS[p]) for p in range(1, num_players + 1)]
@@ -136,16 +174,16 @@ class Overworld:
         for _ in range(count):
             if not available:
                 break
-            pos = random.choice(available)
+            pos = self.rng.choice(available)
             available.remove(pos)
-            self.gold_piles.append({
-                "pos": pos,
-                "value": random.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
-            })
+            self.gold_piles.append(GoldPile(
+                pos=pos,
+                value=self.rng.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
+            ))
 
     def get_gold_pile_at(self, pos):
         for pile in self.gold_piles:
-            if pile["pos"] == pos:
+            if pile.pos == pos:
                 return pile
         return None
 
@@ -153,7 +191,7 @@ class Overworld:
         pile = self.get_gold_pile_at(pos)
         if not pile:
             return 0
-        value = pile["value"]
+        value = pile.value
         self.gold[player] = self.gold.get(player, 0) + value
         self.gold_piles.remove(pile)
         return value
@@ -239,7 +277,7 @@ class Overworld:
                 for b in self.bases
             ],
             "gold_piles": [
-                {"pos": list(p["pos"]), "value": p["value"]}
+                {"pos": list(p.pos), "value": p.value}
                 for p in self.gold_piles
             ],
         }
@@ -248,6 +286,8 @@ class Overworld:
     def from_dict(cls, data):
         """Restore an Overworld from a serialized dict."""
         ow = cls.__new__(cls)
+        ow.rng_seed = data.get("rng_seed", 0)
+        ow.rng = random.Random(ow.rng_seed)
         ow.armies = [
             OverworldArmy(
                 player=d["player"],
@@ -263,7 +303,7 @@ class Overworld:
             for d in data.get("bases", [])
         ]
         ow.gold_piles = [
-            {"pos": tuple(p["pos"]), "value": p["value"]}
+            GoldPile(pos=tuple(p["pos"]), value=p["value"])
             for p in data.get("gold_piles", [])
         ]
         return ow
@@ -288,68 +328,8 @@ class Overworld:
             self.armies.remove(source)
 
 
-def _deserialize_armies(army_data):
-    """Convert serialized army dicts to OverworldArmy objects."""
-    return [
-        OverworldArmy(
-            player=d["player"],
-            units=[tuple(u) for u in d["units"]],
-            pos=tuple(d["pos"]),
-            exhausted=d["exhausted"],
-        )
-        for d in army_data
-    ]
-
-
-def _deserialize_bases(base_data):
-    """Convert serialized base dicts to Base objects."""
-    return [
-        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
-        for d in base_data
-    ]
-
-
 ARMY_MOVE_RANGE = 3
 
-
-def _reachable_hexes(start, steps, cols, rows, occupied):
-    """Return set of hexes reachable from start within `steps` moves, avoiding occupied."""
-    from collections import deque
-    visited = {start: 0}
-    queue = deque([(start, 0)])
-    while queue:
-        pos, dist = queue.popleft()
-        if dist >= steps:
-            continue
-        for nb in hex_neighbors(pos[0], pos[1], cols, rows):
-            if nb not in visited and nb not in occupied:
-                visited[nb] = dist + 1
-                queue.append((nb, dist + 1))
-    # Remove start itself from reachable set
-    result = set(visited.keys())
-    result.discard(start)
-    return result
-
-
-def _bfs_path(start, goal, cols, rows, occupied):
-    """Return the path from start to goal avoiding occupied hexes, or None."""
-    from collections import deque
-    if start == goal:
-        return [start]
-    queue = deque([(start, [start])])
-    visited = {start}
-    while queue:
-        pos, path = queue.popleft()
-        for nb in hex_neighbors(pos[0], pos[1], cols, rows):
-            if nb in visited:
-                continue
-            visited.add(nb)
-            new_path = path + [nb]
-            if nb == goal:
-                return new_path
-            if nb not in occupied:
-                queue.append((nb, new_path))
-    return None
 
 
 class OverworldGUI:
@@ -801,7 +781,7 @@ class OverworldGUI:
         neighbors = set()
         if self.selected_army:
             occupied = {a.pos for a in w.armies if a is not self.selected_army}
-            neighbors = _reachable_hexes(
+            neighbors = reachable_hexes(
                 self.selected_army.pos, ARMY_MOVE_RANGE, w.COLS, w.ROWS, occupied
             )
             # Also include hexes occupied by enemy armies (attack targets)
@@ -835,7 +815,7 @@ class OverworldGUI:
 
         # Draw gold piles
         for pile in getattr(w, "gold_piles", []):
-            cx, cy = self._hex_center(pile["pos"][0], pile["pos"][1])
+            cx, cy = self._hex_center(pile.pos[0], pile.pos[1])
             if hasattr(self, "_gold_sprite") and self._gold_sprite:
                 self.canvas.create_image(cx, cy, image=self._gold_sprite)
 
@@ -993,7 +973,7 @@ class OverworldGUI:
 
         # Check reachability within move range
         occupied = {a.pos for a in self.world.armies if a is not self.selected_army and a is not clicked_army}
-        reachable = _reachable_hexes(
+        reachable = reachable_hexes(
             self.selected_army.pos, ARMY_MOVE_RANGE, self.world.COLS, self.world.ROWS, occupied
         )
         if is_own and clicked not in reachable:
@@ -1090,16 +1070,7 @@ class OverworldGUI:
 
     def _make_battle_units(self, army):
         """Convert an army's units list into Battle-compatible dicts."""
-        result = []
-        effective_stats = self._get_effective_unit_stats(army.player)
-        for name, count in army.units:
-            s = effective_stats[name]
-            spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
-                    "range": s["range"], "count": count,
-                    "abilities": s.get("abilities", []),
-                    "armor": s.get("armor", 0)}
-            result.append(spec)
-        return result
+        return make_battle_units(army, self._get_effective_unit_stats(army.player))
 
     def _start_battle(self, attacker, defender):
         """Start a local single-player battle."""
@@ -1134,17 +1105,6 @@ class OverworldGUI:
             self.combat_frame.destroy()
             self.combat_frame = None
 
-            def _update_survivors(army, player):
-                survivor_counts = {}
-                for u in battle.units:
-                    if u.alive and u.player == player:
-                        survivor_counts[u.name] = survivor_counts.get(u.name, 0) + 1
-                army.units = [
-                    (name, survivor_counts.get(name, 0))
-                    for name, _ in army.units
-                    if survivor_counts.get(name, 0) > 0
-                ]
-
             # Map battle winner to overworld player
             if winner == 1:
                 ow_winner = ow_p1.player
@@ -1154,12 +1114,12 @@ class OverworldGUI:
                 ow_winner = 0
 
             if winner == 0:
-                _update_survivors(ow_p1, 1)
-                _update_survivors(ow_p2, 2)
+                update_survivors(ow_p1, battle, 1)
+                update_survivors(ow_p2, battle, 2)
                 attacker.exhausted = True
             elif ow_winner == attacker.player:
                 # Attacker won — advance to defender's position
-                _update_survivors(attacker, 1 if attacker is ow_p1 else 2)
+                update_survivors(attacker, battle, 1 if attacker is ow_p1 else 2)
                 self.world.armies.remove(defender)
                 self.world.move_army(attacker, defender.pos)
                 attacker.exhausted = True
@@ -1169,7 +1129,7 @@ class OverworldGUI:
                     self._update_gold_display()
             else:
                 # Defender won — attacker is destroyed, defender stays
-                _update_survivors(defender, 1 if defender is ow_p1 else 2)
+                update_survivors(defender, battle, 1 if defender is ow_p1 else 2)
                 self.world.armies.remove(attacker)
 
             summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
@@ -1203,7 +1163,6 @@ class OverworldGUI:
                 self.status_var.set(f"Battle over. P{ow_winner} won with {survivors} survivors.")
             self._draw()
 
-        Unit._id_counter = 0
         self._combat_gui = CombatGUI(self.combat_frame, battle=battle, on_complete=on_battle_complete)
 
     # --- Multiplayer message handling ---
@@ -1246,11 +1205,11 @@ class OverworldGUI:
             if not self.faction and self.player_factions:
                 self.faction = self.player_factions.get(self.player_id)
             self.player_upgrades = {int(k): v for k, v in msg.get("player_upgrades", {}).items()}
-            self.world.armies = _deserialize_armies(msg["armies"])
-            self.world.bases = _deserialize_bases(msg.get("bases", []))
+            self.world.armies = deserialize_armies(msg["armies"])
+            self.world.bases = deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
             self.world.gold_piles = [
-                {"pos": tuple(p["pos"]), "value": p["value"]}
+                GoldPile(pos=tuple(p["pos"]), value=p["value"])
                 for p in msg.get("gold_piles", [])
             ]
             self._update_gold_display()
@@ -1261,11 +1220,11 @@ class OverworldGUI:
             self._draw()
 
         elif msg_type == "state_update":
-            self.world.armies = _deserialize_armies(msg["armies"])
-            self.world.bases = _deserialize_bases(msg.get("bases", []))
+            self.world.armies = deserialize_armies(msg["armies"])
+            self.world.bases = deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
             self.world.gold_piles = [
-                {"pos": tuple(p["pos"]), "value": p["value"]}
+                GoldPile(pos=tuple(p["pos"]), value=p["value"])
                 for p in msg.get("gold_piles", [])
             ]
             if "player_factions" in msg:
@@ -1341,7 +1300,6 @@ class OverworldGUI:
         self.combat_frame = tk.Frame(self.root)
         self.combat_frame.pack(fill=tk.BOTH, expand=True)
 
-        Unit._id_counter = 0
         battle = Battle(
             p1_units=msg["p1_units"],
             p2_units=msg["p2_units"],

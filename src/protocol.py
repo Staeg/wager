@@ -66,6 +66,15 @@ def deserialize_armies(data):
     return armies
 
 
+def deserialize_bases(data):
+    """Convert serialized base dicts back to Base objects."""
+    from .overworld import Base
+    return [
+        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
+        for d in data
+    ]
+
+
 def encode(msg):
     """Encode a message dict to JSON string."""
     return json.dumps(msg)

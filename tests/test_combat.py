@@ -2,7 +2,7 @@ import tkinter as tk
 import pytest
 import random
 from src.ability_defs import ability
-from src.combat import Battle, Unit, CombatGUI
+from src.combat import Battle, CombatGUI
 
 
 
@@ -99,10 +99,10 @@ class TestSkip:
         b = Battle()
         while b.step():
             pass
-        winner_before = b.winner
+        hist_before = len(b.history)
         b.undo()
-        # After undo, winner should be cleared (stepped back one state)
-        assert b.winner is None or b.winner != winner_before or len(b.history) >= 0
+        # Undo should pop one state from history
+        assert len(b.history) == hist_before - 1
 
     def test_multiple_undos_after_skip(self):
         b = Battle()
@@ -126,7 +126,6 @@ def tk_root():
 
 @pytest.fixture
 def gui(tk_root):
-    Unit._id_counter = 0
     g = CombatGUI(tk_root)
     yield g
 
@@ -183,9 +182,10 @@ class TestGUISkip:
 
     def test_undo_after_gui_skip(self, gui):
         gui.on_skip()
+        hist_before = len(gui.battle.history)
         gui.on_undo()
-        # Should be able to undo at least one step
-        assert len(gui.battle.history) >= 0
+        # Undo should pop one state from history
+        assert len(gui.battle.history) == hist_before - 1
 
     def test_skip_then_reset(self, gui):
         gui.on_skip()
@@ -215,7 +215,7 @@ class TestPush:
                 pushed = True
                 break
         # Either push happened or battle ended (Page might die before push)
-        assert pushed or b.winner is not None
+        assert pushed, "Push should trigger before battle ends"
 
     def test_push_blocked_by_occupied(self):
         """Push should not move target into an occupied hex."""
@@ -292,7 +292,7 @@ class TestAmplify:
         seeker = [u for u in b.units if u.name == "Seeker"][0]
         conduit = [u for u in b.units if u.name == "Conduit"][0]
         # Check effective ability when adjacent
-        from src.combat import hex_distance
+        from src.hex import hex_distance
         if hex_distance(seeker.pos, conduit.pos) <= 1:
             ramp_ability = next(ab for ab in seeker.abilities if ab.get("effect") == "ramp")
             eff = b._ability_value(seeker, ramp_ability)
@@ -333,7 +333,7 @@ class TestSplash:
                 splashed = True
                 break
         # Splash may or may not fire depending on positioning
-        assert splashed or b.winner is not None
+        assert splashed, "Splash should trigger before battle ends"
 
 
 class TestWounded:
@@ -358,26 +358,28 @@ class TestWounded:
 class TestLament:
     def test_lament_triggers_on_ally_death(self):
         """Lament should increase damage when an ally dies in range."""
-        # Weak ally next to Avenger, enemy kills the ally
+        # Weak ally same range as Avenger so they spawn in same column (adjacent)
         p1 = [{"name": "Killer", "max_hp": 100, "damage": 100, "range": 1, "count": 1}]
         p2 = [
             {
                 "name": "Avenger", "max_hp": 100, "damage": 3, "range": 1, "count": 1,
-                "abilities": [ability("lament", "ramp", target="self", value=1, range=1)],
+                "abilities": [ability("lament", "ramp", target="self", value=1, range=2)],
             },
-            {"name": "Fodder", "max_hp": 1, "damage": 0, "range": 1, "count": 1},
+            {"name": "Fodder", "max_hp": 1, "damage": 0, "range": 1, "count": 3},
         ]
-        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
-        avenger = [u for u in b.units if u.name == "Avenger"][0]
         ramped = False
-        for _ in range(200):
-            if not b.step():
+        for seed in range(10):
+            b = Battle(p1_units=p1, p2_units=p2, rng_seed=seed)
+            avenger = [u for u in b.units if u.name == "Avenger"][0]
+            for _ in range(200):
+                if not b.step():
+                    break
+                if avenger._ramp_accumulated > 0:
+                    ramped = True
+                    break
+            if ramped:
                 break
-            if avenger._ramp_accumulated > 0:
-                ramped = True
-                break
-        # Lament may not trigger if Avenger and Fodder aren't adjacent
-        assert ramped or b.winner is not None
+        assert ramped, "Lament should trigger across seeds"
 
 
 class TestRepair:
@@ -399,7 +401,7 @@ class TestRepair:
             if any("repairs" in line for line in b.log[-5:]):
                 repaired = True
                 break
-        assert repaired or b.winner is not None
+        assert repaired, "Repair should trigger before battle ends"
 
 
 class TestStrike:
@@ -418,7 +420,7 @@ class TestStrike:
             if any("strikes" in line for line in b.log[-5:]):
                 struck = True
                 break
-        assert struck or b.winner is not None
+        assert struck, "Strike should trigger before battle ends"
 
 
 class TestChargeSummon:
@@ -466,21 +468,23 @@ class TestUndying:
         p1 = [{"name": "Killer", "max_hp": 100, "damage": 100, "range": 1, "count": 1}]
         p2 = [
             {
-                "name": "Gatekeeper", "max_hp": 100, "damage": 4, "range": 2, "count": 1,
-                "abilities": [ability("passive", "undying", value=2, aura=2, amplify=False)],
+                "name": "Gatekeeper", "max_hp": 100, "damage": 4, "range": 1, "count": 1,
+                "abilities": [ability("passive", "undying", value=2, aura=3, amplify=False)],
             },
-            {"name": "Warrior", "max_hp": 3, "damage": 5, "range": 1, "count": 1},
+            {"name": "Warrior", "max_hp": 3, "damage": 5, "range": 1, "count": 3},
         ]
-        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
         saved = False
-        for _ in range(300):
-            if not b.step():
+        for seed in range(10):
+            b = Battle(p1_units=p1, p2_units=p2, rng_seed=seed)
+            for _ in range(300):
+                if not b.step():
+                    break
+                if any("saved by Undying" in line for line in b.log[-5:]):
+                    saved = True
+                    break
+            if saved:
                 break
-            if any("saved by Undying" in line for line in b.log[-5:]):
-                saved = True
-                break
-        # May or may not trigger depending on adjacency
-        assert saved or b.winner is not None
+        assert saved, "Undying should trigger across seeds"
 
 
 class TestDictUnitSpec:
