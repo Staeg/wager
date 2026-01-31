@@ -1125,12 +1125,24 @@ class OverworldGUI:
             if not upgrade:
                 continue
             text = upgrade.get("name", upgrade_id)
-            tk.Button(
+            btn = tk.Button(
                 dialog,
                 text=text,
                 width=28,
                 command=lambda uid=upgrade_id: (on_select(uid), dialog.destroy()),
-            ).pack(pady=2)
+            )
+            btn.pack(pady=2)
+            faction_units = FACTIONS.get(
+                faction_name, list(UNIT_STATS.keys())
+            ) + HEROES_BY_FACTION.get(faction_name, [])
+            summaries = upgrade_effect_summaries(
+                upgrade, ALL_UNIT_STATS, faction_units
+            )
+            keywords = upgrade_effect_keywords(
+                upgrade, ALL_UNIT_STATS, faction_units
+            )
+            if summaries:
+                self._bind_reward_hover(btn, summaries, keywords)
 
         tk.Button(
             dialog,
@@ -1264,6 +1276,91 @@ class OverworldGUI:
 
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+
+    def _bind_reward_hover(self, widget, summary_lines, keywords):
+        tip = [None]
+
+        def _render_tip(x_root, y_root):
+            if tip[0]:
+                tip[0].destroy()
+            tip[0] = tw = tk.Toplevel(widget)
+            tw.wm_overrideredirect(True)
+            tw.wm_geometry(f"+{x_root + 10}+{y_root + 20}")
+            tw.bind(
+                "<Leave>",
+                lambda e: (tip[0].destroy(), tip.__setitem__(0, None))
+                if tip[0]
+                else None,
+            )
+
+            text = "\n".join(summary_lines)
+            tk.Label(
+                tw,
+                text=text,
+                fg="white",
+                bg="#444",
+                font=("Arial", 9),
+                padx=6,
+                pady=4,
+                justify=tk.LEFT,
+            ).pack(anchor="w")
+
+            if keywords:
+                row = tk.Frame(tw, bg="#444")
+                row.pack(anchor="w", padx=6, pady=(4, 2))
+                for label, ability in keywords:
+                    lbl = tk.Label(
+                        row,
+                        text=label,
+                        fg="#aaffaa",
+                        bg="#333",
+                        font=("Arial", 9),
+                        padx=4,
+                        pady=1,
+                        relief=tk.RAISED,
+                        borderwidth=1,
+                    )
+                    lbl.pack(side=tk.LEFT, padx=2)
+                    bind_keyword_hover(lbl, tw, describe_ability(ability))
+
+        def on_enter(e):
+            _render_tip(e.x_root, e.y_root)
+
+        def on_motion(e):
+            if not tip[0]:
+                return
+            shift_held = bool(e.state & 0x1)
+            if not shift_held:
+                tip[0].wm_geometry(f"+{e.x_root + 10}+{e.y_root + 20}")
+
+        def on_leave(e):
+            shift_held = bool(e.state & 0x1)
+            if shift_held:
+                return
+            if tip[0]:
+                tip[0].destroy()
+                tip[0] = None
+
+        def on_shift_release(e):
+            if not tip[0]:
+                return
+            try:
+                mx = self.root.winfo_pointerx()
+                my = self.root.winfo_pointery()
+                widget_at = self.root.winfo_containing(mx, my)
+                if widget_at not in (widget, tip[0]):
+                    tip[0].destroy()
+                    tip[0] = None
+            except Exception:
+                if tip[0]:
+                    tip[0].destroy()
+                    tip[0] = None
+
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+        widget.bind("<Motion>", on_motion)
+        self.root.bind("<KeyRelease-Shift_L>", on_shift_release, add="+")
+        self.root.bind("<KeyRelease-Shift_R>", on_shift_release, add="+")
 
     def _refresh_army_info_panel(self, force=False):
         if self.selected_army and self.selected_army not in self.world.armies:
@@ -1575,7 +1672,13 @@ class OverworldGUI:
 
     def _on_hover(self, event):
         hovered = self._pixel_to_hex(event.x, event.y)
-        army = self.world.get_army_at(hovered) if hovered else None
+        if hovered:
+            my_player = self.player_id if self._multiplayer else 1
+            my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
+            armies = self._visible_armies_at(hovered, my_faction)
+            army = self._pick_target_army(armies, my_player)
+        else:
+            army = None
         shift_held = event.state & 0x1
 
         if army is not self._hovered_army:
@@ -1618,7 +1721,13 @@ class OverworldGUI:
                 mx = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx()
                 my = self.canvas.winfo_pointery() - self.canvas.winfo_rooty()
                 hovered = self._pixel_to_hex(mx, my)
-                army = self.world.get_army_at(hovered) if hovered else None
+                if hovered:
+                    my_player = self.player_id if self._multiplayer else 1
+                    my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
+                    armies = self._visible_armies_at(hovered, my_faction)
+                    army = self._pick_target_army(armies, my_player)
+                else:
+                    army = None
                 if army is not self._hovered_army:
                     self.tooltip.destroy()
                     self.tooltip = None
