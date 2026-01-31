@@ -175,7 +175,7 @@ FACTIONS = {
 
 ARMY_BUDGET = 100
 STARTING_GOLD = 100
-GOLD_PILE_COUNT = 5
+GOLD_PILE_COUNT = 16
 GOLD_PILE_MIN = 10
 GOLD_PILE_MAX = 20
 BASE_INCOME = 5
@@ -327,18 +327,9 @@ class Objective:
     pos: tuple  # (col, row)
     faction: str
 
-# Base positions: two per player
-BASE_POSITIONS = {
-    1: [(1, 1), (2, 1)],
-    2: [(4, 1), (5, 1)],
-    3: [(1, 5), (2, 5)],
-    4: [(4, 5), (5, 5)],
-}
-
-
 class Overworld:
-    COLS = 7
-    ROWS = 7
+    COLS = 14
+    ROWS = 14
 
     def __init__(self, num_players=2, rng_seed=None):
         if rng_seed is None:
@@ -348,38 +339,67 @@ class Overworld:
         self.armies = []
         self.gold = {p: STARTING_GOLD for p in range(1, num_players + 1)}
         self.bases = []
-        for p in range(1, num_players + 1):
-            for pos in BASE_POSITIONS.get(p, []):
-                self.bases.append(Base(player=p, pos=pos))
+        self._spawn_bases(num_players)
         self.gold_piles = []
         self._spawn_gold_piles()
         self.objectives = []
         self._spawn_objectives()
 
+    def _spawn_bases(self, num_players):
+        mid_c = self.COLS // 2
+        mid_r = self.ROWS // 2
+        quadrants = {
+            1: (range(0, mid_c), range(0, mid_r)),  # top-left
+            2: (range(mid_c, self.COLS), range(0, mid_r)),  # top-right
+            3: (range(0, mid_c), range(mid_r, self.ROWS)),  # bottom-left
+            4: (range(mid_c, self.COLS), range(mid_r, self.ROWS)),  # bottom-right
+        }
+        occupied = set()
+        for p in range(1, num_players + 1):
+            cols, rows = quadrants.get(p, quadrants[1])
+            candidates = [(c, r) for r in rows for c in cols if (c, r) not in occupied]
+            if len(candidates) < 2:
+                break
+            picks = self.rng.sample(candidates, 2)
+            for pos in picks:
+                occupied.add(pos)
+                self.bases.append(Base(player=p, pos=pos))
+
     def _spawn_gold_piles(self, count=GOLD_PILE_COUNT):
         excluded = {b.pos for b in self.bases if b.alive}
-        available = [
-            (c, r)
-            for r in range(self.ROWS)
-            for c in range(self.COLS)
-            if (c, r) not in excluded
+        mid_c = self.COLS // 2
+        mid_r = self.ROWS // 2
+        quadrants = [
+            (range(0, mid_c), range(0, mid_r)),
+            (range(mid_c, self.COLS), range(0, mid_r)),
+            (range(0, mid_c), range(mid_r, self.ROWS)),
+            (range(mid_c, self.COLS), range(mid_r, self.ROWS)),
         ]
-        for _ in range(count):
-            if not available:
-                break
-            pos = self.rng.choice(available)
-            available.remove(pos)
-            pile = GoldPile(
-                pos=pos,
-                value=self.rng.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
-            )
-            self.gold_piles.append(pile)
-            name = self.rng.choice(list(UNIT_STATS.keys()))
-            value = UNIT_STATS[name]["value"]
-            count = max(1, round(2 * pile.value / value))
-            self.armies.append(
-                OverworldArmy(player=0, units=[(name, count)], pos=pile.pos)
-            )
+        per_quad = max(1, count // 4)
+        for cols, rows in quadrants:
+            available = [
+                (c, r)
+                for r in rows
+                for c in cols
+                if (c, r) not in excluded
+            ]
+            for _ in range(per_quad):
+                if not available:
+                    break
+                pos = self.rng.choice(available)
+                available.remove(pos)
+                excluded.add(pos)
+                pile = GoldPile(
+                    pos=pos,
+                    value=self.rng.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
+                )
+                self.gold_piles.append(pile)
+                name = self.rng.choice(list(UNIT_STATS.keys()))
+                value = UNIT_STATS[name]["value"]
+                guard_count = max(1, round(2 * pile.value / value))
+                self.armies.append(
+                    OverworldArmy(player=0, units=[(name, guard_count)], pos=pile.pos)
+                )
 
     def _spawn_objectives(self):
         excluded = {b.pos for b in self.bases if b.alive}
@@ -648,6 +668,8 @@ class OverworldGUI:
         self.selected_armies = []
         self.build_panel = None  # track build popup
         self.build_base_pos = None
+        self.view_offset = [0, 0]
+        self._pan_anchor = None
 
         # Main frame for overworld content
         self.main_frame = tk.Frame(root)
@@ -665,9 +687,16 @@ class OverworldGUI:
         self.canvas.pack(padx=5, pady=5)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Button-3>", self._on_right_click)
+        self.canvas.bind("<Button-2>", self._on_pan_start)
+        self.canvas.bind("<B2-Motion>", self._on_pan_move)
+        self.canvas.bind("<ButtonRelease-2>", self._on_pan_end)
         self.canvas.bind("<Motion>", self._on_hover)
         root.bind("<Escape>", self._on_escape)
         root.bind("<space>", lambda e: self._on_end_turn())
+        root.bind("<KeyPress-w>", lambda e: self._pan_by(0, 30))
+        root.bind("<KeyPress-s>", lambda e: self._pan_by(0, -30))
+        root.bind("<KeyPress-a>", lambda e: self._pan_by(30, 0))
+        root.bind("<KeyPress-d>", lambda e: self._pan_by(-30, 0))
         root.bind("<KeyRelease-Shift_L>", self._on_shift_release)
         root.bind("<KeyRelease-Shift_R>", self._on_shift_release)
         self._load_overworld_assets()
@@ -1102,6 +1131,8 @@ class OverworldGUI:
 
         names = FACTIONS[faction_name]
         spent = {n: 0 for n in names}
+        bases = self.world.get_player_bases(player_id)
+        base_spent = {b.pos: 0 for b in bases}
         while self.world.gold.get(player_id, 0) > 0:
             affordable = [
                 n
@@ -1115,7 +1146,14 @@ class OverworldGUI:
             candidates = [n for n in affordable if spent[n] == min_spent]
             name = rng.choice(candidates)
             spent[name] += UNIT_STATS[name]["value"]
-            self.world.build_unit(player_id, name)
+            if bases:
+                pos = min(base_spent, key=base_spent.get)
+                err = self.world.build_unit_at_pos(player_id, name, pos)
+                if err:
+                    break
+                base_spent[pos] += UNIT_STATS[name]["value"]
+            else:
+                self.world.build_unit(player_id, name)
 
     def _update_gold_display(self):
         my_player = self.player_id if self._multiplayer else 1
@@ -1330,10 +1368,10 @@ class OverworldGUI:
                 self._draw()
 
     def _hex_center(self, col, row):
-        x = self.HEX_SIZE * 1.75 * col + 50
+        x = self.HEX_SIZE * 1.75 * col + 50 + self.view_offset[0]
         if row % 2 == 1:
             x += self.HEX_SIZE * 0.875
-        y = self.HEX_SIZE * 1.5 * row + 50
+        y = self.HEX_SIZE * 1.5 * row + 50 + self.view_offset[1]
         return x, y
 
     def _hex_polygon(self, cx, cy):
@@ -1493,6 +1531,27 @@ class OverworldGUI:
                     best_dist = d
                     best = (c, r)
         return best
+
+    def _on_pan_start(self, event):
+        self._pan_anchor = (event.x, event.y)
+
+    def _on_pan_move(self, event):
+        if not self._pan_anchor:
+            return
+        dx = event.x - self._pan_anchor[0]
+        dy = event.y - self._pan_anchor[1]
+        self.view_offset[0] += dx
+        self.view_offset[1] += dy
+        self._pan_anchor = (event.x, event.y)
+        self._draw()
+
+    def _on_pan_end(self, event):
+        self._pan_anchor = None
+
+    def _pan_by(self, dx, dy):
+        self.view_offset[0] += dx
+        self.view_offset[1] += dy
+        self._draw()
 
     def _on_hover(self, event):
         hovered = self._pixel_to_hex(event.x, event.y)

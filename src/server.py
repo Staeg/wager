@@ -867,6 +867,8 @@ class GameServer:
             return
         names = FACTIONS[faction]
         spent = {n: 0 for n in names}
+        bases = self.world.get_player_bases(player_id)
+        base_spent = {b.pos: 0 for b in bases}
         while self.world.gold.get(player_id, 0) > 0:
             affordable = [
                 n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[player_id]
@@ -877,7 +879,14 @@ class GameServer:
             candidates = [n for n in affordable if spent[n] == min_spent]
             name = random.choice(candidates)
             spent[name] += UNIT_STATS[name]["value"]
-            self.world.build_unit(player_id, name)
+            if bases:
+                pos = min(base_spent, key=base_spent.get)
+                err = self.world.build_unit_at_pos(player_id, name, pos)
+                if err:
+                    break
+                base_spent[pos] += UNIT_STATS[name]["value"]
+            else:
+                self.world.build_unit(player_id, name)
 
     async def _handle_objective_capture(self, attacker, defender, ow_winner):
         if defender.player != 0 or ow_winner != attacker.player:
