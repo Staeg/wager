@@ -18,6 +18,8 @@ from .protocol import (
     deserialize_armies,
     deserialize_bases,
     deserialize_gold_piles,
+    serialize_armies,
+    serialize_bases,
     serialize_gold_piles,
     SPLIT_MOVE,
     MOVE_ARMY,
@@ -454,20 +456,9 @@ class Overworld:
     def to_dict(self):
         """Serialize overworld state to a dict."""
         return {
-            "armies": [
-                {
-                    "player": a.player,
-                    "units": a.units,
-                    "pos": list(a.pos),
-                    "exhausted": a.exhausted,
-                }
-                for a in self.armies
-            ],
+            "armies": serialize_armies(self.armies),
             "gold": self.gold,
-            "bases": [
-                {"player": b.player, "pos": list(b.pos), "alive": b.alive}
-                for b in self.bases
-            ],
+            "bases": serialize_bases(self.bases),
             "gold_piles": serialize_gold_piles(self.gold_piles),
         }
 
@@ -477,20 +468,9 @@ class Overworld:
         ow = cls.__new__(cls)
         ow.rng_seed = data.get("rng_seed", 0)
         ow.rng = random.Random(ow.rng_seed)
-        ow.armies = [
-            OverworldArmy(
-                player=d["player"],
-                units=[tuple(u) for u in d["units"]],
-                pos=tuple(d["pos"]),
-                exhausted=d["exhausted"],
-            )
-            for d in data["armies"]
-        ]
+        ow.armies = deserialize_armies(data.get("armies", []))
         ow.gold = {int(k): v for k, v in data.get("gold", {}).items()}
-        ow.bases = [
-            Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
-            for d in data.get("bases", [])
-        ]
+        ow.bases = deserialize_bases(data.get("bases", []))
         ow.gold_piles = deserialize_gold_piles(data.get("gold_piles", []))
         return ow
 
