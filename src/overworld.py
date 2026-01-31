@@ -174,6 +174,7 @@ STARTING_GOLD = 100
 GOLD_PILE_COUNT = 5
 GOLD_PILE_MIN = 10
 GOLD_PILE_MAX = 20
+BASE_INCOME = 5
 
 PLAYER_COLORS = {
     0: "#888888",
@@ -382,6 +383,12 @@ class Overworld:
         self.gold_piles.remove(pile)
         return value
 
+    def grant_income(self, player):
+        income = sum(1 for b in self.bases if b.alive and b.player == player) * BASE_INCOME
+        if income:
+            self.gold[player] = self.gold.get(player, 0) + income
+        return income
+
     def get_base_at(self, pos):
         for b in self.bases:
             if b.pos == pos and b.alive:
@@ -557,6 +564,7 @@ class OverworldGUI:
             # Auto-build AI armies since there's no AI turns
             for pid, faction_name in self.ai_factions.items():
                 self._auto_build_ai(pid, faction_name)
+            self.world.grant_income(1)
 
         self.selected_army = None
         self.build_panel = None  # track build popup
@@ -1529,11 +1537,11 @@ class OverworldGUI:
         self._draw()
 
     def _check_local_base_destruction(self, pos, moving_player):
-        """Destroy enemy base at pos in single-player mode."""
+        """Capture enemy base at pos in single-player mode."""
         for base in getattr(self.world, "bases", []):
             if base.pos == pos and base.alive and base.player != moving_player:
-                base.alive = False
-                self.status_var.set(f"P{base.player}'s base destroyed!")
+                base.player = moving_player
+                self.status_var.set(f"P{moving_player} captured a base!")
 
     def _on_escape(self, event):
         if self.selected_army:
@@ -1554,8 +1562,15 @@ class OverworldGUI:
         for army in self.world.armies:
             if army.player == 1:
                 army.exhausted = False
+        income = self.world.grant_income(1)
         self.selected_army = None
-        self.status_var.set("New turn. Click a P1 army to select it.")
+        if income:
+            self.status_var.set(
+                f"New turn. Gained {income} gold from bases. Click a P1 army to select it."
+            )
+        else:
+            self.status_var.set("New turn. Click a P1 army to select it.")
+        self._update_gold_display()
         self._draw()
 
     def _make_battle_units(self, army):

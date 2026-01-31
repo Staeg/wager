@@ -261,10 +261,10 @@ class GameServer:
         return ow_winner
 
     def _check_base_destruction(self, pos, moving_player):
-        """Destroy any enemy base at the given position."""
+        """Capture any enemy base at the given position."""
         for base in self.world.bases:
             if base.pos == pos and base.alive and base.player != moving_player:
-                base.alive = False
+                base.player = moving_player
 
     async def _check_game_over(self):
         """Check if only one player remains."""
@@ -611,9 +611,11 @@ class GameServer:
             if army.player == self.current_player:
                 army.exhausted = False
         self.current_player = self._next_player()
-        await self._broadcast_state(
-            f"P{player_id} ended turn. P{self.current_player}'s turn."
-        )
+        income = self.world.grant_income(self.current_player)
+        status = f"P{player_id} ended turn. P{self.current_player}'s turn."
+        if income:
+            status = f"{status} P{self.current_player} gained {income} gold from bases."
+        await self._broadcast_state(status)
 
     async def _handle_request_replay(self, player_id, msg):
         bid = msg.get("battle_id")
@@ -783,6 +785,8 @@ class GameServer:
 
         for pid in self.ai_players:
             self._auto_build_ai(pid)
+
+        self.world.grant_income(self.current_player)
 
         for pid in self.players:
             await self.send_to(
