@@ -90,6 +90,10 @@ class GameServer:
             "armies": serialize_armies(self.world.armies),
             "bases": serialize_bases(self.world.bases),
             "gold": self.world.gold,
+            "gold_piles": [
+                {"pos": list(p["pos"]), "value": p["value"]}
+                for p in getattr(self.world, "gold_piles", [])
+            ],
             "current_player": self.current_player,
             "message": message,
             "player_factions": self.player_factions,
@@ -184,6 +188,7 @@ class GameServer:
             self.world.armies.remove(defender)
             self.world.move_army(attacker, defender.pos)
             attacker.exhausted = True
+            self.world.collect_gold_at(defender.pos, attacker.player)
         else:
             # Defender won — attacker is destroyed, defender stays
             _update_survivors(defender, 1 if defender is ow_p1 else 2)
@@ -288,15 +293,15 @@ class GameServer:
                         await self.send_to(player_id, {"type": ERROR, "message": "Army is exhausted"})
                         continue
 
+                    target = self.world.get_army_at(to_pos)
                     # Check reachability within move range
-                    occupied = {a.pos for a in self.world.armies if a.pos != from_pos}
+                    occupied = {a.pos for a in self.world.armies if a.pos != from_pos and a is not target}
                     reachable = _reachable_hexes(
                         from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
                     )
 
-                    target = self.world.get_army_at(to_pos)
-                    if target and target.player == player_id:
-                        await self.send_to(player_id, {"type": ERROR, "message": "Cannot move onto own army"})
+                    if target and target.player == player_id and to_pos not in reachable:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
                         continue
 
                     is_enemy = target and target.player != player_id
@@ -320,17 +325,30 @@ class GameServer:
                         await self.broadcast(self._state_update_msg(
                             f"Battle resolved between P{army.player} and P{target.player}."
                         ))
+                    elif target and target.player == player_id:
+                        # Combine armies
+                        self.world.merge_armies(target, army)
+                        target.exhausted = True
+                        gained = self.world.collect_gold_at(to_pos, player_id)
+                        if await self._check_game_over():
+                            continue
+                        msg = f"P{player_id} combined armies at {to_pos}."
+                        if gained:
+                            msg = f"P{player_id} combined armies and collected {gained} gold."
+                        await self.broadcast(self._state_update_msg(msg))
                     else:
                         # Move
                         self.world.move_army(army, to_pos)
                         army.exhausted = True
+                        gained = self.world.collect_gold_at(to_pos, player_id)
                         # Check for base destruction at new position
                         self._check_base_destruction(to_pos, player_id)
                         if await self._check_game_over():
                             continue
-                        await self.broadcast(self._state_update_msg(
-                            f"P{player_id} moved army to {to_pos}."
-                        ))
+                        msg = f"P{player_id} moved army to {to_pos}."
+                        if gained:
+                            msg = f"P{player_id} moved army and collected {gained} gold."
+                        await self.broadcast(self._state_update_msg(msg))
 
                 elif msg_type == SELECT_FACTION:
                     faction_name = msg.get("faction")
@@ -491,6 +509,10 @@ class GameServer:
                 "armies": serialize_armies(self.world.armies),
                 "bases": serialize_bases(self.world.bases),
                 "gold": self.world.gold,
+                "gold_piles": [
+                    {"pos": list(p["pos"]), "value": p["value"]}
+                    for p in getattr(self.world, "gold_piles", [])
+                ],
                 "current_player": self.current_player,
                 "player_id": pid,
                 "faction": self.player_factions.get(pid),

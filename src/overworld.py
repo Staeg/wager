@@ -1,6 +1,10 @@
 import tkinter as tk
 import math
+import os
+import random
+import sys
 from dataclasses import dataclass
+from PIL import Image, ImageTk
 from .combat import Battle, CombatGUI, Unit, hex_neighbors, format_ability, describe_ability
 from .ability_defs import ability
 from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
@@ -54,6 +58,9 @@ FACTIONS = {
 
 ARMY_BUDGET = 100
 STARTING_GOLD = 100
+GOLD_PILE_COUNT = 5
+GOLD_PILE_MIN = 10
+GOLD_PILE_MAX = 20
 
 PLAYER_COLORS = {
     1: "#4488ff",
@@ -120,6 +127,36 @@ class Overworld:
         self.armies = []
         self.gold = {p: STARTING_GOLD for p in range(1, num_players + 1)}
         self.bases = [Base(player=p, pos=BASE_POSITIONS[p]) for p in range(1, num_players + 1)]
+        self.gold_piles = []
+        self._spawn_gold_piles()
+
+    def _spawn_gold_piles(self, count=GOLD_PILE_COUNT):
+        excluded = {b.pos for b in self.bases if b.alive}
+        available = [(c, r) for r in range(self.ROWS) for c in range(self.COLS) if (c, r) not in excluded]
+        for _ in range(count):
+            if not available:
+                break
+            pos = random.choice(available)
+            available.remove(pos)
+            self.gold_piles.append({
+                "pos": pos,
+                "value": random.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
+            })
+
+    def get_gold_pile_at(self, pos):
+        for pile in self.gold_piles:
+            if pile["pos"] == pos:
+                return pile
+        return None
+
+    def collect_gold_at(self, pos, player):
+        pile = self.get_gold_pile_at(pos)
+        if not pile:
+            return 0
+        value = pile["value"]
+        self.gold[player] = self.gold.get(player, 0) + value
+        self.gold_piles.remove(pile)
+        return value
 
     def get_base_at(self, pos):
         for b in self.bases:
@@ -201,6 +238,10 @@ class Overworld:
                 {"player": b.player, "pos": list(b.pos), "alive": b.alive}
                 for b in self.bases
             ],
+            "gold_piles": [
+                {"pos": list(p["pos"]), "value": p["value"]}
+                for p in self.gold_piles
+            ],
         }
 
     @classmethod
@@ -221,6 +262,10 @@ class Overworld:
             Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
             for d in data.get("bases", [])
         ]
+        ow.gold_piles = [
+            {"pos": tuple(p["pos"]), "value": p["value"]}
+            for p in data.get("gold_piles", [])
+        ]
         return ow
 
     def get_army_at(self, pos):
@@ -231,6 +276,16 @@ class Overworld:
 
     def move_army(self, army, new_pos):
         army.pos = new_pos
+
+    def merge_armies(self, target, source):
+        if target is source:
+            return
+        counts = {name: count for name, count in target.units}
+        for name, count in source.units:
+            counts[name] = counts.get(name, 0) + count
+        target.units = list(counts.items())
+        if source in self.armies:
+            self.armies.remove(source)
 
 
 def _deserialize_armies(army_data):
@@ -328,6 +383,7 @@ class OverworldGUI:
             self.world.armies = []
             self.world.bases = []
             self.world.gold = {}
+            self.world.gold_piles = []
         else:
             self.world = Overworld()
             # Show faction selection before building
@@ -375,6 +431,7 @@ class OverworldGUI:
         root.bind("<space>", lambda e: self._on_end_turn())
         root.bind("<KeyRelease-Shift_L>", self._on_shift_release)
         root.bind("<KeyRelease-Shift_R>", self._on_shift_release)
+        self._load_overworld_assets()
 
         self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click your base to build units, or move armies.")
         tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
@@ -406,6 +463,15 @@ class OverworldGUI:
             self.client.on_message = self._on_server_message
         else:
             self._draw()
+
+    def _load_overworld_assets(self):
+        if getattr(sys, 'frozen', False):
+            asset_dir = os.path.join(sys._MEIPASS, "assets")
+        else:
+            asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
+        gold_path = os.path.join(asset_dir, "gold_pile.png")
+        img = Image.open(gold_path).convert("RGBA")
+        self._gold_sprite = ImageTk.PhotoImage(img)
 
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
@@ -767,6 +833,12 @@ class OverworldGUI:
                                          fill=color, outline="white", width=2)
             self.canvas.create_text(cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold"))
 
+        # Draw gold piles
+        for pile in getattr(w, "gold_piles", []):
+            cx, cy = self._hex_center(pile["pos"][0], pile["pos"][1])
+            if hasattr(self, "_gold_sprite") and self._gold_sprite:
+                self.canvas.create_image(cx, cy, image=self._gold_sprite)
+
         # Draw armies
         for army in w.armies:
             cx, cy = self._hex_center(army.pos[0], army.pos[1])
@@ -917,17 +989,17 @@ class OverworldGUI:
             return
 
         clicked_army = self.world.get_army_at(clicked)
-
-        # Cannot move onto own army
-        if clicked_army and clicked_army.player == my_player:
-            self.status_var.set("Cannot move onto your own army.")
-            return
+        is_own = clicked_army and clicked_army.player == my_player
 
         # Check reachability within move range
-        occupied = {a.pos for a in self.world.armies if a is not self.selected_army}
+        occupied = {a.pos for a in self.world.armies if a is not self.selected_army and a is not clicked_army}
         reachable = _reachable_hexes(
             self.selected_army.pos, ARMY_MOVE_RANGE, self.world.COLS, self.world.ROWS, occupied
         )
+        if is_own and clicked not in reachable:
+            self.status_var.set("Too far. Right-click a highlighted hex to move.")
+            return
+
         # Enemy army hexes are valid attack targets even if "occupied"
         is_enemy = clicked_army and clicked_army.player != my_player
         if clicked not in reachable and not is_enemy:
@@ -958,15 +1030,33 @@ class OverworldGUI:
             self.selected_army = None
             self._start_battle(army, clicked_army)
             return
+        if is_own:
+            moving = self.selected_army
+            self.selected_army = None
+            self.world.merge_armies(clicked_army, moving)
+            clicked_army.exhausted = True
+            gained = self.world.collect_gold_at(clicked, clicked_army.player)
+            if gained:
+                self.status_var.set(f"Armies combined and collected {gained} gold.")
+            else:
+                self.status_var.set("Armies combined.")
+            self._update_gold_display()
+            self._draw()
+            return
 
         # Empty hex -> move
         army = self.selected_army
         self.selected_army = None
         self.world.move_army(army, clicked)
         army.exhausted = True
+        gained = self.world.collect_gold_at(clicked, army.player)
         # Check for base destruction
         self._check_local_base_destruction(clicked, army.player)
-        self.status_var.set(f"Army moved to {clicked}.")
+        if gained:
+            self.status_var.set(f"Army moved to {clicked} and collected {gained} gold.")
+        else:
+            self.status_var.set(f"Army moved to {clicked}.")
+        self._update_gold_display()
         self._draw()
 
     def _check_local_base_destruction(self, pos, moving_player):
@@ -1074,6 +1164,9 @@ class OverworldGUI:
                 self.world.move_army(attacker, defender.pos)
                 attacker.exhausted = True
                 self._check_local_base_destruction(defender.pos, attacker.player)
+                gained = self.world.collect_gold_at(defender.pos, attacker.player)
+                if gained:
+                    self._update_gold_display()
             else:
                 # Defender won — attacker is destroyed, defender stays
                 _update_survivors(defender, 1 if defender is ow_p1 else 2)
@@ -1156,6 +1249,10 @@ class OverworldGUI:
             self.world.armies = _deserialize_armies(msg["armies"])
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+            self.world.gold_piles = [
+                {"pos": tuple(p["pos"]), "value": p["value"]}
+                for p in msg.get("gold_piles", [])
+            ]
             self._update_gold_display()
             if self._is_my_turn():
                 self.status_var.set(f"Game started! Your turn (P{self.player_id}). Click your base to build units.")
@@ -1167,6 +1264,10 @@ class OverworldGUI:
             self.world.armies = _deserialize_armies(msg["armies"])
             self.world.bases = _deserialize_bases(msg.get("bases", []))
             self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+            self.world.gold_piles = [
+                {"pos": tuple(p["pos"]), "value": p["value"]}
+                for p in msg.get("gold_piles", [])
+            ]
             if "player_factions" in msg:
                 self.player_factions = {int(k): v for k, v in msg.get("player_factions", {}).items()}
             if "player_heroes" in msg:
