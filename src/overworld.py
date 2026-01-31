@@ -2,10 +2,17 @@ import tkinter as tk
 import math
 import os
 import random
-import sys
 from dataclasses import dataclass
 from PIL import Image, ImageTk
-from .combat import Battle, CombatGUI, format_ability, describe_ability, bind_keyword_hover
+from .combat import (
+    Battle,
+    CombatGUI,
+    format_ability,
+    describe_ability,
+    bind_keyword_hover,
+)
+from .battle_resolution import make_battle_units, resolve_battle
+from .compat import get_asset_dir
 from .hex import hex_neighbors, reachable_hexes
 from .protocol import deserialize_armies, deserialize_bases, SPLIT_MOVE
 from .ability_defs import ability
@@ -21,38 +28,113 @@ from .upgrades import (
 # Canonical unit stats
 UNIT_STATS = {
     # Custodians (yellow/orange)
-    "Page":       {"max_hp": 3,  "damage": 1, "range": 1, "value": 2, "abilities": []},
-    "Librarian":  {"max_hp": 2,  "damage": 0, "range": 3, "value": 12,
-                   "abilities": [ability("periodic", "sunder", target="random", value=1, range=3, amplify=False)]},
-    "Steward":    {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
-    "Gatekeeper": {"max_hp": 32, "damage": 4, "range": 2, "value": 25,
-                   "abilities": [ability("passive", "undying", value=2, aura=2, amplify=False)]},
+    "Page": {"max_hp": 3, "damage": 1, "range": 1, "value": 2, "abilities": []},
+    "Librarian": {
+        "max_hp": 2,
+        "damage": 0,
+        "range": 3,
+        "value": 12,
+        "abilities": [
+            ability(
+                "periodic", "sunder", target="random", value=1, range=3, amplify=False
+            )
+        ],
+    },
+    "Steward": {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
+    "Gatekeeper": {
+        "max_hp": 32,
+        "damage": 4,
+        "range": 2,
+        "value": 25,
+        "abilities": [ability("passive", "undying", value=2, aura=2, amplify=False)],
+    },
     # Weavers (purple/blue)
-    "Apprentice": {"max_hp": 8,  "damage": 1, "range": 2, "value": 5,
-                   "abilities": [ability("onhit", "push", target="target", value=1, amplify=False)]},
-    "Conduit":    {"max_hp": 5,  "damage": 2, "range": 3, "value": 10,
-                   "abilities": [ability("passive", "amplify", value=1, aura=1, amplify=False)]},
-    "Seeker":     {"max_hp": 3,  "damage": 1, "range": 4, "value": 10,
-                   "abilities": [ability("onhit", "ramp", target="self", value=1)]},
-    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "value": 25,
-                   "abilities": [ability("onhit", "splash", target="target", value=1)]},
+    "Apprentice": {
+        "max_hp": 8,
+        "damage": 1,
+        "range": 2,
+        "value": 5,
+        "abilities": [
+            ability("onhit", "push", target="target", value=1, amplify=False)
+        ],
+    },
+    "Conduit": {
+        "max_hp": 5,
+        "damage": 2,
+        "range": 3,
+        "value": 10,
+        "abilities": [ability("passive", "amplify", value=1, aura=1, amplify=False)],
+    },
+    "Seeker": {
+        "max_hp": 3,
+        "damage": 1,
+        "range": 4,
+        "value": 10,
+        "abilities": [ability("onhit", "ramp", target="self", value=1)],
+    },
+    "Savant": {
+        "max_hp": 6,
+        "damage": 4,
+        "range": 4,
+        "value": 25,
+        "abilities": [ability("onhit", "splash", target="target", value=1)],
+    },
     # Artificers (gray/black)
-    "Tincan":     {"max_hp": 11, "damage": 2, "range": 1, "value": 6, "abilities": []},
-    "Golem":      {"max_hp": 16, "damage": 2, "range": 1, "value": 14,
-                   "abilities": [ability("passive", "armor", value=2, amplify=False)]},
-    "Kitboy":     {"max_hp": 6,  "damage": 2, "range": 2, "value": 10,
-                   "abilities": [ability("periodic", "repair", target="area", value=1, range=1)]},
-    "Artillery":  {"max_hp": 8,  "damage": 4, "range": 4, "value": 25,
-                   "abilities": [ability("periodic", "strike", target="random", value=2, range=6)]},
+    "Tincan": {"max_hp": 11, "damage": 2, "range": 1, "value": 6, "abilities": []},
+    "Golem": {
+        "max_hp": 16,
+        "damage": 2,
+        "range": 1,
+        "value": 14,
+        "abilities": [ability("passive", "armor", value=2, amplify=False)],
+    },
+    "Kitboy": {
+        "max_hp": 6,
+        "damage": 2,
+        "range": 2,
+        "value": 10,
+        "abilities": [ability("periodic", "repair", target="area", value=1, range=1)],
+    },
+    "Artillery": {
+        "max_hp": 8,
+        "damage": 4,
+        "range": 4,
+        "value": 25,
+        "abilities": [ability("periodic", "strike", target="random", value=2, range=6)],
+    },
     # Purifiers (red/white)
-    "Penitent":   {"max_hp": 5,  "damage": 1, "range": 1, "value": 5,
-                   "abilities": [ability("wounded", "ramp", target="self", value=1)]},
-    "Priest":     {"max_hp": 3,  "damage": 1, "range": 3, "value": 10,
-                   "abilities": [ability("periodic", "heal", target="random", value=3, range=3)]},
-    "Avenger":    {"max_hp": 20, "damage": 3, "range": 1, "value": 12,
-                   "abilities": [ability("lament", "ramp", target="self", value=1, range=1)]},
-    "Herald":     {"max_hp": 6,  "damage": 1, "range": 4, "value": 25,
-                   "abilities": [ability("periodic", "summon", target="self", count=2, charge=3, amplify=False)]},
+    "Penitent": {
+        "max_hp": 5,
+        "damage": 1,
+        "range": 1,
+        "value": 5,
+        "abilities": [ability("wounded", "ramp", target="self", value=1)],
+    },
+    "Priest": {
+        "max_hp": 3,
+        "damage": 1,
+        "range": 3,
+        "value": 10,
+        "abilities": [ability("periodic", "heal", target="random", value=3, range=3)],
+    },
+    "Avenger": {
+        "max_hp": 20,
+        "damage": 3,
+        "range": 1,
+        "value": 12,
+        "abilities": [ability("lament", "ramp", target="self", value=1, range=1)],
+    },
+    "Herald": {
+        "max_hp": 6,
+        "damage": 1,
+        "range": 4,
+        "value": 25,
+        "abilities": [
+            ability(
+                "periodic", "summon", target="self", count=2, charge=3, amplify=False
+            )
+        ],
+    },
 }
 
 ALL_UNIT_STATS = {**UNIT_STATS, **HERO_STATS}
@@ -86,6 +168,7 @@ PLAYER_COLORS_EXHAUSTED = {
     4: "#662266",
 }
 
+
 def unit_count(name):
     return ARMY_BUDGET // UNIT_STATS[name]["value"]
 
@@ -93,18 +176,23 @@ def unit_count(name):
 def _ability_texts(stats):
     return [format_ability(ab) for ab in stats.get("abilities", [])]
 
+
 def _ability_descriptions(stats):
     return [describe_ability(ab) for ab in stats.get("abilities", [])]
 
+
 def _unit_tooltip_text(name, stats):
     armor = stats.get("armor", 0)
-    stats_line = f"{name} - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+    stats_line = (
+        f"{name} - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+    )
     if armor:
         stats_line += f" Armor:{armor}"
     ability_lines = _ability_descriptions(stats)
     if ability_lines:
         return "\n".join([stats_line, ""] + ability_lines)
     return stats_line
+
 
 def _upgrade_referenced_units(upgrade, base_stats, faction_units):
     units = set()
@@ -126,18 +214,29 @@ def _upgrade_referenced_units(upgrade, base_stats, faction_units):
                         break
     return sorted(units)
 
-def _add_upgrade_hover_rows(parent, upgrade, effective_stats, faction_units, bind_unit_tooltip):
+
+def _add_upgrade_hover_rows(
+    parent, upgrade, effective_stats, faction_units, bind_unit_tooltip
+):
     units = _upgrade_referenced_units(upgrade, effective_stats, faction_units)
     if units:
         row = tk.Frame(parent)
         row.pack(anchor="w", pady=(2, 0))
-        tk.Label(row, text="Units:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(row, text="Units:", font=("Arial", 9, "bold")).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
         for unit_name in units:
             stats = effective_stats.get(unit_name)
             if not stats:
                 continue
-            lbl = tk.Label(row, text=unit_name, fg="#2244aa", bg=row.cget("bg"),
-                           font=("Arial", 9, "underline"), padx=3)
+            lbl = tk.Label(
+                row,
+                text=unit_name,
+                fg="#2244aa",
+                bg=row.cget("bg"),
+                font=("Arial", 9, "underline"),
+                padx=3,
+            )
             lbl.pack(side=tk.LEFT, padx=2)
             bind_unit_tooltip(lbl, _unit_tooltip_text(unit_name, stats))
 
@@ -145,38 +244,23 @@ def _add_upgrade_hover_rows(parent, upgrade, effective_stats, faction_units, bin
     if keywords:
         row = tk.Frame(parent, bg=parent.cget("bg"))
         row.pack(anchor="w", pady=(2, 0))
-        tk.Label(row, text="Keywords:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(row, text="Keywords:", font=("Arial", 9, "bold")).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
         for text, ability in keywords:
-            lbl = tk.Label(row, text=text, fg="#aaffaa", bg="#333", font=("Arial", 9),
-                           padx=4, pady=1, relief=tk.RAISED, borderwidth=1)
+            lbl = tk.Label(
+                row,
+                text=text,
+                fg="#aaffaa",
+                bg="#333",
+                font=("Arial", 9),
+                padx=4,
+                pady=1,
+                relief=tk.RAISED,
+                borderwidth=1,
+            )
             lbl.pack(side=tk.LEFT, padx=2)
             bind_keyword_hover(lbl, parent, describe_ability(ability))
-
-
-def make_battle_units(army, effective_stats):
-    """Convert an OverworldArmy's unit list into Battle-compatible dicts."""
-    result = []
-    for name, count in army.units:
-        s = effective_stats[name]
-        spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
-                "range": s["range"], "count": count,
-                "abilities": s.get("abilities", []),
-                "armor": s.get("armor", 0)}
-        result.append(spec)
-    return result
-
-
-def update_survivors(army, battle, battle_player):
-    """Update an OverworldArmy's unit list to reflect battle survivors."""
-    survivor_counts = {}
-    for u in battle.units:
-        if u.alive and u.player == battle_player:
-            survivor_counts[u.name] = survivor_counts.get(u.name, 0) + 1
-    army.units = [
-        (name, survivor_counts.get(name, 0))
-        for name, _ in army.units
-        if survivor_counts.get(name, 0) > 0
-    ]
 
 
 @dataclass
@@ -237,7 +321,12 @@ class Overworld:
 
     def _spawn_gold_piles(self, count=GOLD_PILE_COUNT):
         excluded = {b.pos for b in self.bases if b.alive}
-        available = [(c, r) for r in range(self.ROWS) for c in range(self.COLS) if (c, r) not in excluded]
+        available = [
+            (c, r)
+            for r in range(self.ROWS)
+            for c in range(self.COLS)
+            if (c, r) not in excluded
+        ]
         for _ in range(count):
             if not available:
                 break
@@ -251,7 +340,9 @@ class Overworld:
             name = self.rng.choice(list(UNIT_STATS.keys()))
             value = UNIT_STATS[name]["value"]
             count = max(1, round(2 * pile.value / value))
-            self.armies.append(OverworldArmy(player=0, units=[(name, count)], pos=pile.pos))
+            self.armies.append(
+                OverworldArmy(player=0, units=[(name, count)], pos=pile.pos)
+            )
 
     def get_gold_pile_at(self, pos):
         for pile in self.gold_piles:
@@ -283,6 +374,24 @@ class Overworld:
     def get_player_bases(self, player):
         return [b for b in self.bases if b.player == player and b.alive]
 
+    def _add_units_to_army(self, pos, player, unit_name, count):
+        """Add units to an existing army at pos, or create a new one."""
+        army = self.get_army_at(pos)
+        if army and army.player == player:
+            for i, (name, existing) in enumerate(army.units):
+                if name == unit_name:
+                    army.units[i] = (name, existing + count)
+                    return
+            army.units.append((unit_name, count))
+        else:
+            self.armies.append(
+                OverworldArmy(
+                    player=player,
+                    units=[(unit_name, count)],
+                    pos=pos,
+                )
+            )
+
     def build_unit(self, player, unit_name):
         """Build a unit at the player's base. Returns error string or None on success."""
         base = self.get_player_base(player)
@@ -301,22 +410,7 @@ class Overworld:
         if self.gold.get(player, 0) < cost:
             return "Not enough gold"
         self.gold[player] -= cost
-        # Find or create army at base position
-        army = self.get_army_at(base.pos)
-        if army and army.player == player:
-            # Add to existing army
-            for i, (name, count) in enumerate(army.units):
-                if name == unit_name:
-                    army.units[i] = (name, count + 1)
-                    return None
-            army.units.append((unit_name, 1))
-        else:
-            # Create new army at base
-            self.armies.append(OverworldArmy(
-                player=player,
-                units=[(unit_name, 1)],
-                pos=base.pos,
-            ))
+        self._add_units_to_army(base.pos, player, unit_name, 1)
         return None
 
     def add_unit_at_base(self, player, unit_name, count=1):
@@ -326,38 +420,14 @@ class Overworld:
         base = self.get_player_base(player)
         if not base:
             return "No base"
-        army = self.get_army_at(base.pos)
-        if army and army.player == player:
-            for i, (name, existing) in enumerate(army.units):
-                if name == unit_name:
-                    army.units[i] = (name, existing + count)
-                    return None
-            army.units.append((unit_name, count))
-        else:
-            self.armies.append(OverworldArmy(
-                player=player,
-                units=[(unit_name, count)],
-                pos=base.pos,
-            ))
+        self._add_units_to_army(base.pos, player, unit_name, count)
         return None
 
     def add_unit_at_pos(self, player, unit_name, pos, count=1):
         """Add units at a specific position without cost."""
         if unit_name not in ALL_UNIT_STATS:
             return f"Unknown unit: {unit_name}"
-        army = self.get_army_at(pos)
-        if army and army.player == player:
-            for i, (name, existing) in enumerate(army.units):
-                if name == unit_name:
-                    army.units[i] = (name, existing + count)
-                    return None
-            army.units.append((unit_name, count))
-        else:
-            self.armies.append(OverworldArmy(
-                player=player,
-                units=[(unit_name, count)],
-                pos=pos,
-            ))
+        self._add_units_to_army(pos, player, unit_name, count)
         return None
 
     def to_dict(self):
@@ -378,8 +448,7 @@ class Overworld:
                 for b in self.bases
             ],
             "gold_piles": [
-                {"pos": list(p.pos), "value": p.value}
-                for p in self.gold_piles
+                {"pos": list(p.pos), "value": p.value} for p in self.gold_piles
             ],
         }
 
@@ -430,7 +499,6 @@ class Overworld:
 
 
 ARMY_MOVE_RANGE = 3
-
 
 
 class OverworldGUI:
@@ -506,7 +574,9 @@ class OverworldGUI:
         left_frame = tk.Frame(self.main_frame)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH)
 
-        self.canvas = tk.Canvas(left_frame, width=canvas_w, height=canvas_h, bg="#2b3b2b")
+        self.canvas = tk.Canvas(
+            left_frame, width=canvas_w, height=canvas_h, bg="#2b3b2b"
+        )
         self.canvas.pack(padx=5, pady=5)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Button-3>", self._on_right_click)
@@ -517,14 +587,27 @@ class OverworldGUI:
         root.bind("<KeyRelease-Shift_R>", self._on_shift_release)
         self._load_overworld_assets()
 
-        self.status_var = tk.StringVar(value="Waiting for players..." if self._multiplayer else "Click your base to build units, or move armies.")
-        tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(pady=5)
+        self.status_var = tk.StringVar(
+            value="Waiting for players..."
+            if self._multiplayer
+            else "Click your base to build units, or move armies."
+        )
+        tk.Label(left_frame, textvariable=self.status_var, font=("Arial", 12)).pack(
+            pady=5
+        )
 
         self.gold_var = tk.StringVar(value="")
-        tk.Label(left_frame, textvariable=self.gold_var, font=("Arial", 11, "bold"), fg="#B8960F").pack(pady=2)
+        tk.Label(
+            left_frame,
+            textvariable=self.gold_var,
+            font=("Arial", 11, "bold"),
+            fg="#B8960F",
+        ).pack(pady=2)
         self._update_gold_display()
 
-        self.end_turn_btn = tk.Button(left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn)
+        self.end_turn_btn = tk.Button(
+            left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn
+        )
         self.end_turn_btn.pack(pady=5)
 
         self.army_info_title = tk.StringVar(value="No army selected.")
@@ -534,16 +617,26 @@ class OverworldGUI:
         right_frame = tk.Frame(self.main_frame, width=250)
         right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
         right_frame.pack_propagate(False)
-        self.army_info_frame = tk.Frame(right_frame, relief=tk.GROOVE, borderwidth=2, padx=6, pady=6)
+        self.army_info_frame = tk.Frame(
+            right_frame, relief=tk.GROOVE, borderwidth=2, padx=6, pady=6
+        )
         self.army_info_frame.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(self.army_info_frame, text="Army Info", font=("Arial", 11, "bold")).pack(anchor="w")
-        tk.Label(self.army_info_frame, textvariable=self.army_info_title,
-                 font=("Arial", 9), justify=tk.LEFT).pack(anchor="w")
+        tk.Label(
+            self.army_info_frame, text="Army Info", font=("Arial", 11, "bold")
+        ).pack(anchor="w")
+        tk.Label(
+            self.army_info_frame,
+            textvariable=self.army_info_title,
+            font=("Arial", 9),
+            justify=tk.LEFT,
+        ).pack(anchor="w")
         self.army_info_units_frame = tk.Frame(self.army_info_frame)
         self.army_info_units_frame.pack(fill=tk.X, pady=(4, 0))
 
         tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
-        self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
+        self.battle_log = tk.Listbox(
+            right_frame, font=("Consolas", 9), selectmode=tk.SINGLE
+        )
         self.battle_log.pack(fill=tk.BOTH, expand=True)
         self.battle_log.bind("<Double-Button-1>", self._on_replay_click)
         self._battle_log_ids = []  # parallel list of battle_ids
@@ -560,10 +653,7 @@ class OverworldGUI:
             self._draw()
 
     def _load_overworld_assets(self):
-        if getattr(sys, 'frozen', False):
-            asset_dir = os.path.join(sys._MEIPASS, "assets")
-        else:
-            asset_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
+        asset_dir = get_asset_dir()
         gold_path = os.path.join(asset_dir, "gold_pile.png")
         img = Image.open(gold_path).convert("RGBA")
         self._gold_sprite = ImageTk.PhotoImage(img)
@@ -573,18 +663,23 @@ class OverworldGUI:
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
         import random as rng
+
         dialog = tk.Toplevel(self.root)
         dialog.title("Choose Your Faction")
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
 
-        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(
+            pady=10
+        )
 
         for faction_name, unit_names in FACTIONS.items():
             frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=5)
             frame.pack(fill=tk.X, padx=15, pady=5)
-            tk.Label(frame, text=faction_name, font=("Arial", 12, "bold")).pack(anchor="w")
+            tk.Label(frame, text=faction_name, font=("Arial", 12, "bold")).pack(
+                anchor="w"
+            )
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
@@ -595,14 +690,21 @@ class OverworldGUI:
                 ability_lines = _ability_descriptions(s)
                 if ability_lines:
                     self._bind_ability_hover(label, "\n".join(ability_lines))
-            tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
-                      command=lambda fn=faction_name: self._select_faction(fn, dialog)).pack(pady=5)
+            tk.Button(
+                frame,
+                text=f"Play {faction_name}",
+                font=("Arial", 11),
+                command=lambda fn=faction_name: self._select_faction(fn, dialog),
+            ).pack(pady=5)
 
         # Center dialog
         dialog.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{max(0,x)}+{max(0,y)}")
+        y = (
+            self.root.winfo_y()
+            + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        )
+        dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
         self.root.wait_window(dialog)
 
         # Default if somehow closed without picking
@@ -616,6 +718,7 @@ class OverworldGUI:
     def _choose_ai_faction(self):
         """Pick a single-player AI faction different from the player's if possible."""
         import random as rng
+
         other_factions = [f for f in FACTIONS if f != self.faction]
         if other_factions:
             return rng.choice(other_factions)
@@ -623,15 +726,17 @@ class OverworldGUI:
 
     def _choose_random_heroes(self, faction_name, count=2):
         import random as rng
+
         heroes = list(get_heroes_for_faction(faction_name))
         if not heroes:
             return []
         rng.shuffle(heroes)
-        return heroes[:min(count, len(heroes))]
+        return heroes[: min(count, len(heroes))]
 
     def _auto_pick_upgrade(self, faction_name):
         """Pick a random upgrade for an AI faction."""
         import random as rng
+
         upgrades = get_upgrades_for_faction(faction_name)
         if not upgrades:
             return None
@@ -643,50 +748,89 @@ class OverworldGUI:
         if not faction:
             return ALL_UNIT_STATS
         upgrade_id = self.player_upgrades.get(player_id)
-        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction, [])
-        return apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
+        faction_units = FACTIONS.get(
+            faction, list(UNIT_STATS.keys())
+        ) + HEROES_BY_FACTION.get(faction, [])
+        return apply_upgrade_to_unit_stats(
+            ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units
+        )
 
-    def _show_upgrade_dialog(self, faction_name, player_factions, player_heroes, on_select):
+    def _show_upgrade_dialog(
+        self, faction_name, player_factions, player_heroes, on_select
+    ):
         upgrades = get_upgrades_for_faction(faction_name)
         if not upgrades:
             on_select(None, None)
             return
-        faction_units = FACTIONS.get(faction_name, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction_name, [])
+        faction_units = FACTIONS.get(
+            faction_name, list(UNIT_STATS.keys())
+        ) + HEROES_BY_FACTION.get(faction_name, [])
         dialog = tk.Toplevel(self.root)
         dialog.title("Choose Your Upgrade")
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
 
-        tk.Label(dialog, text="Choose Your Upgrade", font=("Arial", 14, "bold")).pack(pady=8)
+        tk.Label(dialog, text="Choose Your Upgrade", font=("Arial", 14, "bold")).pack(
+            pady=8
+        )
         if player_factions:
-            tk.Label(dialog, text="Factions:", font=("Arial", 11, "bold")).pack(anchor="w", padx=12)
+            tk.Label(dialog, text="Factions:", font=("Arial", 11, "bold")).pack(
+                anchor="w", padx=12
+            )
             for pid in sorted(player_factions.keys()):
-                tk.Label(dialog, text=f"P{pid}: {player_factions[pid]}", font=("Arial", 10)).pack(anchor="w", padx=20)
+                tk.Label(
+                    dialog, text=f"P{pid}: {player_factions[pid]}", font=("Arial", 10)
+                ).pack(anchor="w", padx=20)
         if player_heroes:
-            tk.Label(dialog, text="Heroes:", font=("Arial", 11, "bold")).pack(anchor="w", padx=12, pady=(6, 0))
+            tk.Label(dialog, text="Heroes:", font=("Arial", 11, "bold")).pack(
+                anchor="w", padx=12, pady=(6, 0)
+            )
             for pid in sorted(player_heroes.keys()):
                 hero_list = player_heroes[pid]
                 if isinstance(hero_list, str):
                     hero_list = [hero_list]
                 for hero_name in hero_list:
-                    hero_label = tk.Label(dialog, text=f"P{pid}: {hero_name}", font=("Arial", 10))
+                    hero_label = tk.Label(
+                        dialog, text=f"P{pid}: {hero_name}", font=("Arial", 10)
+                    )
                     hero_label.pack(anchor="w", padx=20)
                     hero_stats = ALL_UNIT_STATS.get(hero_name)
                     if hero_stats:
-                        self._bind_ability_hover(hero_label, _unit_tooltip_text(hero_name, hero_stats))
+                        self._bind_ability_hover(
+                            hero_label, _unit_tooltip_text(hero_name, hero_stats)
+                        )
 
         for upgrade in upgrades:
             frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
             frame.pack(fill=tk.X, padx=15, pady=6)
-            tk.Label(frame, text=upgrade["name"], font=("Arial", 12, "bold")).pack(anchor="w")
-            summary_lines = upgrade_effect_summaries(upgrade, ALL_UNIT_STATS, faction_units)
-            summary_text = "\n".join(summary_lines) if summary_lines else upgrade.get("description", "")
-            tk.Label(frame, text=summary_text, font=("Arial", 9), wraplength=360,
-                     justify=tk.LEFT).pack(anchor="w")
-            _add_upgrade_hover_rows(frame, upgrade, ALL_UNIT_STATS, faction_units, self._bind_ability_hover)
-            tk.Button(frame, text=f"Choose {upgrade['name']}", font=("Arial", 10),
-                      command=lambda u=upgrade: on_select(u["id"], dialog)).pack(pady=4)
+            tk.Label(frame, text=upgrade["name"], font=("Arial", 12, "bold")).pack(
+                anchor="w"
+            )
+            summary_lines = upgrade_effect_summaries(
+                upgrade, ALL_UNIT_STATS, faction_units
+            )
+            summary_text = (
+                "\n".join(summary_lines)
+                if summary_lines
+                else upgrade.get("description", "")
+            )
+            tk.Label(
+                frame,
+                text=summary_text,
+                font=("Arial", 9),
+                wraplength=360,
+                justify=tk.LEFT,
+            ).pack(anchor="w")
+            _add_upgrade_hover_rows(
+                frame, upgrade, ALL_UNIT_STATS, faction_units, self._bind_ability_hover
+            )
+            tk.Button(
+                frame,
+                text=f"Choose {upgrade['name']}",
+                font=("Arial", 10),
+                command=lambda u=upgrade: on_select(u["id"], dialog),
+            ).pack(pady=4)
 
         dialog.focus_force()
 
@@ -701,9 +845,13 @@ class OverworldGUI:
                 dialog.destroy()
             if upgrade_id:
                 if hasattr(self, "status_var"):
-                    self.status_var.set(f"Upgrade selected: {get_upgrade_by_id(upgrade_id)['name']}")
+                    self.status_var.set(
+                        f"Upgrade selected: {get_upgrade_by_id(upgrade_id)['name']}"
+                    )
 
-        self._show_upgrade_dialog(faction, self.player_factions, self.player_heroes, on_select)
+        self._show_upgrade_dialog(
+            faction, self.player_factions, self.player_heroes, on_select
+        )
 
     def _pick_upgrade_multiplayer(self, player_factions):
         faction = player_factions.get(self.player_id)
@@ -716,7 +864,9 @@ class OverworldGUI:
             if upgrade_id:
                 self.client.send({"type": "select_upgrade", "upgrade_id": upgrade_id})
 
-        self._show_upgrade_dialog(faction, player_factions, self.player_heroes, on_select)
+        self._show_upgrade_dialog(
+            faction, player_factions, self.player_heroes, on_select
+        )
 
     def _pick_faction_multiplayer(self, taken):
         """Show faction picker for multiplayer, excluding already-taken factions."""
@@ -726,35 +876,55 @@ class OverworldGUI:
         dialog.grab_set()
         dialog.resizable(False, False)
 
-        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(dialog, text="Choose Your Faction", font=("Arial", 14, "bold")).pack(
+            pady=10
+        )
 
         for faction_name, unit_names in FACTIONS.items():
             is_taken = faction_name in taken
             frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=5)
             frame.pack(fill=tk.X, padx=15, pady=5)
             label_text = faction_name + (" (taken)" if is_taken else "")
-            tk.Label(frame, text=label_text, font=("Arial", 12, "bold"),
-                     fg="gray" if is_taken else "black").pack(anchor="w")
+            tk.Label(
+                frame,
+                text=label_text,
+                font=("Arial", 12, "bold"),
+                fg="gray" if is_taken else "black",
+            ).pack(anchor="w")
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
                 for ab_text in _ability_texts(s):
                     desc += f" {ab_text}"
-                label = tk.Label(frame, text=desc, font=("Arial", 9), anchor="w",
-                                 fg="gray" if is_taken else "black")
+                label = tk.Label(
+                    frame,
+                    text=desc,
+                    font=("Arial", 9),
+                    anchor="w",
+                    fg="gray" if is_taken else "black",
+                )
                 label.pack(anchor="w")
                 ability_lines = _ability_descriptions(s)
                 if ability_lines:
                     self._bind_ability_hover(label, "\n".join(ability_lines))
-            btn = tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
-                            state=tk.DISABLED if is_taken else tk.NORMAL,
-                            command=lambda fn=faction_name, d=dialog: self._select_faction_mp(fn, d))
+            btn = tk.Button(
+                frame,
+                text=f"Play {faction_name}",
+                font=("Arial", 11),
+                state=tk.DISABLED if is_taken else tk.NORMAL,
+                command=lambda fn=faction_name, d=dialog: self._select_faction_mp(
+                    fn, d
+                ),
+            )
             btn.pack(pady=5)
 
         dialog.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{max(0,x)}+{max(0,y)}")
+        y = (
+            self.root.winfo_y()
+            + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        )
+        dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
 
     def _select_faction_mp(self, faction_name, dialog):
         """Send faction selection to server in multiplayer."""
@@ -765,12 +935,15 @@ class OverworldGUI:
         """Auto-spend P2's gold to create armies in single-player mode.
         Distributes gold roughly equally across all faction unit types."""
         import random as rng
+
         p2_faction = self.ai_faction or self._choose_ai_faction()
         self.ai_faction = p2_faction
         names = FACTIONS[p2_faction]
         spent = {n: 0 for n in names}
         while self.world.gold.get(2, 0) > 0:
-            affordable = [n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[2]]
+            affordable = [
+                n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[2]
+            ]
             if not affordable:
                 break
             # Pick the affordable unit with the least gold spent so far
@@ -796,16 +969,26 @@ class OverworldGUI:
         tw.resizable(False, False)
         tw.transient(self.root)
 
-        self._build_gold_label = tk.Label(tw, text="", font=("Arial", 12, "bold"), fg="#B8960F")
+        self._build_gold_label = tk.Label(
+            tw, text="", font=("Arial", 12, "bold"), fg="#B8960F"
+        )
         self._build_gold_label.pack(pady=5)
         if self.build_base_pos:
-            tk.Label(tw, text=f"Building at {self.build_base_pos}",
-                     font=("Arial", 9), fg="#cccccc").pack()
+            tk.Label(
+                tw,
+                text=f"Building at {self.build_base_pos}",
+                font=("Arial", 9),
+                fg="#cccccc",
+            ).pack()
 
         self._build_buttons = {}
         self._build_order = []  # ordered list of unit names for hotkeys
         my_player = self.player_id if self._multiplayer else 1
-        faction_units = FACTIONS.get(self.faction, list(UNIT_STATS.keys())) if self.faction else list(UNIT_STATS.keys())
+        faction_units = (
+            FACTIONS.get(self.faction, list(UNIT_STATS.keys()))
+            if self.faction
+            else list(UNIT_STATS.keys())
+        )
         effective_stats = self._get_effective_unit_stats(my_player)
         for idx, name in enumerate(faction_units):
             stats = effective_stats[name]
@@ -814,8 +997,12 @@ class OverworldGUI:
             text = f"[{hotkey}] {name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
             for ab_text in _ability_texts(stats):
                 text += f" {ab_text}"
-            btn = tk.Button(tw, text=text, font=("Arial", 10),
-                            command=lambda n=name: self._do_build(n))
+            btn = tk.Button(
+                tw,
+                text=text,
+                font=("Arial", 10),
+                command=lambda n=name: self._do_build(n),
+            )
             btn.pack(fill=tk.X, padx=10, pady=2)
             self._build_buttons[name] = btn
             self._build_order.append(name)
@@ -837,16 +1024,27 @@ class OverworldGUI:
 
     def _bind_ability_hover(self, widget, description):
         tip = [None]
+
         def on_enter(e):
             tip[0] = tw = tk.Toplevel(widget)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 20}")
-            tk.Label(tw, text=description, fg="white", bg="#444",
-                     font=("Arial", 9), padx=6, pady=4, justify=tk.LEFT).pack()
+            tk.Label(
+                tw,
+                text=description,
+                fg="white",
+                bg="#444",
+                font=("Arial", 9),
+                padx=6,
+                pady=4,
+                justify=tk.LEFT,
+            ).pack()
+
         def on_leave(e):
             if tip[0]:
                 tip[0].destroy()
                 tip[0] = None
+
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
 
@@ -868,12 +1066,23 @@ class OverworldGUI:
             self.army_info_title.set("No army selected.")
             return
 
-        owner = "Neutral" if self.selected_army.player == 0 else f"P{self.selected_army.player}"
-        self.army_info_title.set(f"{owner} Army - {self.selected_army.total_count} units")
+        owner = (
+            "Neutral"
+            if self.selected_army.player == 0
+            else f"P{self.selected_army.player}"
+        )
+        self.army_info_title.set(
+            f"{owner} Army - {self.selected_army.total_count} units"
+        )
         effective_stats = self._get_effective_unit_stats(self.selected_army.player)
         for name, count in self.selected_army.units:
-            label = tk.Label(self.army_info_units_frame, text=f"{count}x {name}",
-                             font=("Arial", 9), anchor="w", justify=tk.LEFT)
+            label = tk.Label(
+                self.army_info_units_frame,
+                text=f"{count}x {name}",
+                font=("Arial", 9),
+                anchor="w",
+                justify=tk.LEFT,
+            )
             label.pack(anchor="w")
             stats = effective_stats.get(name)
             if stats:
@@ -892,7 +1101,7 @@ class OverworldGUI:
 
     def _close_build_panel(self):
         """Close the build panel and unbind root hotkeys."""
-        for key, bid in getattr(self, '_build_hotkey_ids', []):
+        for key, bid in getattr(self, "_build_hotkey_ids", []):
             self.root.unbind(key, bid)
         self._build_hotkey_ids = []
         if self.build_panel and self.build_panel.winfo_exists():
@@ -946,7 +1155,11 @@ class OverworldGUI:
         # Determine reachable hexes for selected army
         neighbors = set()
         my_player = self.player_id if self._multiplayer else 1
-        show_reachable = self.selected_army and self.selected_army.player == my_player and self._is_my_turn()
+        show_reachable = (
+            self.selected_army
+            and self.selected_army.player == my_player
+            and self._is_my_turn()
+        )
         if show_reachable:
             occupied = {a.pos for a in w.armies if a is not self.selected_army}
             neighbors = reachable_hexes(
@@ -968,10 +1181,15 @@ class OverworldGUI:
                 if self.selected_army and (c, r) == self.selected_army.pos:
                     outline = "#ffff00"
                     outline_width = 3
-                self.canvas.create_polygon(self._hex_polygon(cx, cy), fill=fill, outline=outline, width=outline_width)
+                self.canvas.create_polygon(
+                    self._hex_polygon(cx, cy),
+                    fill=fill,
+                    outline=outline,
+                    width=outline_width,
+                )
 
         # Draw bases (behind armies, larger square)
-        for base in getattr(w, 'bases', []):
+        for base in getattr(w, "bases", []):
             if not base.alive:
                 continue
             cx, cy = self._hex_center(base.pos[0], base.pos[1])
@@ -982,9 +1200,18 @@ class OverworldGUI:
             if self.build_panel and self.build_base_pos == base.pos:
                 outline = "#ffdd55"
                 outline_width = 3
-            self.canvas.create_rectangle(cx - s, cy - s, cx + s, cy + s,
-                                         fill=color, outline=outline, width=outline_width)
-            self.canvas.create_text(cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold"))
+            self.canvas.create_rectangle(
+                cx - s,
+                cy - s,
+                cx + s,
+                cy + s,
+                fill=color,
+                outline=outline,
+                width=outline_width,
+            )
+            self.canvas.create_text(
+                cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold")
+            )
 
         # Draw gold piles
         army_positions = {a.pos for a in w.armies}
@@ -994,7 +1221,9 @@ class OverworldGUI:
                 # Show small gold icon at top-right of hex when army is on top
                 if hasattr(self, "_gold_sprite_small") and self._gold_sprite_small:
                     s = self.HEX_SIZE
-                    self.canvas.create_image(cx + s * 0.45, cy - s * 0.45, image=self._gold_sprite_small)
+                    self.canvas.create_image(
+                        cx + s * 0.45, cy - s * 0.45, image=self._gold_sprite_small
+                    )
             elif hasattr(self, "_gold_sprite") and self._gold_sprite:
                 self.canvas.create_image(cx, cy, image=self._gold_sprite)
 
@@ -1005,8 +1234,16 @@ class OverworldGUI:
                 color = PLAYER_COLORS_EXHAUSTED.get(army.player, "#444444")
             else:
                 color = PLAYER_COLORS.get(army.player, "#888888")
-            self.canvas.create_oval(cx - 16, cy - 16, cx + 16, cy + 16, fill=color, outline="white", width=2)
-            self.canvas.create_text(cx, cy, text=str(army.total_count), fill="white", font=("Arial", 12, "bold"))
+            self.canvas.create_oval(
+                cx - 16, cy - 16, cx + 16, cy + 16, fill=color, outline="white", width=2
+            )
+            self.canvas.create_text(
+                cx,
+                cy,
+                text=str(army.total_count),
+                fill="white",
+                font=("Arial", 12, "bold"),
+            )
 
         self._refresh_army_info_panel()
 
@@ -1045,8 +1282,17 @@ class OverworldGUI:
                     )
                     if army.exhausted:
                         text += "\n  (Exhausted)"
-                    tk.Label(tw, text=text, justify=tk.LEFT, bg="#ffffdd",
-                             font=("Arial", 10), padx=6, pady=4, relief=tk.SOLID, borderwidth=1).pack()
+                    tk.Label(
+                        tw,
+                        text=text,
+                        justify=tk.LEFT,
+                        bg="#ffffdd",
+                        font=("Arial", 10),
+                        padx=6,
+                        pady=4,
+                        relief=tk.SOLID,
+                        borderwidth=1,
+                    ).pack()
         elif self.tooltip:
             if not shift_held:
                 self.tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
@@ -1090,7 +1336,9 @@ class OverworldGUI:
                 else:
                     self.selected_army = clicked_army
                     if clicked_army.player == my_player:
-                        self.status_var.set(f"Selected: {clicked_army.label}. Waiting for your turn.")
+                        self.status_var.set(
+                            f"Selected: {clicked_army.label}. Waiting for your turn."
+                        )
                     elif clicked_army.player == 0:
                         self.status_var.set("Neutral army selected.")
                     else:
@@ -1104,7 +1352,9 @@ class OverworldGUI:
             return
 
         # Click own base -> build panel only if no own army, or army already selected
-        clicked_base = self.world.get_base_at(clicked) if hasattr(self.world, 'bases') else None
+        clicked_base = (
+            self.world.get_base_at(clicked) if hasattr(self.world, "bases") else None
+        )
         if clicked_base and clicked_base.player == my_player:
             if clicked_army and clicked_army.player == my_player:
                 if self.selected_army == clicked_army:
@@ -1127,7 +1377,9 @@ class OverworldGUI:
                     return
                 self.selected_army = clicked_army
                 if clicked_army.player == my_player:
-                    self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+                    self.status_var.set(
+                        f"Selected: {clicked_army.label}. Right-click to move."
+                    )
                 elif clicked_army.player == 0:
                     self.status_var.set("Neutral army selected.")
                 else:
@@ -1151,7 +1403,9 @@ class OverworldGUI:
                 return
             self.selected_army = clicked_army
             if clicked_army.player == my_player:
-                self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+                self.status_var.set(
+                    f"Selected: {clicked_army.label}. Right-click to move."
+                )
             elif clicked_army.player == 0:
                 self.status_var.set("Neutral army selected.")
             else:
@@ -1186,9 +1440,17 @@ class OverworldGUI:
         is_own = clicked_army and clicked_army.player == my_player
 
         # Check reachability within move range
-        occupied = {a.pos for a in self.world.armies if a is not self.selected_army and a is not clicked_army}
+        occupied = {
+            a.pos
+            for a in self.world.armies
+            if a is not self.selected_army and a is not clicked_army
+        }
         reachable = reachable_hexes(
-            self.selected_army.pos, ARMY_MOVE_RANGE, self.world.COLS, self.world.ROWS, occupied
+            self.selected_army.pos,
+            ARMY_MOVE_RANGE,
+            self.world.COLS,
+            self.world.ROWS,
+            occupied,
         )
         if is_own and clicked not in reachable:
             self.status_var.set("Too far. Right-click a highlighted hex to move.")
@@ -1202,8 +1464,12 @@ class OverworldGUI:
         # For enemy targets, check that we can reach an adjacent hex
         if is_enemy and clicked not in reachable:
             # Check if any neighbor of the enemy is reachable
-            adj = hex_neighbors(clicked[0], clicked[1], self.world.COLS, self.world.ROWS)
-            adj_reachable = [h for h in adj if h in reachable or h == self.selected_army.pos]
+            adj = hex_neighbors(
+                clicked[0], clicked[1], self.world.COLS, self.world.ROWS
+            )
+            adj_reachable = [
+                h for h in adj if h in reachable or h == self.selected_army.pos
+            ]
             if not adj_reachable:
                 self.status_var.set("Too far. Right-click a highlighted hex to move.")
                 return
@@ -1213,11 +1479,13 @@ class OverworldGUI:
             return
 
         if self._multiplayer:
-            self.client.send({
-                "type": "move_army",
-                "from": list(self.selected_army.pos),
-                "to": list(clicked),
-            })
+            self.client.send(
+                {
+                    "type": "move_army",
+                    "from": list(self.selected_army.pos),
+                    "to": list(clicked),
+                }
+            )
             self.selected_army = None
             self._refresh_army_info_panel(force=True)
             return
@@ -1260,7 +1528,7 @@ class OverworldGUI:
 
     def _check_local_base_destruction(self, pos, moving_player):
         """Destroy enemy base at pos in single-player mode."""
-        for base in getattr(self.world, 'bases', []):
+        for base in getattr(self.world, "bases", []):
             if base.pos == pos and base.alive and base.player != moving_player:
                 base.alive = False
                 self.status_var.set(f"P{base.player}'s base destroyed!")
@@ -1298,6 +1566,7 @@ class OverworldGUI:
         ow_p1, ow_p2 = attacker, defender
 
         import random
+
         p1_units = self._make_battle_units(ow_p1)
         p2_units = self._make_battle_units(ow_p2)
         rng_seed = random.randint(0, 2**31 - 1)
@@ -1316,43 +1585,34 @@ class OverworldGUI:
 
         def on_battle_complete(winner, p1_survivors, p2_survivors):
             # Use the GUI's current battle (may differ from original after reset)
-            current_battle = self._combat_gui.battle if hasattr(self, '_combat_gui') and self._combat_gui else battle
-            if hasattr(self, '_combat_gui') and self._combat_gui:
+            current_battle = (
+                self._combat_gui.battle
+                if hasattr(self, "_combat_gui") and self._combat_gui
+                else battle
+            )
+            if hasattr(self, "_combat_gui") and self._combat_gui:
                 self._combat_gui._close_log()
                 self._combat_gui = None
             self.combat_frame.destroy()
             self.combat_frame = None
 
-            # Map battle winner to overworld player
-            if winner == 1:
-                ow_winner = ow_p1.player
-            elif winner == 2:
-                ow_winner = ow_p2.player
-            else:
-                ow_winner = 0
+            result = resolve_battle(
+                self.world,
+                attacker,
+                defender,
+                current_battle,
+                winner,
+                p1_survivors,
+                p2_survivors,
+            )
+            ow_winner = result["winner"]
+            summary = result["summary"]
 
-            if winner == 0:
-                update_survivors(ow_p1, current_battle, 1)
-                update_survivors(ow_p2, current_battle, 2)
-                attacker.exhausted = True
-            elif ow_winner == attacker.player:
-                # Attacker won — advance to defender's position
-                update_survivors(attacker, current_battle, 1 if attacker is ow_p1 else 2)
-                self.world.armies.remove(defender)
-                self.world.move_army(attacker, defender.pos)
-                attacker.exhausted = True
-                self._check_local_base_destruction(defender.pos, attacker.player)
-                gained = self.world.collect_gold_at(defender.pos, attacker.player)
-                if gained:
-                    self._update_gold_display()
-            else:
-                # Defender won — attacker is destroyed, defender stays
-                update_survivors(defender, current_battle, 1 if defender is ow_p1 else 2)
-                self.world.armies.remove(attacker)
+            if result["moved_to"] is not None:
+                self._check_local_base_destruction(result["moved_to"], attacker.player)
+            if result["gained_gold"]:
+                self._update_gold_display()
 
-            summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
-            if winner == 0:
-                summary = f"P{ow_p1.player} vs P{ow_p2.player}: Draw"
             if self.battle_log is not None:
                 self.battle_log.insert(tk.END, summary)
                 battle_id = self._next_local_battle_id
@@ -1380,7 +1640,9 @@ class OverworldGUI:
                 self.status_var.set("Battle ended in a stalemate. Both armies survive.")
             else:
                 survivors = p1_survivors if winner == 1 else p2_survivors
-                self.status_var.set(f"Battle over. P{ow_winner} won with {survivors} survivors.")
+                self.status_var.set(
+                    f"Battle over. P{ow_winner} won with {survivors} survivors."
+                )
             self._draw()
 
         self._combat_gui = CombatGUI(
@@ -1432,31 +1694,51 @@ class OverworldGUI:
         for name, count in source.units:
             row = tk.Frame(left)
             row.pack(anchor="w", pady=2, fill=tk.X)
-            lbl = tk.Label(row, text=f"{count}x {name}", font=("Arial", 9), width=14, anchor="w")
+            lbl = tk.Label(
+                row, text=f"{count}x {name}", font=("Arial", 9), width=14, anchor="w"
+            )
             lbl.pack(side=tk.LEFT)
             src_labels[name] = lbl
-            tk.Button(row, text="+1", width=3,
-                      command=lambda n=name: _move_units(n, 1)).pack(side=tk.LEFT, padx=2)
-            tk.Button(row, text="+All", width=5,
-                      command=lambda n=name, c=count: _move_units(n, c)).pack(side=tk.LEFT)
+            tk.Button(
+                row, text="+1", width=3, command=lambda n=name: _move_units(n, 1)
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                row,
+                text="+All",
+                width=5,
+                command=lambda n=name, c=count: _move_units(n, c),
+            ).pack(side=tk.LEFT)
 
             row_mid = tk.Frame(mid)
             row_mid.pack(anchor="w", pady=2, fill=tk.X)
-            mid_lbl = tk.Label(row_mid, text=f"0x {name}", font=("Arial", 9), width=14, anchor="w")
+            mid_lbl = tk.Label(
+                row_mid, text=f"0x {name}", font=("Arial", 9), width=14, anchor="w"
+            )
             mid_lbl.pack(side=tk.LEFT)
             mid_labels[name] = mid_lbl
-            tk.Button(row_mid, text="-1", width=3,
-                      command=lambda n=name: _move_units(n, -1)).pack(side=tk.LEFT, padx=2)
-            tk.Button(row_mid, text="-All", width=5,
-                      command=lambda n=name, c=count: _move_units(n, -c)).pack(side=tk.LEFT)
+            tk.Button(
+                row_mid, text="-1", width=3, command=lambda n=name: _move_units(n, -1)
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                row_mid,
+                text="-All",
+                width=5,
+                command=lambda n=name, c=count: _move_units(n, -c),
+            ).pack(side=tk.LEFT)
 
         if dest_army:
             owner = "Neutral" if dest_army.player == 0 else f"P{dest_army.player}"
-            tk.Label(right, text=f"{owner} Army", font=("Arial", 9, "bold")).pack(anchor="w")
+            tk.Label(right, text=f"{owner} Army", font=("Arial", 9, "bold")).pack(
+                anchor="w"
+            )
             for name, count in dest_army.units:
-                tk.Label(right, text=f"{count}x {name}", font=("Arial", 9), anchor="w").pack(anchor="w")
+                tk.Label(
+                    right, text=f"{count}x {name}", font=("Arial", 9), anchor="w"
+                ).pack(anchor="w")
         else:
-            tk.Label(right, text="Empty", font=("Arial", 9), anchor="w").pack(anchor="w")
+            tk.Label(right, text="Empty", font=("Arial", 9), anchor="w").pack(
+                anchor="w"
+            )
 
         def _move_units(name, delta):
             available = dict(source.units).get(name, 0)
@@ -1478,14 +1760,18 @@ class OverworldGUI:
                 self.status_var.set("Select at least one unit to move.")
                 return
 
-            moving_units = [(name, cnt) for name, cnt in moving_counts.items() if cnt > 0]
+            moving_units = [
+                (name, cnt) for name, cnt in moving_counts.items() if cnt > 0
+            ]
             if self._multiplayer:
-                self.client.send({
-                    "type": SPLIT_MOVE,
-                    "from": list(source.pos),
-                    "to": list(dest_pos),
-                    "units": moving_units,
-                })
+                self.client.send(
+                    {
+                        "type": SPLIT_MOVE,
+                        "from": list(source.pos),
+                        "to": list(dest_pos),
+                        "units": moving_units,
+                    }
+                )
                 dialog.destroy()
                 self.selected_army = None
                 self._refresh_army_info_panel(force=True)
@@ -1500,7 +1786,9 @@ class OverworldGUI:
             if not source.units and source in self.world.armies:
                 self.world.armies.remove(source)
 
-            moving_army = OverworldArmy(player=source.player, units=moving_units, pos=source.pos)
+            moving_army = OverworldArmy(
+                player=source.player, units=moving_units, pos=source.pos
+            )
 
             if dest_army and dest_army.player != source.player:
                 self.world.armies.append(moving_army)
@@ -1524,7 +1812,9 @@ class OverworldGUI:
                 gained = self.world.collect_gold_at(dest_pos, moving_army.player)
                 self._check_local_base_destruction(dest_pos, moving_army.player)
                 if gained:
-                    self.status_var.set(f"Army moved to {dest_pos} and collected {gained} gold.")
+                    self.status_var.set(
+                        f"Army moved to {dest_pos} and collected {gained} gold."
+                    )
                 else:
                     self.status_var.set(f"Army moved to {dest_pos}.")
 
@@ -1533,106 +1823,140 @@ class OverworldGUI:
             self._update_gold_display()
             self._draw()
 
-        tk.Button(btn_row, text="Confirm", width=10, command=on_confirm).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row, text="Cancel", width=10, command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row, text="Confirm", width=10, command=on_confirm).pack(
+            side=tk.LEFT, padx=5
+        )
+        tk.Button(btn_row, text="Cancel", width=10, command=dialog.destroy).pack(
+            side=tk.LEFT, padx=5
+        )
 
     # --- Multiplayer message handling ---
 
+    def _msg_joined(self, msg):
+        self.player_id = msg["player_id"]
+        self.status_var.set(
+            f"You are P{self.player_id}. Waiting for players ({msg['player_count']}/{msg['needed']})..."
+        )
+
+    def _msg_faction_prompt(self, msg):
+        picking = msg["picking_player"]
+        taken = msg.get("taken", [])
+        if picking == self.player_id:
+            self.status_var.set("Choose your faction!")
+            self._pick_faction_multiplayer(taken)
+        else:
+            self.status_var.set(f"Waiting for P{picking} to choose a faction...")
+
+    def _msg_upgrade_prompt(self, msg):
+        picking = msg["picking_player"]
+        player_factions = msg.get("player_factions", {})
+        self.player_factions = {int(k): v for k, v in player_factions.items()}
+        player_heroes = msg.get("player_heroes", {})
+        self.player_heroes = {int(k): v for k, v in player_heroes.items()}
+        if picking == self.player_id:
+            self.status_var.set("Choose your upgrade!")
+            self._pick_upgrade_multiplayer(self.player_factions)
+        else:
+            self.status_var.set(f"Waiting for P{picking} to choose an upgrade...")
+
+    def _msg_game_start(self, msg):
+        self.player_id = msg["player_id"]
+        self.current_player = msg["current_player"]
+        self.faction = msg.get("faction")
+        self.player_factions = {
+            int(k): v for k, v in msg.get("player_factions", {}).items()
+        }
+        self.player_heroes = {
+            int(k): v for k, v in msg.get("player_heroes", {}).items()
+        }
+        if not self.faction and self.player_factions:
+            self.faction = self.player_factions.get(self.player_id)
+        self.player_upgrades = {
+            int(k): v for k, v in msg.get("player_upgrades", {}).items()
+        }
+        self.world.armies = deserialize_armies(msg["armies"])
+        self.world.bases = deserialize_bases(msg.get("bases", []))
+        self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+        self.world.gold_piles = [
+            GoldPile(pos=tuple(p["pos"]), value=p["value"])
+            for p in msg.get("gold_piles", [])
+        ]
+        self._update_gold_display()
+        if self._is_my_turn():
+            self.status_var.set(
+                f"Game started! Your turn (P{self.player_id}). Click your base to build units."
+            )
+        else:
+            self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
+        self._draw()
+
+    def _msg_state_update(self, msg):
+        self.world.armies = deserialize_armies(msg["armies"])
+        self.world.bases = deserialize_bases(msg.get("bases", []))
+        self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
+        self.world.gold_piles = [
+            GoldPile(pos=tuple(p["pos"]), value=p["value"])
+            for p in msg.get("gold_piles", [])
+        ]
+        if "player_factions" in msg:
+            self.player_factions = {
+                int(k): v for k, v in msg.get("player_factions", {}).items()
+            }
+        if "player_heroes" in msg:
+            self.player_heroes = {
+                int(k): v for k, v in msg.get("player_heroes", {}).items()
+            }
+        if "player_upgrades" in msg:
+            self.player_upgrades = {
+                int(k): v for k, v in msg.get("player_upgrades", {}).items()
+            }
+        self._update_gold_display()
+        self._refresh_build_panel()
+        self.current_player = msg["current_player"]
+        self.selected_army = None
+        status = msg.get("message", "")
+        if self._is_my_turn():
+            status += f" Your turn (P{self.player_id})."
+        else:
+            status += f" Waiting for P{self.current_player}."
+        self.status_var.set(status)
+        self._draw()
+
+    def _msg_battle_end(self, msg):
+        if self.battle_log is not None:
+            self.battle_log.insert(tk.END, msg["summary"])
+            self._battle_log_ids.append(msg["battle_id"])
+
+    def _msg_replay_data(self, msg):
+        self._show_replay(msg)
+
+    def _msg_game_over(self, msg):
+        winner = msg["winner"]
+        if winner == self.player_id:
+            self.status_var.set("You win!")
+        else:
+            self.status_var.set(f"P{winner} wins the game!")
+
+    def _msg_error(self, msg):
+        self.status_var.set(f"Error: {msg['message']}")
+
+    _SERVER_MSG_DISPATCH = {
+        "joined": _msg_joined,
+        "faction_prompt": _msg_faction_prompt,
+        "upgrade_prompt": _msg_upgrade_prompt,
+        "game_start": _msg_game_start,
+        "state_update": _msg_state_update,
+        "battle_end": _msg_battle_end,
+        "replay_data": _msg_replay_data,
+        "game_over": _msg_game_over,
+        "error": _msg_error,
+    }
+
     def _on_server_message(self, msg):
         """Handle a message from the server (called from main thread via queue polling)."""
-        msg_type = msg.get("type")
-
-        if msg_type == "joined":
-            self.player_id = msg["player_id"]
-            self.status_var.set(f"You are P{self.player_id}. Waiting for players ({msg['player_count']}/{msg['needed']})...")
-
-        elif msg_type == "faction_prompt":
-            picking = msg["picking_player"]
-            taken = msg.get("taken", [])
-            if picking == self.player_id:
-                self.status_var.set("Choose your faction!")
-                self._pick_faction_multiplayer(taken)
-            else:
-                self.status_var.set(f"Waiting for P{picking} to choose a faction...")
-
-        elif msg_type == "upgrade_prompt":
-            picking = msg["picking_player"]
-            player_factions = msg.get("player_factions", {})
-            self.player_factions = {int(k): v for k, v in player_factions.items()}
-            player_heroes = msg.get("player_heroes", {})
-            self.player_heroes = {int(k): v for k, v in player_heroes.items()}
-            if picking == self.player_id:
-                self.status_var.set("Choose your upgrade!")
-                self._pick_upgrade_multiplayer(self.player_factions)
-            else:
-                self.status_var.set(f"Waiting for P{picking} to choose an upgrade...")
-
-        elif msg_type == "game_start":
-            self.player_id = msg["player_id"]
-            self.current_player = msg["current_player"]
-            self.faction = msg.get("faction")
-            self.player_factions = {int(k): v for k, v in msg.get("player_factions", {}).items()}
-            self.player_heroes = {int(k): v for k, v in msg.get("player_heroes", {}).items()}
-            if not self.faction and self.player_factions:
-                self.faction = self.player_factions.get(self.player_id)
-            self.player_upgrades = {int(k): v for k, v in msg.get("player_upgrades", {}).items()}
-            self.world.armies = deserialize_armies(msg["armies"])
-            self.world.bases = deserialize_bases(msg.get("bases", []))
-            self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
-            self.world.gold_piles = [
-                GoldPile(pos=tuple(p["pos"]), value=p["value"])
-                for p in msg.get("gold_piles", [])
-            ]
-            self._update_gold_display()
-            if self._is_my_turn():
-                self.status_var.set(f"Game started! Your turn (P{self.player_id}). Click your base to build units.")
-            else:
-                self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
-            self._draw()
-
-        elif msg_type == "state_update":
-            self.world.armies = deserialize_armies(msg["armies"])
-            self.world.bases = deserialize_bases(msg.get("bases", []))
-            self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
-            self.world.gold_piles = [
-                GoldPile(pos=tuple(p["pos"]), value=p["value"])
-                for p in msg.get("gold_piles", [])
-            ]
-            if "player_factions" in msg:
-                self.player_factions = {int(k): v for k, v in msg.get("player_factions", {}).items()}
-            if "player_heroes" in msg:
-                self.player_heroes = {int(k): v for k, v in msg.get("player_heroes", {}).items()}
-            if "player_upgrades" in msg:
-                self.player_upgrades = {int(k): v for k, v in msg.get("player_upgrades", {}).items()}
-            self._update_gold_display()
-            self._refresh_build_panel()
-            self.current_player = msg["current_player"]
-            self.selected_army = None
-            status = msg.get("message", "")
-            if self._is_my_turn():
-                status += f" Your turn (P{self.player_id})."
-            else:
-                status += f" Waiting for P{self.current_player}."
-            self.status_var.set(status)
-            self._draw()
-
-        elif msg_type == "battle_end":
-            if self.battle_log is not None:
-                self.battle_log.insert(tk.END, msg["summary"])
-                self._battle_log_ids.append(msg["battle_id"])
-
-        elif msg_type == "replay_data":
-            self._show_replay(msg)
-
-        elif msg_type == "game_over":
-            winner = msg["winner"]
-            if winner == self.player_id:
-                self.status_var.set("You win!")
-            else:
-                self.status_var.set(f"P{winner} wins the game!")
-
-        elif msg_type == "error":
-            self.status_var.set(f"Error: {msg['message']}")
+        handler = self._SERVER_MSG_DISPATCH.get(msg.get("type"))
+        if handler:
+            handler(self, msg)
 
     def _close_replay(self):
         """Close the replay viewer and return to overworld."""
@@ -1652,10 +1976,12 @@ class OverworldGUI:
             if idx < len(self._battle_log_ids):
                 battle_id = self._battle_log_ids[idx]
                 if self.client:
-                    self.client.send({
-                        "type": "request_replay",
-                        "battle_id": battle_id,
-                    })
+                    self.client.send(
+                        {
+                            "type": "request_replay",
+                            "battle_id": battle_id,
+                        }
+                    )
                 else:
                     record = self._local_battle_history.get(battle_id)
                     if record:
@@ -1697,3 +2023,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
