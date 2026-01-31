@@ -82,6 +82,7 @@ class BattleRecord:
 class GameServer:
     def __init__(self, num_players=2, host="0.0.0.0", port=8765):
         self.num_players = num_players
+        self.total_players = 4
         self.host = host
         self.port = port
         self.players = {}  # player_id -> websocket
@@ -99,11 +100,12 @@ class GameServer:
         self.player_upgrades = {}  # player_id -> upgrade id
         self._upgrade_selection_order = []  # order of players to pick upgrades
         self._upgrade_selection_idx = 0  # which player is currently picking
+        self.ai_players = set()
         self._effective_stats_cache = {}
 
     def _build_world(self):
         """Create an Overworld with bases and gold, no starting armies."""
-        world = Overworld(num_players=self.num_players)
+        world = Overworld(num_players=self.total_players)
         return world
 
     async def broadcast(self, msg):
@@ -161,9 +163,15 @@ class GameServer:
         players |= {b.player for b in self.world.bases if b.alive}
         return players
 
+    def _active_human_players(self):
+        humans = set(self.players.keys())
+        players = {a.player for a in self.world.armies if a.player in humans}
+        players |= {b.player for b in self.world.bases if b.alive and b.player in humans}
+        return players
+
     def _next_player(self):
         """Advance to next player who still has armies."""
-        active = sorted(self._players_with_armies())
+        active = sorted(self._active_human_players())
         if not active:
             return self.current_player
         idx = active.index(self.current_player) if self.current_player in active else -1
@@ -521,13 +529,11 @@ class GameServer:
             )
             return
         self.player_factions[player_id] = faction_name
-        if player_id not in self.player_heroes:
-            heroes = list(get_heroes_for_faction(faction_name))
-            random.shuffle(heroes)
-            self.player_heroes[player_id] = heroes[: min(2, len(heroes))]
+        self._assign_heroes(player_id, faction_name)
         self._faction_selection_idx += 1
         if self._faction_selection_idx >= len(self._faction_selection_order):
             self._faction_selection_order = []
+            self._assign_ai_factions()
             await self._start_upgrade_selection()
         else:
             await self._prompt_next_faction()
@@ -560,6 +566,7 @@ class GameServer:
         self._upgrade_selection_idx += 1
         if self._upgrade_selection_idx >= len(self._upgrade_selection_order):
             self._upgrade_selection_order = []
+            self._assign_ai_upgrades()
             await self._start_game()
         else:
             await self._prompt_next_upgrade()
@@ -679,9 +686,55 @@ class GameServer:
 
     async def _start_faction_selection(self):
         """Begin sequential faction selection: P1 picks first, then P2, etc."""
+        self.ai_players = set(range(1, self.total_players + 1)) - set(
+            self.players.keys()
+        )
         self._faction_selection_order = sorted(self.players.keys())
         self._faction_selection_idx = 0
         await self._prompt_next_faction()
+
+    def _assign_heroes(self, player_id, faction_name):
+        if player_id not in self.player_heroes:
+            heroes = list(get_heroes_for_faction(faction_name))
+            random.shuffle(heroes)
+            self.player_heroes[player_id] = heroes[: min(2, len(heroes))]
+
+    def _assign_ai_factions(self):
+        taken = set(self.player_factions.values())
+        remaining = [f for f in FACTIONS if f not in taken]
+        for pid in sorted(self.ai_players):
+            if not remaining:
+                break
+            faction_name = remaining.pop(0)
+            self.player_factions[pid] = faction_name
+            self._assign_heroes(pid, faction_name)
+
+    def _assign_ai_upgrades(self):
+        for pid in self.ai_players:
+            faction = self.player_factions.get(pid)
+            if not faction:
+                continue
+            upgrades = get_upgrades_for_faction(faction)
+            if upgrades:
+                self.player_upgrades[pid] = random.choice(upgrades)["id"]
+
+    def _auto_build_ai(self, player_id):
+        faction = self.player_factions.get(player_id)
+        if not faction:
+            return
+        names = FACTIONS[faction]
+        spent = {n: 0 for n in names}
+        while self.world.gold.get(player_id, 0) > 0:
+            affordable = [
+                n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[player_id]
+            ]
+            if not affordable:
+                break
+            min_spent = min(spent[n] for n in affordable)
+            candidates = [n for n in affordable if spent[n] == min_spent]
+            name = random.choice(candidates)
+            spent[name] += UNIT_STATS[name]["value"]
+            self.world.build_unit(player_id, name)
 
     async def _prompt_next_faction(self):
         """Send a faction prompt to the next player who needs to pick."""
@@ -700,6 +753,10 @@ class GameServer:
         """Begin sequential upgrade selection after factions are chosen."""
         self._upgrade_selection_order = sorted(self.players.keys())
         self._upgrade_selection_idx = 0
+        if not self._upgrade_selection_order:
+            self._assign_ai_upgrades()
+            await self._start_game()
+            return
         await self._prompt_next_upgrade()
 
     async def _prompt_next_upgrade(self):
@@ -717,12 +774,15 @@ class GameServer:
     async def _start_game(self):
         self.started = True
         self.world = self._build_world()
-        self.current_player = 1
+        self.current_player = min(self.players.keys()) if self.players else 1
 
         for pid, hero_names in self.player_heroes.items():
             bases = self.world.get_player_bases(pid)
             for hero_name, base in zip(hero_names, bases):
                 self.world.add_unit_at_pos(pid, hero_name, base.pos)
+
+        for pid in self.ai_players:
+            self._auto_build_ai(pid)
 
         for pid in self.players:
             await self.send_to(

@@ -518,9 +518,9 @@ class OverworldGUI:
         self.player_upgrades = {}
         self.player_heroes = {}
         self._effective_stats_cache = {}
-        self.ai_faction = None
-        self.ai_upgrade = None
-        self.ai_hero = None
+        self.ai_factions = {}
+        self.ai_upgrades = {}
+        self.ai_heroes = {}
 
         root.title("Wager of War - Overworld")
 
@@ -531,31 +531,32 @@ class OverworldGUI:
             self.world.gold = {}
             self.world.gold_piles = []
         else:
-            self.world = Overworld()
+            self.world = Overworld(num_players=4)
             # Show faction selection before building
             self._pick_faction()
             self.player_factions[1] = self.faction
-            self.ai_faction = self._choose_ai_faction()
-            if self.ai_faction:
-                self.player_factions[2] = self.ai_faction
+            self._assign_ai_factions_singleplayer()
             # Spawn heroes after factions are picked, before upgrades
             self.player_heroes[1] = self._choose_random_heroes(self.faction)
             p1_bases = self.world.get_player_bases(1)
             for hero_name, base in zip(self.player_heroes[1], p1_bases):
                 self.world.add_unit_at_pos(1, hero_name, base.pos)
-            if self.ai_faction:
-                self.ai_hero = self._choose_random_heroes(self.ai_faction)
-                self.player_heroes[2] = self.ai_hero
-                p2_bases = self.world.get_player_bases(2)
-                for hero_name, base in zip(self.ai_hero, p2_bases):
-                    self.world.add_unit_at_pos(2, hero_name, base.pos)
+            for pid, faction_name in self.ai_factions.items():
+                heroes = self._choose_random_heroes(faction_name)
+                self.ai_heroes[pid] = heroes
+                self.player_heroes[pid] = heroes
+                bases = self.world.get_player_bases(pid)
+                for hero_name, base in zip(heroes, bases):
+                    self.world.add_unit_at_pos(pid, hero_name, base.pos)
             # Choose upgrades after factions are set
             self._pick_upgrade_singleplayer()
-            if self.ai_faction:
-                self.ai_upgrade = self._auto_pick_upgrade(self.ai_faction)
-                self.player_upgrades[2] = self.ai_upgrade
-            # Auto-build P2 armies since there's no AI
-            self._auto_build_p2()
+            for pid, faction_name in self.ai_factions.items():
+                upgrade = self._auto_pick_upgrade(faction_name)
+                self.ai_upgrades[pid] = upgrade
+                self.player_upgrades[pid] = upgrade
+            # Auto-build AI armies since there's no AI turns
+            for pid, faction_name in self.ai_factions.items():
+                self._auto_build_ai(pid, faction_name)
 
         self.selected_army = None
         self.build_panel = None  # track build popup
@@ -712,14 +713,12 @@ class OverworldGUI:
         self.faction = faction_name
         dialog.destroy()
 
-    def _choose_ai_faction(self):
-        """Pick a single-player AI faction different from the player's if possible."""
-        import random as rng
-
-        other_factions = [f for f in FACTIONS if f != self.faction]
-        if other_factions:
-            return rng.choice(other_factions)
-        return rng.choice(list(FACTIONS.keys()))
+    def _assign_ai_factions_singleplayer(self):
+        """Assign remaining factions to AI players (P2-P4) in single-player."""
+        remaining = [f for f in FACTIONS if f != self.faction]
+        for pid, faction_name in zip(range(2, 5), remaining):
+            self.ai_factions[pid] = faction_name
+            self.player_factions[pid] = faction_name
 
     def _choose_random_heroes(self, faction_name, count=2):
         import random as rng
@@ -934,18 +933,18 @@ class OverworldGUI:
         self.client.send({"type": SELECT_FACTION, "faction": faction_name})
         dialog.destroy()
 
-    def _auto_build_p2(self):
-        """Auto-spend P2's gold to create armies in single-player mode.
+    def _auto_build_ai(self, player_id, faction_name):
+        """Auto-spend an AI player's gold to create armies in single-player mode.
         Distributes gold roughly equally across all faction unit types."""
         import random as rng
 
-        p2_faction = self.ai_faction or self._choose_ai_faction()
-        self.ai_faction = p2_faction
-        names = FACTIONS[p2_faction]
+        names = FACTIONS[faction_name]
         spent = {n: 0 for n in names}
-        while self.world.gold.get(2, 0) > 0:
+        while self.world.gold.get(player_id, 0) > 0:
             affordable = [
-                n for n in names if UNIT_STATS[n]["value"] <= self.world.gold[2]
+                n
+                for n in names
+                if UNIT_STATS[n]["value"] <= self.world.gold[player_id]
             ]
             if not affordable:
                 break
@@ -954,7 +953,7 @@ class OverworldGUI:
             candidates = [n for n in affordable if spent[n] == min_spent]
             name = rng.choice(candidates)
             spent[name] += UNIT_STATS[name]["value"]
-            self.world.build_unit(2, name)
+            self.world.build_unit(player_id, name)
 
     def _update_gold_display(self):
         my_player = self.player_id if self._multiplayer else 1
