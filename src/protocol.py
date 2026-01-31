@@ -11,6 +11,7 @@ REQUEST_REPLAY = "request_replay"
 BUILD_UNIT = "build_unit"
 SELECT_FACTION = "select_faction"
 SELECT_UPGRADE = "select_upgrade"
+OBJECTIVE_REWARD_CHOICE = "objective_reward_choice"
 
 # Message types - Server -> Client
 JOINED = "joined"
@@ -22,6 +23,7 @@ BATTLE_END = "battle_end"
 REPLAY_DATA = "replay_data"
 ERROR = "error"
 GAME_OVER = "game_over"
+OBJECTIVE_REWARD_PROMPT = "objective_reward_prompt"
 
 
 def serialize_base(base):
@@ -63,6 +65,18 @@ def deserialize_gold_piles(data):
     from .overworld import GoldPile
 
     return [GoldPile(pos=tuple(p["pos"]), value=p["value"]) for p in data]
+
+
+def serialize_objectives(objectives):
+    """Convert a list of Objective objects to serializable list."""
+    return [{"pos": list(o.pos), "faction": o.faction} for o in objectives]
+
+
+def deserialize_objectives(data):
+    """Convert serialized objective dicts back to Objective objects."""
+    from .overworld import Objective
+
+    return [Objective(pos=tuple(o["pos"]), faction=o["faction"]) for o in data]
 
 
 def deserialize_armies(data):

@@ -13,8 +13,11 @@ UPGRADE_DEFS = {
             "tier": 1,
             "description": "Pages gain Onhit Self Ramp 1.",
             "effects": [
-                {"type": "append_ability", "unit": "Page",
-                 "ability": ability("onhit", "ramp", target="self", value=1)},
+                {
+                    "type": "append_ability",
+                    "unit": "Page",
+                    "ability": ability("onhit", "ramp", target="self", value=1),
+                },
             ],
         },
         {
@@ -23,9 +26,11 @@ UPGRADE_DEFS = {
             "tier": 2,
             "description": "Random Sunder abilities become Area Sunder.",
             "effects": [
-                {"type": "modify_abilities",
-                 "match": {"effect": "sunder", "target": "random"},
-                 "set": {"target": "area"}},
+                {
+                    "type": "modify_abilities",
+                    "match": {"effect": "sunder", "target": "random"},
+                    "set": {"target": "area"},
+                },
             ],
         },
         {
@@ -34,8 +39,11 @@ UPGRADE_DEFS = {
             "tier": 3,
             "description": "Stewards gain Wounded Self Ramp 1.",
             "effects": [
-                {"type": "append_ability", "unit": "Steward",
-                 "ability": ability("wounded", "ramp", target="self", value=1)},
+                {
+                    "type": "append_ability",
+                    "unit": "Steward",
+                    "ability": ability("wounded", "ramp", target="self", value=1),
+                },
             ],
         },
     ],
@@ -46,8 +54,13 @@ UPGRADE_DEFS = {
             "tier": 1,
             "description": "Apprentices gain Onhit Retreat 1.",
             "effects": [
-                {"type": "append_ability", "unit": "Apprentice",
-                 "ability": ability("onhit", "retreat", target="self", value=1, amplify=False)},
+                {
+                    "type": "append_ability",
+                    "unit": "Apprentice",
+                    "ability": ability(
+                        "onhit", "retreat", target="self", value=1, amplify=False
+                    ),
+                },
             ],
         },
         {
@@ -56,10 +69,12 @@ UPGRADE_DEFS = {
             "tier": 2,
             "description": "Conduit Amplify aura range becomes 2.",
             "effects": [
-                {"type": "modify_abilities",
-                 "unit": "Conduit",
-                 "match": {"effect": "amplify"},
-                 "set": {"aura": 2}},
+                {
+                    "type": "modify_abilities",
+                    "unit": "Conduit",
+                    "match": {"effect": "amplify"},
+                    "set": {"aura": 2},
+                },
             ],
         },
         {
@@ -79,8 +94,13 @@ UPGRADE_DEFS = {
             "tier": 1,
             "description": "Tincans gain Onhit Target Sunder 1.",
             "effects": [
-                {"type": "append_ability", "unit": "Tincan",
-                 "ability": ability("onhit", "sunder", target="target", value=1, amplify=False)},
+                {
+                    "type": "append_ability",
+                    "unit": "Tincan",
+                    "ability": ability(
+                        "onhit", "sunder", target="target", value=1, amplify=False
+                    ),
+                },
             ],
         },
         {
@@ -89,8 +109,13 @@ UPGRADE_DEFS = {
             "tier": 2,
             "description": "Kitboys gain Passive Aura 1 - Armor 1.",
             "effects": [
-                {"type": "append_ability", "unit": "Kitboy",
-                 "ability": ability("passive", "armor", value=1, aura=1, amplify=False)},
+                {
+                    "type": "append_ability",
+                    "unit": "Kitboy",
+                    "ability": ability(
+                        "passive", "armor", value=1, aura=1, amplify=False
+                    ),
+                },
             ],
         },
         {
@@ -101,7 +126,11 @@ UPGRADE_DEFS = {
             "effects": [
                 {
                     "type": "modify_abilities",
-                    "match": {"effect": "strike", "target": "random", "trigger": "periodic"},
+                    "match": {
+                        "effect": "strike",
+                        "target": "random",
+                        "trigger": "periodic",
+                    },
                     "set": {"target": "area", "charge": 2},
                 },
             ],
@@ -114,10 +143,12 @@ UPGRADE_DEFS = {
             "tier": 1,
             "description": "Blades spawn adjacent to the highest-health ally in range and are ready.",
             "effects": [
-                {"type": "modify_abilities",
-                 "unit": "Herald",
-                 "match": {"effect": "summon"},
-                 "set": {"summon_target": "highest", "summon_ready": True}},
+                {
+                    "type": "modify_abilities",
+                    "unit": "Herald",
+                    "match": {"effect": "summon"},
+                    "set": {"summon_target": "highest", "summon_ready": True},
+                },
             ],
         },
         {
@@ -126,9 +157,11 @@ UPGRADE_DEFS = {
             "tier": 2,
             "description": "Random Heal abilities become Area Heal abilities.",
             "effects": [
-                {"type": "modify_abilities",
-                 "match": {"effect": "heal", "target": "random"},
-                 "set": {"target": "area"}},
+                {
+                    "type": "modify_abilities",
+                    "match": {"effect": "heal", "target": "random"},
+                    "set": {"target": "area"},
+                },
             ],
         },
         {
@@ -137,19 +170,19 @@ UPGRADE_DEFS = {
             "tier": 3,
             "description": "Summon Blades every turn instead of every 3 turns.",
             "effects": [
-                {"type": "modify_abilities",
-                 "unit": "Herald",
-                 "match": {"effect": "summon"},
-                 "set": {"charge": None}},
+                {
+                    "type": "modify_abilities",
+                    "unit": "Herald",
+                    "match": {"effect": "summon"},
+                    "set": {"charge": None},
+                },
             ],
         },
     ],
 }
 
 UPGRADE_BY_ID = {
-    upgrade["id"]: upgrade
-    for upgrades in UPGRADE_DEFS.values()
-    for upgrade in upgrades
+    upgrade["id"]: upgrade for upgrades in UPGRADE_DEFS.values() for upgrade in upgrades
 }
 
 
@@ -161,11 +194,9 @@ def get_upgrade_by_id(upgrade_id):
     return UPGRADE_BY_ID.get(upgrade_id)
 
 
-def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
-    """Return a deep-copied unit stats dict with the upgrade applied."""
-    stats = deepcopy(base_stats)
+def _apply_upgrade_effects(stats, upgrade_def, faction_units):
     if not upgrade_def:
-        return stats
+        return
 
     def _match(ab, match):
         for k, v in match.items():
@@ -195,11 +226,26 @@ def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
             if unit == "__all__":
                 for uname in faction_units:
                     stat = effect["stat"]
-                    stats[uname][stat] = stats[uname].get(stat, 0) + effect.get("delta", 0)
+                    stats[uname][stat] = stats[uname].get(stat, 0) + effect.get(
+                        "delta", 0
+                    )
             else:
                 stat = effect["stat"]
                 stats[unit][stat] = stats[unit].get(stat, 0) + effect.get("delta", 0)
 
+
+def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
+    """Return a deep-copied unit stats dict with the upgrade applied."""
+    stats = deepcopy(base_stats)
+    _apply_upgrade_effects(stats, upgrade_def, faction_units)
+    return stats
+
+
+def apply_upgrades_to_unit_stats(base_stats, upgrade_ids, faction_units):
+    """Return a deep-copied unit stats dict with multiple upgrades applied."""
+    stats = deepcopy(base_stats)
+    for upgrade_id in upgrade_ids or []:
+        _apply_upgrade_effects(stats, get_upgrade_by_id(upgrade_id), faction_units)
     return stats
 
 

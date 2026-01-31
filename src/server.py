@@ -27,12 +27,13 @@ from .heroes import get_heroes_for_faction, HEROES_BY_FACTION
 from .upgrades import (
     get_upgrades_for_faction,
     get_upgrade_by_id,
-    apply_upgrade_to_unit_stats,
+    apply_upgrades_to_unit_stats,
 )
 from .protocol import (
     serialize_armies,
     serialize_bases,
     serialize_gold_piles,
+    serialize_objectives,
     encode,
     decode,
     JOIN,
@@ -43,6 +44,7 @@ from .protocol import (
     BUILD_UNIT,
     SELECT_FACTION,
     SELECT_UPGRADE,
+    OBJECTIVE_REWARD_CHOICE,
     JOINED,
     GAME_START,
     STATE_UPDATE,
@@ -52,6 +54,7 @@ from .protocol import (
     GAME_OVER,
     FACTION_PROMPT,
     UPGRADE_PROMPT,
+    OBJECTIVE_REWARD_PROMPT,
 )
 
 
@@ -101,6 +104,7 @@ class GameServer:
         self._upgrade_selection_order = []  # order of players to pick upgrades
         self._upgrade_selection_idx = 0  # which player is currently picking
         self.ai_players = set()
+        self._pending_objective_rewards = {}
         self._effective_stats_cache = {}
 
     def _build_world(self):
@@ -118,7 +122,8 @@ class GameServer:
                 pass
 
     async def _broadcast_state(self, message=""):
-        await self.broadcast(self._state_update_msg(message))
+        for pid in self.players:
+            await self.send_to(pid, self._state_update_msg(message, pid))
 
     async def send_to(self, player_id, msg):
         """Send message to a specific player."""
@@ -129,15 +134,22 @@ class GameServer:
             except websockets.ConnectionClosed:
                 pass
 
-    def _state_update_msg(self, message=""):
+    def _state_update_msg(self, message="", player_id=None):
+        objectives = []
+        if player_id is not None:
+            objectives = serialize_objectives(self._objectives_for_player(player_id))
+        armies = self.world.armies
+        if player_id is not None:
+            armies = self._armies_for_player(player_id)
         return {
             "type": STATE_UPDATE,
-            "armies": serialize_armies(self.world.armies),
+            "armies": serialize_armies(armies),
             "bases": serialize_bases(self.world.bases),
             "gold": self.world.gold,
             "gold_piles": serialize_gold_piles(
                 getattr(self.world, "gold_piles", [])
             ),
+            "objectives": objectives,
             "current_player": self.current_player,
             "message": message,
             "player_factions": self.player_factions,
@@ -169,6 +181,30 @@ class GameServer:
         players |= {b.player for b in self.world.bases if b.alive and b.player in humans}
         return players
 
+    def _objectives_for_player(self, player_id):
+        faction = self.player_factions.get(player_id)
+        if not faction:
+            return []
+        return [
+            o for o in getattr(self.world, "objectives", []) if o.faction == faction
+        ]
+
+    def _armies_for_player(self, player_id):
+        faction = self.player_factions.get(player_id)
+        objectives = {o.pos: o.faction for o in getattr(self.world, "objectives", [])}
+        armies = []
+        for a in self.world.armies:
+            if a.player == 0 and a.pos in objectives and objectives[a.pos] != faction:
+                continue
+            armies.append(a)
+        return armies
+
+    def _objective_at(self, pos):
+        for o in getattr(self.world, "objectives", []):
+            if o.pos == pos:
+                return o
+        return None
+
     def _next_player(self):
         """Advance to next player who still has armies."""
         active = sorted(self._active_human_players())
@@ -180,16 +216,18 @@ class GameServer:
     def _get_effective_stats(self, player):
         """Return unit stats with the player's upgrade applied."""
         faction = self.player_factions.get(player)
-        upgrade_id = self.player_upgrades.get(player)
-        cache_key = (faction, upgrade_id)
+        upgrade_ids = self.player_upgrades.get(player) or []
+        if not isinstance(upgrade_ids, list):
+            upgrade_ids = [upgrade_ids]
+        cache_key = (faction, tuple(upgrade_ids))
         cached = self._effective_stats_cache.get(player)
         if cached and cached.get("key") == cache_key:
             return cached["stats"]
         faction_units = FACTIONS.get(
             faction, list(UNIT_STATS.keys())
         ) + HEROES_BY_FACTION.get(faction, [])
-        stats = apply_upgrade_to_unit_stats(
-            ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units
+        stats = apply_upgrades_to_unit_stats(
+            ALL_UNIT_STATS, upgrade_ids, faction_units
         )
         self._effective_stats_cache[player] = {"key": cache_key, "stats": stats}
         return stats
@@ -245,6 +283,8 @@ class GameServer:
                 defender_player=defender.player,
             )
         )
+
+        await self._handle_objective_capture(attacker, defender, ow_winner)
 
         # Broadcast battle result
         await self.broadcast(
@@ -397,6 +437,15 @@ class GameServer:
         target = validation["target"]
         is_enemy = validation["is_enemy"]
 
+        if is_enemy and target.player == 0:
+            objective = self._objective_at(target.pos)
+            if objective and objective.faction != self.player_factions.get(player_id):
+                await self.send_to(
+                    player_id,
+                    {"type": ERROR, "message": "Objective belongs to another faction"},
+                )
+                return
+
         if is_enemy:
             await self._run_battle(army, target)
             if army in self.world.armies:
@@ -441,6 +490,15 @@ class GameServer:
                 player_id, {"type": ERROR, "message": "No units selected"}
             )
             return
+
+        if is_enemy and target.player == 0:
+            objective = self._objective_at(target.pos)
+            if objective and objective.faction != self.player_factions.get(player_id):
+                await self.send_to(
+                    player_id,
+                    {"type": ERROR, "message": "Objective belongs to another faction"},
+                )
+                return
 
         available = {name: count for name, count in army.units}
         moving_counts = {}
@@ -562,7 +620,7 @@ class GameServer:
                 player_id, {"type": ERROR, "message": "Invalid upgrade choice"}
             )
             return
-        self.player_upgrades[player_id] = upgrade_id
+        self.player_upgrades[player_id] = [upgrade_id]
         self._upgrade_selection_idx += 1
         if self._upgrade_selection_idx >= len(self._upgrade_selection_order):
             self._upgrade_selection_order = []
@@ -638,6 +696,33 @@ class GameServer:
                 player_id, {"type": ERROR, "message": f"Battle {bid} not found"}
             )
 
+    async def _handle_objective_reward_choice(self, player_id, msg):
+        pending = self._pending_objective_rewards.get(player_id)
+        if not pending:
+            await self.send_to(
+                player_id,
+                {"type": ERROR, "message": "No objective reward pending"},
+            )
+            return
+        reward = msg.get("reward")
+        if reward == "gold":
+            self.world.gold[player_id] = self.world.gold.get(player_id, 0) + 50
+            message = f"P{player_id} claimed 50 gold from an objective."
+        elif reward in pending.get("upgrade_ids", []):
+            upgrades = self.player_upgrades.get(player_id, [])
+            if reward not in upgrades:
+                upgrades.append(reward)
+                self.player_upgrades[player_id] = upgrades
+            message = f"P{player_id} unlocked an upgrade from an objective."
+        else:
+            await self.send_to(
+                player_id,
+                {"type": ERROR, "message": "Invalid objective reward"},
+            )
+            return
+        del self._pending_objective_rewards[player_id]
+        await self._broadcast_state(message)
+
     _MSG_HANDLERS = {
         MOVE_ARMY: _handle_move_army,
         SPLIT_MOVE: _handle_split_move,
@@ -646,6 +731,7 @@ class GameServer:
         BUILD_UNIT: _handle_build_unit,
         END_TURN: _handle_end_turn,
         REQUEST_REPLAY: _handle_request_replay,
+        OBJECTIVE_REWARD_CHOICE: _handle_objective_reward_choice,
     }
 
     async def handle_client(self, websocket):
@@ -718,7 +804,7 @@ class GameServer:
                 continue
             upgrades = get_upgrades_for_faction(faction)
             if upgrades:
-                self.player_upgrades[pid] = random.choice(upgrades)["id"]
+                self.player_upgrades[pid] = [random.choice(upgrades)["id"]]
 
     def _auto_build_ai(self, player_id):
         faction = self.player_factions.get(player_id)
@@ -737,6 +823,34 @@ class GameServer:
             name = random.choice(candidates)
             spent[name] += UNIT_STATS[name]["value"]
             self.world.build_unit(player_id, name)
+
+    async def _handle_objective_capture(self, attacker, defender, ow_winner):
+        if defender.player != 0 or ow_winner != attacker.player:
+            return
+        objective = self._objective_at(defender.pos)
+        if not objective:
+            return
+        faction = self.player_factions.get(attacker.player)
+        if objective.faction != faction:
+            return
+        # Remove objective so it can't be claimed twice
+        self.world.objectives.remove(objective)
+        upgrades = get_upgrades_for_faction(faction)
+        unlocked = set(self.player_upgrades.get(attacker.player, []))
+        available = [u["id"] for u in upgrades if u["id"] not in unlocked]
+        self._pending_objective_rewards[attacker.player] = {
+            "faction": faction,
+            "upgrade_ids": available,
+        }
+        await self.send_to(
+            attacker.player,
+            {
+                "type": OBJECTIVE_REWARD_PROMPT,
+                "faction": faction,
+                "upgrade_ids": available,
+                "gold": 50,
+            },
+        )
 
     async def _prompt_next_faction(self):
         """Send a faction prompt to the next player who needs to pick."""
@@ -793,11 +907,14 @@ class GameServer:
                 pid,
                 {
                     "type": GAME_START,
-                    "armies": serialize_armies(self.world.armies),
+                    "armies": serialize_armies(self._armies_for_player(pid)),
                     "bases": serialize_bases(self.world.bases),
                     "gold": self.world.gold,
                     "gold_piles": serialize_gold_piles(
                         getattr(self.world, "gold_piles", [])
+                    ),
+                    "objectives": serialize_objectives(
+                        self._objectives_for_player(pid)
                     ),
                     "current_player": self.current_player,
                     "player_id": pid,

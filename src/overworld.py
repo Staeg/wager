@@ -18,9 +18,11 @@ from .protocol import (
     deserialize_armies,
     deserialize_bases,
     deserialize_gold_piles,
+    deserialize_objectives,
     serialize_armies,
     serialize_bases,
     serialize_gold_piles,
+    serialize_objectives,
     SPLIT_MOVE,
     MOVE_ARMY,
     END_TURN,
@@ -28,6 +30,7 @@ from .protocol import (
     BUILD_UNIT,
     SELECT_FACTION,
     SELECT_UPGRADE,
+    OBJECTIVE_REWARD_CHOICE,
     JOINED,
     FACTION_PROMPT,
     UPGRADE_PROMPT,
@@ -37,13 +40,14 @@ from .protocol import (
     REPLAY_DATA,
     GAME_OVER,
     ERROR,
+    OBJECTIVE_REWARD_PROMPT,
 )
 from .ability_defs import ability
 from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
 from .upgrades import (
     get_upgrades_for_faction,
     get_upgrade_by_id,
-    apply_upgrade_to_unit_stats,
+    apply_upgrades_to_unit_stats,
     upgrade_effect_keywords,
     upgrade_effect_summaries,
 )
@@ -175,6 +179,8 @@ GOLD_PILE_COUNT = 5
 GOLD_PILE_MIN = 10
 GOLD_PILE_MAX = 20
 BASE_INCOME = 5
+OBJECTIVE_GUARD_VALUE = 50
+OBJECTIVES_PER_FACTION = 1
 
 PLAYER_COLORS = {
     0: "#888888",
@@ -316,6 +322,11 @@ class GoldPile:
     value: int
 
 
+@dataclass
+class Objective:
+    pos: tuple  # (col, row)
+    faction: str
+
 # Base positions: two per player
 BASE_POSITIONS = {
     1: [(1, 1), (2, 1)],
@@ -342,6 +353,8 @@ class Overworld:
                 self.bases.append(Base(player=p, pos=pos))
         self.gold_piles = []
         self._spawn_gold_piles()
+        self.objectives = []
+        self._spawn_objectives()
 
     def _spawn_gold_piles(self, count=GOLD_PILE_COUNT):
         excluded = {b.pos for b in self.bases if b.alive}
@@ -368,10 +381,48 @@ class Overworld:
                 OverworldArmy(player=0, units=[(name, count)], pos=pile.pos)
             )
 
+    def _spawn_objectives(self, count_per_faction=OBJECTIVES_PER_FACTION):
+        excluded = {b.pos for b in self.bases if b.alive}
+        excluded |= {p.pos for p in self.gold_piles}
+        excluded |= {a.pos for a in self.armies}
+        available = [
+            (c, r)
+            for r in range(self.ROWS)
+            for c in range(self.COLS)
+            if (c, r) not in excluded
+        ]
+        for faction_name in FACTIONS:
+            for _ in range(count_per_faction):
+                if not available:
+                    return
+                pos = self.rng.choice(available)
+                available.remove(pos)
+                self.objectives.append(Objective(pos=pos, faction=faction_name))
+                self._spawn_objective_guards(pos)
+
+    def _spawn_objective_guards(self, pos):
+        unit_names = list(UNIT_STATS.keys())
+        if len(unit_names) < 2:
+            return
+        choices = self.rng.sample(unit_names, 2)
+        per_type_value = OBJECTIVE_GUARD_VALUE / 4
+        units = []
+        for name in choices:
+            value = UNIT_STATS[name]["value"]
+            count = max(1, round(2 * per_type_value / value))
+            units.append((name, count))
+        self.armies.append(OverworldArmy(player=0, units=units, pos=pos))
+
     def get_gold_pile_at(self, pos):
         for pile in self.gold_piles:
             if pile.pos == pos:
                 return pile
+        return None
+
+    def get_objective_at(self, pos):
+        for objective in getattr(self, "objectives", []):
+            if objective.pos == pos:
+                return objective
         return None
 
     def collect_gold_at(self, pos, player):
@@ -467,6 +518,7 @@ class Overworld:
             "gold": self.gold,
             "bases": serialize_bases(self.bases),
             "gold_piles": serialize_gold_piles(self.gold_piles),
+            "objectives": serialize_objectives(getattr(self, "objectives", [])),
         }
 
     @classmethod
@@ -479,6 +531,7 @@ class Overworld:
         ow.gold = {int(k): v for k, v in data.get("gold", {}).items()}
         ow.bases = deserialize_bases(data.get("bases", []))
         ow.gold_piles = deserialize_gold_piles(data.get("gold_piles", []))
+        ow.objectives = deserialize_objectives(data.get("objectives", []))
         return ow
 
     def get_army_at(self, pos):
@@ -537,6 +590,7 @@ class OverworldGUI:
             self.world.bases = []
             self.world.gold = {}
             self.world.gold_piles = []
+            self.world.objectives = []
         else:
             self.world = Overworld(num_players=4)
             # Show faction selection before building
@@ -560,7 +614,8 @@ class OverworldGUI:
             for pid, faction_name in self.ai_factions.items():
                 upgrade = self._auto_pick_upgrade(faction_name)
                 self.ai_upgrades[pid] = upgrade
-                self.player_upgrades[pid] = upgrade
+                if upgrade:
+                    self.player_upgrades[pid] = [upgrade]
             # Auto-build AI armies since there's no AI turns
             for pid, faction_name in self.ai_factions.items():
                 self._auto_build_ai(pid, faction_name)
@@ -751,19 +806,45 @@ class OverworldGUI:
         faction = self.player_factions.get(player_id)
         if not faction:
             return ALL_UNIT_STATS
-        upgrade_id = self.player_upgrades.get(player_id)
-        cache_key = (faction, upgrade_id)
+        upgrade_ids = self.player_upgrades.get(player_id) or []
+        if not isinstance(upgrade_ids, list):
+            upgrade_ids = [upgrade_ids]
+        cache_key = (faction, tuple(upgrade_ids))
         cached = self._effective_stats_cache.get(player_id)
         if cached and cached.get("key") == cache_key:
             return cached["stats"]
         faction_units = FACTIONS.get(
             faction, list(UNIT_STATS.keys())
         ) + HEROES_BY_FACTION.get(faction, [])
-        stats = apply_upgrade_to_unit_stats(
-            ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units
+        stats = apply_upgrades_to_unit_stats(
+            ALL_UNIT_STATS, upgrade_ids, faction_units
         )
         self._effective_stats_cache[player_id] = {"key": cache_key, "stats": stats}
         return stats
+
+    def _get_unlocked_upgrades(self, player_id):
+        upgrades = self.player_upgrades.get(player_id) or []
+        if not isinstance(upgrades, list):
+            upgrades = [upgrades]
+        return upgrades
+
+    def _is_hidden_objective_guard(self, army, my_faction):
+        if army.player != 0:
+            return False
+        objective = self.world.get_objective_at(army.pos)
+        return objective is not None and objective.faction != my_faction
+
+    def _grant_objective_reward_local(self, player_id, reward):
+        if reward == "gold":
+            self.world.gold[player_id] = self.world.gold.get(player_id, 0) + 50
+            self.status_var.set("Objective reward: 50 gold.")
+            self._update_gold_display()
+            return
+        upgrades = self._get_unlocked_upgrades(player_id)
+        if reward not in upgrades:
+            upgrades.append(reward)
+            self.player_upgrades[player_id] = upgrades
+        self.status_var.set("Objective reward: upgrade unlocked.")
 
     def _show_upgrade_dialog(
         self, faction_name, player_factions, player_heroes, on_select
@@ -850,7 +931,7 @@ class OverworldGUI:
             return
 
         def on_select(upgrade_id, dialog):
-            self.player_upgrades[1] = upgrade_id
+            self.player_upgrades[1] = [upgrade_id]
             if dialog:
                 dialog.destroy()
             if upgrade_id:
@@ -940,6 +1021,41 @@ class OverworldGUI:
         """Send faction selection to server in multiplayer."""
         self.client.send({"type": SELECT_FACTION, "faction": faction_name})
         dialog.destroy()
+
+    def _show_objective_reward_dialog(self, faction_name, upgrade_ids, on_select):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Objective Reward")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Choose Your Reward", font=("Arial", 14, "bold")).pack(
+            pady=8
+        )
+        tk.Label(
+            dialog,
+            text=f"{faction_name} objective completed!",
+            font=("Arial", 9),
+        ).pack(pady=(0, 6))
+
+        for upgrade_id in upgrade_ids:
+            upgrade = get_upgrade_by_id(upgrade_id)
+            if not upgrade:
+                continue
+            text = upgrade.get("name", upgrade_id)
+            tk.Button(
+                dialog,
+                text=text,
+                width=28,
+                command=lambda uid=upgrade_id: (on_select(uid), dialog.destroy()),
+            ).pack(pady=2)
+
+        tk.Button(
+            dialog,
+            text="50 Gold",
+            width=28,
+            command=lambda: (on_select("gold"), dialog.destroy()),
+        ).pack(pady=(6, 8))
 
     def _auto_build_ai(self, player_id, faction_name):
         """Auto-spend an AI player's gold to create armies in single-player mode.
@@ -1170,6 +1286,7 @@ class OverworldGUI:
             and self.selected_army.player == my_player
             and self._is_my_turn()
         )
+        my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
         if show_reachable:
             occupied = {a.pos for a in w.armies if a is not self.selected_army}
             neighbors = reachable_hexes(
@@ -1177,7 +1294,7 @@ class OverworldGUI:
             )
             # Also include hexes occupied by enemy armies (attack targets)
             for a in w.armies:
-                if a.player != self.selected_army.player:
+                if a.player != self.selected_army.player and not self._is_hidden_objective_guard(a, my_faction):
                     neighbors.add(a.pos)
 
         for r in range(w.ROWS):
@@ -1237,8 +1354,32 @@ class OverworldGUI:
             elif hasattr(self, "_gold_sprite") and self._gold_sprite:
                 self.canvas.create_image(cx, cy, image=self._gold_sprite)
 
+        # Draw objectives (only visible to owning faction)
+        for obj in getattr(w, "objectives", []):
+            if obj.faction != my_faction:
+                continue
+            cx, cy = self._hex_center(obj.pos[0], obj.pos[1])
+            color = PLAYER_COLORS.get(my_player, "#ffffff")
+            self.canvas.create_oval(
+                cx - 8,
+                cy - 8,
+                cx + 8,
+                cy + 8,
+                outline=color,
+                width=2,
+            )
+            self.canvas.create_text(
+                cx,
+                cy,
+                text="O",
+                fill=color,
+                font=("Arial", 8, "bold"),
+            )
+
         # Draw armies
         for army in w.armies:
+            if self._is_hidden_objective_guard(army, my_faction):
+                continue
             cx, cy = self._hex_center(army.pos[0], army.pos[1])
             if army.exhausted:
                 color = PLAYER_COLORS_EXHAUSTED.get(army.player, "#444444")
@@ -1503,6 +1644,11 @@ class OverworldGUI:
         # Local single-player mode
         # Enemy -> battle
         if is_enemy:
+            if clicked_army.player == 0:
+                objective = self.world.get_objective_at(clicked)
+                if objective and objective.faction != self.faction:
+                    self.status_var.set("Objective belongs to another faction.")
+                    return
             army = self.selected_army
             self.selected_army = None
             self._start_battle(army, clicked_army)
@@ -1629,6 +1775,23 @@ class OverworldGUI:
                 self._check_local_base_destruction(result["moved_to"], attacker.player)
             if result["gained_gold"]:
                 self._update_gold_display()
+
+            if ow_winner == attacker.player and defender.player == 0:
+                objective = self.world.get_objective_at(defender.pos)
+                if objective and objective.faction == self.player_factions.get(
+                    attacker.player
+                ):
+                    self.world.objectives.remove(objective)
+                    upgrades = get_upgrades_for_faction(objective.faction)
+                    unlocked = set(self._get_unlocked_upgrades(attacker.player))
+                    available = [u["id"] for u in upgrades if u["id"] not in unlocked]
+                    self._show_objective_reward_dialog(
+                        objective.faction,
+                        available,
+                        lambda reward: self._grant_objective_reward_local(
+                            attacker.player, reward
+                        ),
+                    )
 
             if self.battle_log is not None:
                 self.battle_log.insert(tk.END, summary)
@@ -1808,6 +1971,11 @@ class OverworldGUI:
             )
 
             if dest_army and dest_army.player != source.player:
+                if dest_army.player == 0:
+                    objective = self.world.get_objective_at(dest_pos)
+                    if objective and objective.faction != self.faction:
+                        self.status_var.set("Objective belongs to another faction.")
+                        return
                 self.world.armies.append(moving_army)
                 self.selected_army = None
                 dialog.destroy()
@@ -1895,6 +2063,7 @@ class OverworldGUI:
         self.world.bases = deserialize_bases(msg.get("bases", []))
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
         self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
+        self.world.objectives = deserialize_objectives(msg.get("objectives", []))
         if "player_factions" in msg:
             self.player_factions = self._coerce_int_keys(msg.get("player_factions", {}))
         if "player_heroes" in msg:
@@ -1947,6 +2116,17 @@ class OverworldGUI:
     def _msg_error(self, msg):
         self.status_var.set(f"Error: {msg['message']}")
 
+    def _msg_objective_reward_prompt(self, msg):
+        faction = msg.get("faction")
+        upgrade_ids = msg.get("upgrade_ids", [])
+        self._show_objective_reward_dialog(
+            faction,
+            upgrade_ids,
+            lambda reward: self.client.send(
+                {"type": OBJECTIVE_REWARD_CHOICE, "reward": reward}
+            ),
+        )
+
     _SERVER_MSG_DISPATCH = {
         JOINED: _msg_joined,
         FACTION_PROMPT: _msg_faction_prompt,
@@ -1957,6 +2137,7 @@ class OverworldGUI:
         REPLAY_DATA: _msg_replay_data,
         GAME_OVER: _msg_game_over,
         ERROR: _msg_error,
+        OBJECTIVE_REWARD_PROMPT: _msg_objective_reward_prompt,
     }
 
     def _on_server_message(self, msg):
