@@ -65,6 +65,7 @@ GOLD_PILE_MIN = 10
 GOLD_PILE_MAX = 20
 
 PLAYER_COLORS = {
+    0: "#888888",
     1: "#4488ff",
     2: "#ff4444",
     3: "#44cc44",
@@ -72,6 +73,7 @@ PLAYER_COLORS = {
 }
 
 PLAYER_COLORS_EXHAUSTED = {
+    0: "#444444",
     1: "#223366",
     2: "#882222",
     3: "#226622",
@@ -176,10 +178,15 @@ class Overworld:
                 break
             pos = self.rng.choice(available)
             available.remove(pos)
-            self.gold_piles.append(GoldPile(
+            pile = GoldPile(
                 pos=pos,
                 value=self.rng.randint(GOLD_PILE_MIN, GOLD_PILE_MAX),
-            ))
+            )
+            self.gold_piles.append(pile)
+            name = self.rng.choice(list(UNIT_STATS.keys()))
+            value = UNIT_STATS[name]["value"]
+            count = max(1, round(2 * pile.value / value))
+            self.armies.append(OverworldArmy(player=0, units=[(name, count)], pos=pile.pos))
 
     def get_gold_pile_at(self, pos):
         for pile in self.gold_piles:
@@ -452,6 +459,8 @@ class OverworldGUI:
         gold_path = os.path.join(asset_dir, "gold_pile.png")
         img = Image.open(gold_path).convert("RGBA")
         self._gold_sprite = ImageTk.PhotoImage(img)
+        small = img.resize((16, 16), Image.LANCZOS)
+        self._gold_sprite_small = ImageTk.PhotoImage(small)
 
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
@@ -814,9 +823,15 @@ class OverworldGUI:
             self.canvas.create_text(cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold"))
 
         # Draw gold piles
+        army_positions = {a.pos for a in w.armies}
         for pile in getattr(w, "gold_piles", []):
             cx, cy = self._hex_center(pile.pos[0], pile.pos[1])
-            if hasattr(self, "_gold_sprite") and self._gold_sprite:
+            if pile.pos in army_positions:
+                # Show small gold icon at top-right of hex when army is on top
+                if hasattr(self, "_gold_sprite_small") and self._gold_sprite_small:
+                    s = self.HEX_SIZE
+                    self.canvas.create_image(cx + s * 0.45, cy - s * 0.45, image=self._gold_sprite_small)
+            elif hasattr(self, "_gold_sprite") and self._gold_sprite:
                 self.canvas.create_image(cx, cy, image=self._gold_sprite)
 
         # Draw armies
@@ -1074,12 +1089,8 @@ class OverworldGUI:
 
     def _start_battle(self, attacker, defender):
         """Start a local single-player battle."""
-        # Ensure overworld player IDs match battle player IDs:
-        # lower-numbered player is always battle P1
-        if attacker.player <= defender.player:
-            ow_p1, ow_p2 = attacker, defender
-        else:
-            ow_p1, ow_p2 = defender, attacker
+        # Attacker is always battle P1 (left side of screen)
+        ow_p1, ow_p2 = attacker, defender
 
         import random
         p1_units = self._make_battle_units(ow_p1)
