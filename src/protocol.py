@@ -54,7 +54,7 @@ def serialize_armies(armies):
 
 def deserialize_armies(data):
     """Convert serialized army dicts back to OverworldArmy objects."""
-    from overworld import OverworldArmy
+    from .overworld import OverworldArmy
     armies = []
     for d in data:
         armies.append(OverworldArmy(

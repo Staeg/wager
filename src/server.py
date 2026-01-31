@@ -14,18 +14,18 @@ else:
 
 import websockets
 
-from combat import Battle, Unit
-from overworld import Overworld, UNIT_STATS, ALL_UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
-from overworld import FACTIONS
-from heroes import get_heroes_for_faction
-from upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
-from protocol import (
+from .combat import Battle, Unit
+from .overworld import Overworld, UNIT_STATS, ALL_UNIT_STATS, ARMY_MOVE_RANGE, _reachable_hexes
+from .overworld import FACTIONS
+from .heroes import get_heroes_for_faction
+from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
+from .protocol import (
     serialize_armies, serialize_bases, encode, decode,
     JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION, SELECT_UPGRADE,
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
     REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT, UPGRADE_PROMPT,
 )
-from combat import hex_neighbors
+from .combat import hex_neighbors
 
 
 class BattleRecord:
@@ -115,28 +115,16 @@ class GameServer:
         """Convert an OverworldArmy to Battle-compatible dicts."""
         faction = self.player_factions.get(army.player)
         upgrade_id = self.player_upgrades.get(army.player)
-        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys()))
+        from .heroes import HEROES_BY_FACTION
+        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction, [])
         effective_stats = apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
         result = []
         for name, count in army.units:
             s = effective_stats[name]
             spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
-                    "range": s["range"], "count": count}
-            for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                        "amplify_range", "aura_armor", "aura_armor_range",
-                        "retreat", "heal_all", "sunder_all",
-                        "undying", "splash", "repair", "bombardment", "bombardment_range",
-                        "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
-                        "rage", "vengeance", "charge", "summon_count",
-                        "summon_ready", "summon_target_highest",
-                        "harvest", "harvest_range", "lifesteal", "freeze",
-                        "shadowstep_charge",
-                        "followup_damage", "followup_range", "followup_count",
-                        "global_boost",
-                        "lament_threshold", "lament_range", "lament_damage",
-                        "aura_vengeance", "aura_vengeance_range"):
-                if s.get(key, 0):
-                    spec[key] = s[key]
+                    "range": s["range"], "count": count,
+                    "abilities": s.get("abilities", []),
+                    "armor": s.get("armor", 0)}
             result.append(spec)
         return result
 

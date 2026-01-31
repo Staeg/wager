@@ -1,6 +1,7 @@
 """Faction upgrades and helpers for applying them to unit stats."""
 
 from copy import deepcopy
+from .ability_defs import ability
 
 
 UPGRADE_DEFS = {
@@ -9,27 +10,31 @@ UPGRADE_DEFS = {
             "id": "custodian_frenzy",
             "name": "Frenzy",
             "tier": 1,
-            "description": "Pages gain Ramp 1.",
+            "description": "Pages gain Onhit Self Ramp 1.",
             "effects": [
-                {"type": "add_ability", "unit": "Page", "ability": "ramp", "value": 1},
+                {"type": "append_ability", "unit": "Page",
+                 "ability": ability("onhit", "ramp", target="self", value=1)},
             ],
         },
         {
             "id": "custodian_sweeping_sands",
             "name": "Sweeping Sands",
             "tier": 2,
-            "description": "Sunder abilities hit all enemies in range instead of randomly.",
+            "description": "Random Sunder abilities become Area Sunder.",
             "effects": [
-                {"type": "flag_if_ability", "ability": "sunder", "flag": "sunder_all"},
+                {"type": "modify_abilities",
+                 "match": {"effect": "sunder", "target": "random"},
+                 "set": {"target": "area"}},
             ],
         },
         {
             "id": "custodian_trespassers",
             "name": "Trespassers",
             "tier": 3,
-            "description": "Stewards gain Rage 1.",
+            "description": "Stewards gain Wounded Self Ramp 1.",
             "effects": [
-                {"type": "add_ability", "unit": "Steward", "ability": "rage", "value": 1},
+                {"type": "append_ability", "unit": "Steward",
+                 "ability": ability("wounded", "ramp", target="self", value=1)},
             ],
         },
     ],
@@ -38,9 +43,10 @@ UPGRADE_DEFS = {
             "id": "weaver_skirmish_tactics",
             "name": "Skirmish Tactics",
             "tier": 1,
-            "description": "Apprentices gain the Retreat ability.",
+            "description": "Apprentices gain Onhit Retreat 1.",
             "effects": [
-                {"type": "add_ability", "unit": "Apprentice", "ability": "retreat", "value": 1},
+                {"type": "append_ability", "unit": "Apprentice",
+                 "ability": ability("onhit", "retreat", target="self", value=1, amplify=False)},
             ],
         },
         {
@@ -49,19 +55,19 @@ UPGRADE_DEFS = {
             "tier": 2,
             "description": "Conduit Amplify aura range becomes 2.",
             "effects": [
-                {"type": "set_ability", "unit": "Conduit", "ability": "amplify_range", "value": 2},
+                {"type": "modify_abilities",
+                 "unit": "Conduit",
+                 "match": {"effect": "amplify"},
+                 "set": {"aura": 2}},
             ],
         },
         {
             "id": "weaver_farcasting",
             "name": "Farcasting",
             "tier": 3,
-            "description": "Apprentices +1 range, Conduits/Seekers +2 range, Savants +3 range.",
+            "description": "All units gain +1 range.",
             "effects": [
-                {"type": "add_stat", "unit": "Apprentice", "stat": "range", "delta": 1},
-                {"type": "add_stat", "unit": "Conduit", "stat": "range", "delta": 2},
-                {"type": "add_stat", "unit": "Seeker", "stat": "range", "delta": 2},
-                {"type": "add_stat", "unit": "Savant", "stat": "range", "delta": 3},
+                {"type": "add_stat", "unit": "__all__", "stat": "range", "delta": 1},
             ],
         },
     ],
@@ -70,35 +76,32 @@ UPGRADE_DEFS = {
             "id": "artificer_corrosion",
             "name": "Corrosion",
             "tier": 1,
-            "description": "Tincans gain Sunder 1.",
+            "description": "Tincans gain Onhit Target Sunder 1.",
             "effects": [
-                {"type": "add_ability", "unit": "Tincan", "ability": "sunder", "value": 1},
+                {"type": "append_ability", "unit": "Tincan",
+                 "ability": ability("onhit", "sunder", target="target", value=1, amplify=False)},
             ],
         },
         {
             "id": "artificer_armor_kits",
             "name": "Armor Kits",
             "tier": 2,
-            "description": "Kitboys gain Aura 1 - Armor 1.",
+            "description": "Kitboys gain Passive Aura 1 - Armor 1.",
             "effects": [
-                {"type": "set_ability", "unit": "Kitboy", "ability": "aura_armor", "value": 1},
-                {"type": "set_ability", "unit": "Kitboy", "ability": "aura_armor_range", "value": 1},
+                {"type": "append_ability", "unit": "Kitboy",
+                 "ability": ability("passive", "armor", value=1, aura=1, amplify=False)},
             ],
         },
         {
             "id": "artificer_carpet_bombing",
             "name": "Carpet Bombing",
             "tier": 3,
-            "description": "Bombardment becomes Charge 2 and hits all enemies in range after attacking.",
+            "description": "Random Followup abilities become Charge 2 Area Followup abilities.",
             "effects": [
                 {
-                    "type": "set_for_ability",
-                    "ability": "bombardment",
-                    "set": {
-                        "bombardment_charge": 2,
-                        "bombardment_all": True,
-                        "bombardment_requires_attack": True,
-                    },
+                    "type": "modify_abilities",
+                    "match": {"effect": "strike", "target": "random", "trigger": "periodic"},
+                    "set": {"target": "area", "charge": 2},
                 },
             ],
         },
@@ -110,17 +113,21 @@ UPGRADE_DEFS = {
             "tier": 1,
             "description": "Blades spawn adjacent to the highest-health ally in range and are ready.",
             "effects": [
-                {"type": "set_flag", "unit": "Herald", "flag": "summon_target_highest", "value": True},
-                {"type": "set_flag", "unit": "Herald", "flag": "summon_ready", "value": True},
+                {"type": "modify_abilities",
+                 "unit": "Herald",
+                 "match": {"effect": "summon"},
+                 "set": {"summon_target": "highest", "summon_ready": True}},
             ],
         },
         {
             "id": "purifier_salvation",
             "name": "Salvation",
             "tier": 2,
-            "description": "Heal abilities target all allies in range instead of randomly.",
+            "description": "Random Heal abilities become Area Heal abilities.",
             "effects": [
-                {"type": "flag_if_ability", "ability": "heal", "flag": "heal_all"},
+                {"type": "modify_abilities",
+                 "match": {"effect": "heal", "target": "random"},
+                 "set": {"target": "area"}},
             ],
         },
         {
@@ -129,7 +136,10 @@ UPGRADE_DEFS = {
             "tier": 3,
             "description": "Summon Blades every turn instead of every 3 turns.",
             "effects": [
-                {"type": "set_ability", "unit": "Herald", "ability": "charge", "value": 1},
+                {"type": "modify_abilities",
+                 "unit": "Herald",
+                 "match": {"effect": "summon"},
+                 "set": {"charge": None}},
             ],
         },
     ],
@@ -156,35 +166,37 @@ def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
     if not upgrade_def:
         return stats
 
+    def _match(ab, match):
+        for k, v in match.items():
+            if ab.get(k) != v:
+                return False
+        return True
+
     for effect in upgrade_def.get("effects", []):
         etype = effect.get("type")
-        if etype == "add_ability":
+        if etype == "append_ability":
             unit = effect["unit"]
-            ability = effect["ability"]
-            value = effect.get("value", 0)
-            stats[unit][ability] = stats[unit].get(ability, 0) + value
-        elif etype == "set_ability":
-            unit = effect["unit"]
-            ability = effect["ability"]
-            stats[unit][ability] = effect.get("value")
+            stats[unit].setdefault("abilities", []).append(effect["ability"])
+        elif etype == "modify_abilities":
+            match = effect.get("match", {})
+            for unit in faction_units:
+                if effect.get("unit") and unit != effect["unit"]:
+                    continue
+                for ab in stats[unit].get("abilities", []):
+                    if _match(ab, match):
+                        for key, value in effect.get("set", {}).items():
+                            if value is None and key in ab:
+                                del ab[key]
+                            else:
+                                ab[key] = value
         elif etype == "add_stat":
             unit = effect["unit"]
-            stat = effect["stat"]
-            stats[unit][stat] = stats[unit].get(stat, 0) + effect.get("delta", 0)
-        elif etype == "set_flag":
-            unit = effect["unit"]
-            stats[unit][effect["flag"]] = effect.get("value", True)
-        elif etype == "flag_if_ability":
-            ability = effect["ability"]
-            flag = effect["flag"]
-            for unit in faction_units:
-                if stats[unit].get(ability, 0):
-                    stats[unit][flag] = True
-        elif etype == "set_for_ability":
-            ability = effect["ability"]
-            for unit in faction_units:
-                if stats[unit].get(ability, 0):
-                    for key, value in effect.get("set", {}).items():
-                        stats[unit][key] = value
+            if unit == "__all__":
+                for uname in faction_units:
+                    stat = effect["stat"]
+                    stats[uname][stat] = stats[uname].get(stat, 0) + effect.get("delta", 0)
+            else:
+                stat = effect["stat"]
+                stats[unit][stat] = stats[unit].get(stat, 0) + effect.get("delta", 0)
 
     return stats

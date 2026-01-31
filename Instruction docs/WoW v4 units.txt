@@ -16,35 +16,35 @@ Baselines, before considering variation and faction strengths using HP/Damage/Ra
 Custodian
 * Page: 3/1/1/2
 * Librarian: 2/0/3/12
-   * Sunder 1: at the end of turn, reduce the Armor of a random enemy in range by 1
+   * Periodic Random Sunder 1: at the end of turn, reduce the Armor of a random enemy in range by 1
 * Steward: 20/3/1/10
 * Gatekeeper: 32/4/2/25
-   * Aura 2 - Undying 2: if an ally within 2 hexes would die and has >0 attack damage, it loses 2 attack damage instead of taking damage
+   * Passive Aura 2 - Undying 2: if an ally within 2 hexes would die and has >0 attack damage, it loses 2 attack damage instead of taking damage
 Weaver
 * Apprentice: 8/1/2/5
-   * Push 1: moves the target back 1 hex horizontally if possible after attacking
+   * Onhit Push 1: moves the attack target back 1 hex horizontally if possible after attacking
 * Conduit: 5/2/3/10
-   * Aura 1 - Amplify 1: passively increases the values of ally abilities by 1 for all allies within 1 hex
+   * Passive Aura 1 - Amplify 1: passively increases the values of ally abilities by 1 for all allies within 1 range
       * Does not Amplify other Amplify effects or negative effects (such as Armor -X) and drawbacks (such as Charge Y)
 * Seeker: 3/1/4/10
-   * Ramp 1: increases attack damage by 1 after successful attacks
+   * Onhit Self Ramp 1: increases attack damage by 1 after successful attacks
 * Savant: 6/4/4/25
-   * Splash 1: deals 1 damage to all enemies adjacent to attack target after attacking
+   * Onhit Splash 1: deals 1 damage to all enemies adjacent to attack target after attacking
 Artificer
 * Tincan: 11/2/1/6
 * Golem: 16/2/1/14
-   * Armor 2: reduces all damage taken by 2
+   * Passive Armor 2: reduces all damage taken by 2
 * Kitboy: 6/2/2/10
-   * Repair 1: at the end of turn, heal all adjacent allies by 1
+   * Periodic Repair 1/1: at the end of turn, heal all allies within 1 range for 1 HP
 * Artillery: 8/4/4/25
-   * Followup 2/6: at the end of turn, additionally deal 2 damage to a random enemy within 6 range
+   * Periodic Random Strike 2/6: at the end of turn, additionally deal 2 damage to a random enemy within 6 range
 Purifier
 * Penitent: 5/1/1/5
-   * Rage 1: gain 1 attack damage after taking damage
+   * Wounded Self Ramp 1: gain 1 attack damage after taking damage
 * Priest: 3/1/3/10
-   * Heal 1: at the end of turn, heal random ally in range for 1
+   * Periodic Random Heal 3: at the end of turn, heal random ally in range for 3
 * Avenger: 20/3/1/12
-   * Vengeance 1: whenever an adjacent ally dies, gain 1 attack damage
+   * Lament 1/1 - Self Ramp 1: for every 1 ally in range 1 that dies, gain 1 attack damage
 * Herald: 6/1/4/25
-   * Charge 3 - Summon 2 Blades: Every 3 turns summons 2 Blades
+   * Charge 3 Periodic - Summon 2 Blades: Every 3 turns summons 2 Blades
       * Blade: 1/2/1/1 unit, created adjacent to its summoner exhausted

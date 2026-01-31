@@ -4,7 +4,7 @@ import random
 import os
 import sys
 from PIL import Image, ImageTk, ImageEnhance
-from heroes import HERO_STATS
+from .heroes import HERO_STATS
 
 # --- Hex grid utilities (offset coordinates, even-r) ---
 
@@ -106,22 +106,7 @@ def bfs_path_length(start, goal, occupied, cols, rows):
 class Unit:
     _id_counter = 0
 
-    # All known ability keys (for save/restore)
-    ABILITY_KEYS = ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                    "amplify_range", "aura_armor", "aura_armor_range",
-                    "retreat", "heal_all", "sunder_all",
-                    "undying", "splash", "repair", "bombardment", "bombardment_range",
-                    "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
-                    "rage", "vengeance", "charge", "summon_count",
-                    "summon_ready", "summon_target_highest",
-                    "harvest", "harvest_range", "lifesteal", "freeze",
-                    "shadowstep_charge",
-                    "followup_damage", "followup_range", "followup_count",
-                    "global_boost",
-                    "lament_threshold", "lament_range", "lament_damage",
-                    "aura_vengeance", "aura_vengeance_range")
-
-    def __init__(self, name, max_hp, damage, attack_range, player, **abilities):
+    def __init__(self, name, max_hp, damage, attack_range, player, abilities=None, armor=0):
         Unit._id_counter += 1
         self.id = Unit._id_counter
         self.name = name
@@ -130,17 +115,13 @@ class Unit:
         self.damage = damage
         self.attack_range = attack_range
         self.player = player
-        # Abilities — all default to 0
-        for key in Unit.ABILITY_KEYS:
-            setattr(self, key, abilities.get(key, 0))
+        self.abilities = abilities or []
+        self.armor = armor
         self._ramp_accumulated = 0
         self._rage_accumulated = 0
         self._vengeance_accumulated = 0
-        self._charge_counter = 0
-        self._bombardment_counter = 0
-        self._shadowstep_counter = 0
-        self._lament_counter = 0
         self._frozen_turns = 0
+        self._ability_counters = {}
         self.pos = None
         self.has_acted = False
         # For summoned units tracking
@@ -159,7 +140,7 @@ class Battle:
     MIN_ROWS = 5
     MAX_ROWS = 15
 
-    def __init__(self, p1_units=None, p2_units=None, rng_seed=None):
+    def __init__(self, p1_units=None, p2_units=None, rng_seed=None, apply_events_immediately=True):
         """Initialize battle.
 
         p1_units/p2_units: optional list of unit specs (tuples or dicts).
@@ -173,6 +154,7 @@ class Battle:
         self.rng_seed = rng_seed
         self.rng = random.Random(rng_seed)
         self._init_rng_state = self.rng.getstate()
+        self.apply_events_immediately = apply_events_immediately
         self.ROWS = self._compute_rows(p1_units, p2_units)
         self.units = []
         self.turn_order = []
@@ -220,14 +202,10 @@ class Battle:
                 "damage": u.damage, "_ramp_accumulated": u._ramp_accumulated,
                 "_rage_accumulated": u._rage_accumulated,
                 "_vengeance_accumulated": u._vengeance_accumulated,
-                "_charge_counter": u._charge_counter,
-                "_bombardment_counter": u._bombardment_counter,
-                "_shadowstep_counter": u._shadowstep_counter,
-                "_lament_counter": u._lament_counter,
                 "_frozen_turns": u._frozen_turns,
+                "_ability_counters": dict(u._ability_counters),
+                "armor": u.armor,
             }
-            for key in Unit.ABILITY_KEYS:
-                state[key] = getattr(u, key)
             unit_states[u.id] = state
         turn_ids = [u.id for u in self.turn_order]
         unit_ids = [u.id for u in self.units]
@@ -255,44 +233,168 @@ class Battle:
             u._ramp_accumulated = state["_ramp_accumulated"]
             u._rage_accumulated = state["_rage_accumulated"]
             u._vengeance_accumulated = state["_vengeance_accumulated"]
-            u._charge_counter = state["_charge_counter"]
-            u._bombardment_counter = state.get("_bombardment_counter", 0)
-            u._shadowstep_counter = state.get("_shadowstep_counter", 0)
-            u._lament_counter = state.get("_lament_counter", 0)
             u._frozen_turns = state.get("_frozen_turns", 0)
-            for key in Unit.ABILITY_KEYS:
-                setattr(u, key, state[key])
+            u._ability_counters = dict(state.get("_ability_counters", {}))
+            u.armor = state.get("armor", u.armor)
         self.turn_order = [id_to_unit[uid] for uid in turn_ids if uid in id_to_unit]
 
-    def _effective_ability(self, unit, ability_name):
-        """Return base ability value + sum of amplify from adjacent alive allies."""
-        base = getattr(unit, ability_name, 0)
+    def _ability_value(self, unit, ability):
+        base = ability.get("value", 0)
         if base == 0:
             return 0
+        if ability.get("amplify", True) is False:
+            return base
         bonus = 0
         for ally in self.units:
-            if ally.alive and ally.player == unit.player and ally.id != unit.id and ally.amplify > 0:
-                aura_range = ally.amplify_range if ally.amplify_range > 0 else 1
-                if hex_distance(unit.pos, ally.pos) <= aura_range:
-                    bonus += ally.amplify
+            if not ally.alive or ally.player != unit.player or ally.id == unit.id:
+                continue
+            for a in ally.abilities:
+                if a.get("trigger") == "passive" and a.get("effect") == "amplify":
+                    aura_range = a.get("aura", 1)
+                    if hex_distance(unit.pos, ally.pos) <= aura_range:
+                        bonus += a.get("value", 0)
         return base + bonus
 
     def _effective_armor(self, unit):
-        """Return base armor + sum of aura_armor from nearby allies."""
+        """Return base armor + passive armor on self + aura armor from allies."""
         bonus = 0
+        for ab in unit.abilities:
+            if ab.get("trigger") == "passive" and ab.get("effect") == "armor" and not ab.get("aura"):
+                bonus += self._ability_value(unit, ab)
         for ally in self.units:
-            if ally.alive and ally.player == unit.player and ally.id != unit.id and ally.aura_armor > 0:
-                aura_range = ally.aura_armor_range if ally.aura_armor_range > 0 else 1
-                if hex_distance(unit.pos, ally.pos) <= aura_range:
-                    bonus += self._effective_ability(ally, "aura_armor")
+            if ally.alive and ally.player == unit.player and ally.id != unit.id:
+                for ab in ally.abilities:
+                    if ab.get("trigger") == "passive" and ab.get("effect") == "armor" and ab.get("aura"):
+                        aura_range = ab.get("aura", 1)
+                        if hex_distance(unit.pos, ally.pos) <= aura_range:
+                            bonus += self._ability_value(ally, ab)
         return unit.armor + bonus
 
     def _global_boost_bonus(self, player):
         bonus = 0
         for ally in self.units:
-            if ally.alive and ally.player == player and ally.global_boost > 0:
-                bonus += self._effective_ability(ally, "global_boost")
+            if ally.alive and ally.player == player:
+                for ab in ally.abilities:
+                    if ab.get("trigger") == "passive" and ab.get("effect") == "boost":
+                        bonus += self._ability_value(ally, ab)
         return bonus
+
+    def _charge_ready(self, unit, idx, ability):
+        charge = ability.get("charge")
+        if not charge:
+            return True
+        key = f"{idx}:{ability.get('trigger')}"
+        unit._ability_counters[key] = unit._ability_counters.get(key, 0) + 1
+        if unit._ability_counters[key] < charge:
+            return False
+        unit._ability_counters[key] = 0
+        return True
+
+    def _targets_for_ability(self, unit, ability, context):
+        target = ability.get("target", "self")
+        rng = ability.get("range", unit.attack_range)
+        effect = ability.get("effect")
+        if target == "self":
+            return [unit]
+        if target == "target":
+            tgt = context.get("target")
+            return [tgt] if tgt and tgt.alive else []
+        if target == "global":
+            return [u for u in self.units if u.alive and u.player == unit.player]
+        if effect in ("heal", "fortify", "repair"):
+            pool = [u for u in self.units if u.alive and u.player == unit.player
+                    and hex_distance(unit.pos, u.pos) <= rng]
+        else:
+            pool = [u for u in self.units if u.alive and u.player != unit.player
+                    and hex_distance(unit.pos, u.pos) <= rng]
+        if target == "random":
+            return [self.rng.choice(pool)] if pool else []
+        if target == "area":
+            return pool
+        return []
+
+    def _queue_event(self, event_type, unit, target, amount, extra=None):
+        if self.last_action is None:
+            self.last_action = {}
+        event = {
+            "type": event_type,
+            "target_id": target.id,
+            "amount": amount,
+            "pos": target.pos,
+            "source_id": unit.id,
+        }
+        if extra:
+            event.update(extra)
+        key = f"{event_type}_events"
+        self.last_action.setdefault(key, []).append(event)
+
+    def _execute_ability(self, unit, ability, context):
+        effect = ability.get("effect")
+        value = self._ability_value(unit, ability)
+        if effect == "ramp":
+            unit.damage += value
+            unit._ramp_accumulated += value
+            if self.last_action is not None:
+                self.last_action["ramp_pos"] = unit.pos
+            return
+        if effect == "push":
+            targets = self._targets_for_ability(unit, ability, context)
+            if targets:
+                self._apply_push_value(unit, targets[0], value)
+            return
+        if effect == "retreat":
+            tgt = context.get("target")
+            if tgt:
+                self._apply_retreat(unit, tgt)
+            return
+        if effect == "freeze":
+            self._apply_freeze_value(unit, value)
+            return
+        if effect == "summon":
+            count = ability.get("count", 1)
+            self._apply_summon(unit, count, ability)
+            return
+        if effect == "shadowstep":
+            # handled during movement
+            return
+        if effect == "splash":
+            tgt = context.get("target")
+            if tgt:
+                self._queue_splash_events(unit, tgt, value)
+            return
+        if effect in ("heal", "fortify"):
+            targets = self._targets_for_ability(unit, ability, context)
+            for t in targets:
+                etype = "fortify" if effect == "fortify" else "heal"
+                self._queue_event(etype, unit, t, value)
+            return
+        if effect == "repair":
+            targets = self._targets_for_ability(unit, ability, context)
+            for t in targets:
+                self._queue_event("repair", unit, t, value)
+            return
+        if effect == "sunder":
+            targets = self._targets_for_ability(unit, ability, context)
+            for t in targets:
+                self._queue_event("sunder", unit, t, value, {"source_pos": unit.pos})
+            return
+        if effect == "strike":
+            targets = self._targets_for_ability(unit, ability, context)
+            for t in targets:
+                self._queue_event("strike", unit, t, value, {"source_pos": unit.pos})
+            return
+
+    def _trigger_abilities(self, unit, trigger, context):
+        for idx, ability in enumerate(unit.abilities):
+            if ability.get("trigger") != trigger:
+                continue
+            if trigger == "periodic" and ability.get("effect") == "shadowstep":
+                continue
+            if not self._charge_ready(unit, idx, ability):
+                continue
+            self._execute_ability(unit, ability, context)
+        if self.apply_events_immediately:
+            self._apply_queued_events()
 
     @staticmethod
     def _parse_unit_spec(spec, player):
@@ -308,21 +410,25 @@ class Battle:
             damage = spec["damage"]
             atk_range = spec["range"]
             count = spec["count"]
-            abilities = {k: v for k, v in spec.items()
-                         if k not in ("name", "max_hp", "damage", "range", "count", "value")}
+            abilities = spec.get("abilities", [])
+            armor = spec.get("armor", 0)
             for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player, **abilities))
+                units.append(Unit(name, max_hp, damage, atk_range, player, abilities=abilities, armor=armor))
         else:
             tup = spec
             name, max_hp, damage, atk_range, count = tup[:5]
             # Legacy positional: armor, heal, sunder, push, ramp, amplify
             legacy_keys = ("armor", "heal", "sunder", "push", "ramp", "amplify")
-            abilities = {}
+            abilities = []
+            armor = 0
             for i, key in enumerate(legacy_keys):
                 if len(tup) > 5 + i:
-                    abilities[key] = tup[5 + i]
+                    if key == "armor":
+                        armor = tup[5 + i]
+                    elif tup[5 + i]:
+                        abilities.append({"trigger": "periodic", "effect": key, "value": tup[5 + i]})
             for _ in range(count):
-                units.append(Unit(name, max_hp, damage, atk_range, player, **abilities))
+                units.append(Unit(name, max_hp, damage, atk_range, player, abilities=abilities, armor=armor))
         return units
 
     def _setup_armies(self, p1_units=None, p2_units=None):
@@ -426,120 +532,65 @@ class Battle:
             return 0
         would_die = target.hp - actual <= 0
         if would_die and target.damage > 0:
-            # Check for Undying aura from allies
             for ally in self.units:
-                if (ally.alive and ally.player == target.player and ally.id != target.id
-                        and ally.undying > 0):
-                    dist = hex_distance(target.pos, ally.pos)
-                    # Undying has an aura range (stored as undying_range via the aura range)
-                    # The doc says "Aura 2 - Undying 2": aura range is 2
-                    # We use the Gatekeeper's attack_range or a fixed 2 for the aura
-                    # Actually the doc says "ally within 2 hexes", so undying value is the
-                    # damage reduction, and aura range is always 2 for Gatekeeper
-                    aura_range = 2  # Undying aura range
-                    if dist <= aura_range and target.damage >= 2:
-                        # Instead of dying, lose 2 attack damage
-                        target.damage -= 2
-                        self.log.append(f"  {target} saved by Undying! Loses 2 dmg (now {target.damage})")
-                        if self.last_action is not None:
-                            self.last_action.setdefault("undying_saves", []).append(
-                                {"target": target.pos, "source": ally.pos})
-                        return 0
+                if ally.alive and ally.player == target.player and ally.id != target.id:
+                    for ab in ally.abilities:
+                        if ab.get("trigger") == "passive" and ab.get("effect") == "undying":
+                            aura_range = ab.get("aura", 2)
+                            if hex_distance(target.pos, ally.pos) <= aura_range:
+                                undying_val = self._ability_value(ally, ab)
+                                if target.damage >= undying_val:
+                                    target.damage -= undying_val
+                                    self.log.append(f"  {target} saved by Undying! Loses {undying_val} dmg (now {target.damage})")
+                                    if self.last_action is not None:
+                                        self.last_action.setdefault("undying_saves", []).append(
+                                            {"target": target.pos, "source": ally.pos})
+                                    return 0
         target.hp -= actual
-        # Rage: gain damage when taking damage
-        if target.alive and target.rage > 0 and actual > 0:
-            eff_rage = self._effective_ability(target, "rage")
-            target.damage += eff_rage
-            target._rage_accumulated += eff_rage
-            self.log.append(f"  {target} rages! +{eff_rage} dmg (now {target.damage})")
-            if self.last_action is not None:
-                self.last_action.setdefault("rage_positions", []).append(target.pos)
+        if target.alive and actual > 0:
+            self._trigger_abilities(target, "wounded", {"source": source_unit})
         if not target.alive:
             self._handle_unit_death(target, source_unit)
         return actual
 
     def _handle_unit_death(self, dead_unit, source_unit=None):
-        self._check_vengeance(dead_unit)
-        self._apply_aura_vengeance(dead_unit)
-        self._apply_harvest(dead_unit)
-        self._apply_lament(dead_unit)
-        if source_unit and source_unit.alive and source_unit.lifesteal > 0:
-            ls_val = self._effective_ability(source_unit, "lifesteal")
-            heal = min(ls_val, source_unit.max_hp - source_unit.hp)
-            if heal > 0:
-                source_unit.hp += heal
-                self.log.append(f"  {source_unit} lifesteals {heal} HP")
+        if source_unit and source_unit.alive:
+            self._trigger_abilities(source_unit, "onkill", {"target": dead_unit})
+        for unit in self.units:
+            if not unit.alive:
+                continue
+            # Lament: ally deaths within range
+            for idx, ab in enumerate(unit.abilities):
+                if ab.get("trigger") == "lament" and unit.player == dead_unit.player and unit.id != dead_unit.id:
+                    rng = ab.get("range", 1)
+                    if hex_distance(unit.pos, dead_unit.pos) <= rng:
+                        if self._charge_ready(unit, idx, ab):
+                            self._execute_ability(unit, ab, {"dead": dead_unit})
+            # Harvest: enemy deaths within range
+            for idx, ab in enumerate(unit.abilities):
+                if ab.get("trigger") == "harvest" and unit.player != dead_unit.player:
+                    rng = ab.get("range", unit.attack_range)
+                    if hex_distance(unit.pos, dead_unit.pos) <= rng:
+                        if self._charge_ready(unit, idx, ab):
+                            self._execute_ability(unit, ab, {"dead": dead_unit})
+            # Lament aura: allies within aura range gain ramp when nearby ally dies
+            for ab in unit.abilities:
+                if ab.get("trigger") == "passive" and ab.get("effect") == "lament_aura":
+                    aura_range = ab.get("aura", 0)
+                    inner_range = ab.get("range", 1)
+                    for ally in self.units:
+                        if (ally.alive and ally.player == unit.player and ally.id != dead_unit.id
+                                and hex_distance(ally.pos, unit.pos) <= aura_range
+                                and hex_distance(ally.pos, dead_unit.pos) <= inner_range):
+                            value = self._ability_value(unit, ab)
+                            ally.damage += value
+                            ally._vengeance_accumulated += value
+                            self.log.append(f"  {ally} gains {value} dmg from Aura Lament (now {ally.damage})")
+                            if self.last_action is not None:
+                                self.last_action.setdefault("vengeance_positions", []).append(ally.pos)
 
-    def _apply_aura_vengeance(self, dead_unit):
-        """Grant vengeance damage to allies in range of an aura-vengeance unit."""
-        if not dead_unit.pos:
-            return
-        for aura_unit in self.units:
-            if (aura_unit.alive and aura_unit.player == dead_unit.player
-                    and aura_unit.aura_vengeance > 0):
-                aura_range = aura_unit.aura_vengeance_range if aura_unit.aura_vengeance_range > 0 else 3
-                for ally in self.units:
-                    if (ally.alive and ally.player == dead_unit.player and ally.id != dead_unit.id
-                            and hex_distance(ally.pos, aura_unit.pos) <= aura_range
-                            and hex_distance(ally.pos, dead_unit.pos) <= 1):
-                        eff = self._effective_ability(aura_unit, "aura_vengeance")
-                        ally.damage += eff
-                        ally._vengeance_accumulated += eff
-                        self.log.append(f"  {ally} gains {eff} dmg from Aura Vengeance (now {ally.damage})")
-                        if self.last_action is not None:
-                            self.last_action.setdefault("vengeance_positions", []).append(ally.pos)
-
-    def _apply_harvest(self, dead_unit):
-        """When an enemy within range dies, heal allies around the harvester."""
-        for harvester in self.units:
-            if (harvester.alive and harvester.harvest > 0
-                    and harvester.player != dead_unit.player):
-                harvest_val = self._effective_ability(harvester, "harvest")
-                h_range = harvester.harvest_range if harvester.harvest_range > 0 else harvester.attack_range
-                if hex_distance(harvester.pos, dead_unit.pos) > h_range:
-                    continue
-                for ally in self.units:
-                    if ally.alive and ally.player == harvester.player and hex_distance(ally.pos, harvester.pos) <= h_range:
-                        ally.max_hp += harvest_val
-                        ally.hp += harvest_val
-                self.log.append(f"  {harvester} harvests vitality from a fallen foe")
-
-    def _apply_lament(self, dead_unit):
-        """Track allied deaths and trigger lament bombardments."""
-        for mourner in self.units:
-            if (mourner.alive and mourner.lament_threshold > 0
-                    and mourner.player == dead_unit.player):
-                l_range = mourner.lament_range if mourner.lament_range > 0 else mourner.attack_range
-                if hex_distance(mourner.pos, dead_unit.pos) > l_range:
-                    continue
-                lament_damage = self._effective_ability(mourner, "lament_damage")
-                mourner._lament_counter += 1
-                while mourner._lament_counter >= mourner.lament_threshold:
-                    mourner._lament_counter -= mourner.lament_threshold
-                    enemies = [e for e in self.units if e.alive and e.player != mourner.player
-                               and hex_distance(mourner.pos, e.pos) <= l_range]
-                    for enemy in enemies:
-                        actual = self._apply_damage(enemy, lament_damage, source_unit=mourner)
-                        if actual > 0:
-                            self.log.append(f"  {mourner} laments for {actual} dmg on {enemy}")
-
-    def _check_vengeance(self, dead_unit):
-        """When a unit dies, adjacent allies with vengeance gain damage."""
-        if not dead_unit.pos:
-            return
-        for ally in self.units:
-            if (ally.alive and ally.player == dead_unit.player and ally.id != dead_unit.id
-                    and ally.vengeance > 0 and hex_distance(ally.pos, dead_unit.pos) <= 1):
-                eff = self._effective_ability(ally, "vengeance")
-                ally.damage += eff
-                ally._vengeance_accumulated += eff
-                self.log.append(f"  {ally} gains {eff} dmg from Vengeance (now {ally.damage})")
-                if self.last_action is not None:
-                    self.last_action.setdefault("vengeance_positions", []).append(ally.pos)
-
-    def _apply_push(self, attacker, target):
+    def _apply_push_value(self, attacker, target, push_val):
         """Push target N hexes horizontally away from attacker after attacking."""
-        push_val = self._effective_ability(attacker, "push")
         if push_val <= 0 or not target.alive:
             return
         direction = 1 if target.pos[0] >= attacker.pos[0] else -1
@@ -560,39 +611,9 @@ class Battle:
                 self.last_action["push_from"] = old_pos
                 self.last_action["push_to"] = target.pos
 
-    def _apply_ramp(self, unit, damage_dealt):
-        """Increase unit's damage after a successful attack."""
-        ramp_val = self._effective_ability(unit, "ramp")
-        if ramp_val <= 0 or damage_dealt <= 0:
-            return
-        unit.damage += ramp_val
-        unit._ramp_accumulated += ramp_val
-        self.log.append(f"  {unit} ramps damage by {ramp_val} (now {unit.damage})")
-        if self.last_action is not None:
-            self.last_action["ramp_pos"] = unit.pos
-
-    def _apply_splash(self, attacker, target):
-        """Deal splash damage to all enemies adjacent to the attack target."""
-        splash_val = self._effective_ability(attacker, "splash")
-        if splash_val <= 0:
-            return
-        for enemy in list(self.units):
-            if (enemy.alive and enemy.player != attacker.player
-                    and enemy.id != target.id
-                    and hex_distance(enemy.pos, target.pos) <= 1):
-                if self.last_action is None:
-                    self.last_action = {}
-                self.last_action.setdefault("splash_events", []).append({
-                    "type": "splash",
-                    "target_id": enemy.id,
-                    "amount": splash_val,
-                    "pos": enemy.pos,
-                    "source_id": attacker.id,
-                })
-
     def _apply_retreat(self, unit, target):
         """Move unit one hex away from target after a successful attack."""
-        if unit.retreat <= 0:
+        if not target:
             return
         occupied = self._occupied() - {unit.pos}
         current_dist = hex_distance(unit.pos, target.pos)
@@ -610,11 +631,10 @@ class Battle:
         unit.pos = best
         self.log.append(f"  {unit} retreats to {best}")
 
-    def _apply_freeze(self, unit):
+    def _apply_freeze_value(self, unit, freeze_count):
         """Exhaust random ready enemies within attack range after attacking."""
-        if unit.freeze <= 0:
+        if freeze_count <= 0:
             return
-        freeze_count = self._effective_ability(unit, "freeze")
         candidates = [e for e in self.units if e.alive and e.player != unit.player
                       and e._frozen_turns == 0 and not e.has_acted
                       and hex_distance(unit.pos, e.pos) <= unit.attack_range]
@@ -626,21 +646,41 @@ class Battle:
             enemy._frozen_turns = 1
             self.log.append(f"  {enemy} is frozen")
 
-    def _apply_followup(self, unit):
-        """Deal extra followup damage at end of turn."""
-        if unit.followup_damage <= 0 or unit.followup_range <= 0 or not unit.alive:
+    def _apply_summon(self, unit, count, ability):
+        """Summon units adjacent to the summoner or another target."""
+        if count <= 0 or not unit.alive:
             return
-        follow_damage = self._effective_ability(unit, "followup_damage")
-        count = unit.followup_count if unit.followup_count > 0 else 1
+        occupied = self._occupied()
+        anchor = unit.pos
+        if ability.get("summon_target") == "highest":
+            allies = [a for a in self.units if a.alive and a.player == unit.player
+                      and hex_distance(unit.pos, a.pos) <= unit.attack_range]
+            if allies:
+                max_hp = max(a.hp for a in allies)
+                candidates = [a for a in allies if a.hp == max_hp]
+                anchor = self.rng.choice(candidates).pos
+        adj = hex_neighbors(anchor[0], anchor[1], self.COLS, self.ROWS)
+        empty = [pos for pos in adj if pos not in occupied]
+        summoned = 0
         for _ in range(count):
-            enemies = [e for e in self.units if e.alive and e.player != unit.player
-                       and hex_distance(unit.pos, e.pos) <= unit.followup_range]
-            if not enemies:
-                return
-            target = self.rng.choice(enemies)
-            actual = self._apply_damage(target, follow_damage, source_unit=unit)
-            if actual > 0:
-                self.log.append(f"  {unit} follows up on {target} for {actual} dmg")
+            if not empty:
+                break
+            pos = empty.pop(0)
+            blade = Unit("Blade", 1, 2, 1, unit.player, abilities=[])
+            blade.pos = pos
+            blade.has_acted = not ability.get("summon_ready", False)
+            blade.summoner_id = unit.id
+            self.units.append(blade)
+            summoned += 1
+        if summoned > 0:
+            self.log.append(f"  {unit} summons {summoned} Blade(s)!")
+
+    def _queue_splash_events(self, attacker, target, amount):
+        for enemy in list(self.units):
+            if (enemy.alive and enemy.player != attacker.player
+                    and enemy.id != target.id
+                    and hex_distance(enemy.pos, target.pos) <= 1):
+                self._queue_event("splash", attacker, enemy, amount)
 
     def _shadowstep_destination(self, unit, enemies, occupied):
         """Find a hex adjacent to the furthest enemy unit."""
@@ -672,6 +712,12 @@ class Battle:
             target.hp += healed
             if source:
                 self.log.append(f"  {source} heals {target} for {healed} HP")
+        elif etype == "fortify":
+            amount = event.get("amount", 0)
+            target.max_hp += amount
+            target.hp += amount
+            if source:
+                self.log.append(f"  {source} fortifies {target} for +{amount} HP")
         elif etype == "repair":
             amount = event.get("amount", 0)
             healed = min(amount, target.max_hp - target.hp)
@@ -694,97 +740,33 @@ class Battle:
                 self.log.append(f"  Splash hits {target} for {actual} dmg")
                 if not target.alive:
                     self.log.append(f"  {target.name}(P{target.player}) dies from splash!")
-        elif etype == "bombardment":
+        elif etype in ("bombardment", "strike"):
             amount = event.get("amount", 0)
             actual = self._apply_damage(target, amount, source_unit=source)
             if actual > 0 and source:
-                self.log.append(f"  {source} bombards {target} for {actual} dmg")
-                if not target.alive:
-                    self.log.append(f"  {target.name}(P{target.player}) dies from bombardment!")
-    def _apply_repair(self, unit):
-        """Heal all adjacent allies by repair value."""
-        repair_val = self._effective_ability(unit, "repair")
-        if repair_val <= 0 or not unit.alive:
-            return
-        for ally in self.units:
-            if (ally.alive and ally.player == unit.player and ally.id != unit.id
-                    and ally.hp < ally.max_hp and hex_distance(unit.pos, ally.pos) <= 1):
-                healed = min(repair_val, ally.max_hp - ally.hp)
-                if healed <= 0:
-                    continue
-                if self.last_action is None:
-                    self.last_action = {}
-                self.last_action.setdefault("repair_events", []).append({
-                    "type": "repair",
-                    "target_id": ally.id,
-                    "amount": healed,
-                    "pos": ally.pos,
-                    "source_id": unit.id,
-                })
+                if etype == "bombardment":
+                    self.log.append(f"  {source} bombards {target} for {actual} dmg")
+                    if not target.alive:
+                        self.log.append(f"  {target.name}(P{target.player}) dies from bombardment!")
+                else:
+                    self.log.append(f"  {source} strikes {target} for {actual} dmg")
 
-    def _apply_bombardment(self, unit):
-        """Deal bombardment damage to enemies within bombardment_range."""
-        bomb_val = self._effective_ability(unit, "bombardment")
-        if bomb_val <= 0 or not unit.alive:
+    def _apply_queued_events(self):
+        if not self.last_action:
             return
-        if unit.bombardment_requires_attack and not getattr(unit, "_attacked_this_turn", False):
-            return
-        if unit.bombardment_charge > 0:
-            unit._bombardment_counter += 1
-            if unit._bombardment_counter < unit.bombardment_charge:
-                return
-            unit._bombardment_counter = 0
-        bomb_range = unit.bombardment_range if unit.bombardment_range > 0 else 6
-        enemies_in_range = [e for e in self.units if e.alive and e.player != unit.player
-                            and hex_distance(unit.pos, e.pos) <= bomb_range]
-        if enemies_in_range:
-            targets = enemies_in_range if unit.bombardment_all else [self.rng.choice(enemies_in_range)]
-            for bomb_target in targets:
-                if self.last_action is None:
-                    self.last_action = {}
-                self.last_action.setdefault("bombardment_events", []).append({
-                    "type": "bombardment",
-                    "target_id": bomb_target.id,
-                    "amount": bomb_val,
-                    "pos": bomb_target.pos,
-                    "source_id": unit.id,
-                    "source_pos": unit.pos,
-                })
-
-    def _apply_charge_summon(self, unit):
-        """Every N turns, summon units adjacent to the summoner."""
-        if unit.charge <= 0 or unit.summon_count <= 0 or not unit.alive:
-            return
-        unit._charge_counter += 1
-        if unit._charge_counter < unit.charge:
-            return
-        unit._charge_counter = 0
-        # Find empty adjacent hexes around summon anchor
-        occupied = self._occupied()
-        anchor = unit.pos
-        if unit.summon_target_highest:
-            allies = [a for a in self.units if a.alive and a.player == unit.player
-                      and hex_distance(unit.pos, a.pos) <= unit.attack_range]
-            if allies:
-                max_hp = max(a.hp for a in allies)
-                candidates = [a for a in allies if a.hp == max_hp]
-                anchor = self.rng.choice(candidates).pos
-        adj = hex_neighbors(anchor[0], anchor[1], self.COLS, self.ROWS)
-        empty = [pos for pos in adj if pos not in occupied]
-        summoned = 0
-        for _ in range(unit.summon_count):
-            if not empty:
+        keys = ("heal_events", "fortify_events", "sunder_events",
+                "splash_events", "repair_events", "bombardment_events", "strike_events")
+        while True:
+            for key in keys:
+                events = self.last_action.get(key, [])
+                idx = 0
+                while idx < len(events):
+                    self.apply_effect_event(events[idx])
+                    idx += 1
+                if events:
+                    self.last_action[key] = []
+            if not any(self.last_action.get(key) for key in keys):
                 break
-            pos = empty.pop(0)
-            blade = Unit("Blade", 1, 2, 1, unit.player)
-            blade.pos = pos
-            blade.has_acted = not unit.summon_ready
-            blade.summoner_id = unit.id
-            self.units.append(blade)
-            summoned += 1
-        if summoned > 0:
-            self.log.append(f"  {unit} summons {summoned} Blade(s)!")
-
     def step(self):
         """Execute one unit's turn. Returns True if battle continues.
 
@@ -829,8 +811,6 @@ class Battle:
             return self.step()
 
         unit._attacked_this_turn = False
-        if unit.shadowstep_charge > 0:
-            unit._shadowstep_counter += 1
         enemies = [u for u in self.units if u.alive and u.player != unit.player]
         if not enemies:
             self.winner = unit.player
@@ -860,11 +840,7 @@ class Battle:
                 "type": "attack", "attacker_pos": unit.pos, "target_pos": target.pos,
                 "ranged": ranged, "killed": killed,
             }
-            self._apply_push(unit, target)
-            self._apply_ramp(unit, actual)
-            self._apply_splash(unit, target)
-            self._apply_retreat(unit, target)
-            self._apply_freeze(unit)
+            self._trigger_abilities(unit, "onhit", {"target": target, "damage": actual})
         else:
             # move toward closest enemy by actual path length
             occupied = self._occupied() - {unit.pos}
@@ -874,20 +850,17 @@ class Battle:
             target_enemy = self.rng.choice(closest)
             next_pos = bfs_next_step(unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS)
             old = unit.pos
-            if unit.shadowstep_charge > 0:
-                if unit._shadowstep_counter >= unit.shadowstep_charge:
-                    unit._shadowstep_counter = 0
-                    shadow_pos = self._shadowstep_destination(unit, enemies, occupied)
-                    if shadow_pos:
-                        unit.pos = shadow_pos
-                        self.log.append(f"{unit} shadowsteps {old}->{shadow_pos}")
-                    else:
-                        unit.pos = next_pos
-                        self.log.append(f"{unit} moves {old}->{next_pos}")
-                else:
-                    unit.pos = next_pos
-                    self.log.append(f"{unit} moves {old}->{next_pos}")
-            else:
+            shadowstepped = False
+            for idx, ab in enumerate(unit.abilities):
+                if ab.get("trigger") == "periodic" and ab.get("effect") == "shadowstep":
+                    if self._charge_ready(unit, idx, ab):
+                        shadow_pos = self._shadowstep_destination(unit, enemies, occupied)
+                        if shadow_pos:
+                            unit.pos = shadow_pos
+                            shadowstepped = True
+                            self.log.append(f"{unit} shadowsteps {old}->{shadow_pos}")
+                        break
+            if not shadowstepped:
                 unit.pos = next_pos
                 self.log.append(f"{unit} moves {old}->{next_pos}")
             moved_to = unit.pos
@@ -914,90 +887,12 @@ class Battle:
                     "type": "move_attack", "from": old, "to": moved_to,
                     "target_pos": target.pos, "ranged": ranged, "killed": killed,
                 }
-                self._apply_push(unit, target)
-                self._apply_ramp(unit, actual)
-                self._apply_splash(unit, target)
-                self._apply_retreat(unit, target)
-                self._apply_freeze(unit)
+                self._trigger_abilities(unit, "onhit", {"target": target, "damage": actual})
             else:
                 self.last_action = {"type": "move", "from": old, "to": moved_to}
 
-        # Heal ability
-        if unit.heal > 0 and unit.alive:
-            allies = [a for a in self.units if a.alive and a.player == unit.player
-                      and a.hp < a.max_hp and hex_distance(unit.pos, a.pos) <= unit.attack_range]
-            if allies:
-                heal_val = self._effective_ability(unit, "heal")
-                if unit.heal_all:
-                    for ally in allies:
-                        healed = min(heal_val, ally.max_hp - ally.hp)
-                        if healed <= 0:
-                            continue
-                        if self.last_action is None:
-                            self.last_action = {}
-                        self.last_action.setdefault("heal_events", []).append({
-                            "type": "heal",
-                            "target_id": ally.id,
-                            "amount": healed,
-                            "pos": ally.pos,
-                            "source_id": unit.id,
-                        })
-                else:
-                    heal_target = self.rng.choice(allies)
-                    healed = min(heal_val, heal_target.max_hp - heal_target.hp)
-                    if healed > 0:
-                        if self.last_action is None:
-                            self.last_action = {}
-                        self.last_action.setdefault("heal_events", []).append({
-                            "type": "heal",
-                            "target_id": heal_target.id,
-                            "amount": healed,
-                            "pos": heal_target.pos,
-                            "source_id": unit.id,
-                        })
-
-        # Sunder ability (reduce target armor)
-        if unit.sunder > 0 and unit.alive:
-            enemies_in_range = [e for e in self.units if e.alive and e.player != unit.player
-                                and hex_distance(unit.pos, e.pos) <= unit.attack_range]
-            if enemies_in_range:
-                sunder_val = self._effective_ability(unit, "sunder")
-                if unit.sunder_all:
-                    for enemy in enemies_in_range:
-                        if self.last_action is None:
-                            self.last_action = {}
-                        self.last_action.setdefault("sunder_events", []).append({
-                            "type": "sunder",
-                            "target_id": enemy.id,
-                            "amount": sunder_val,
-                            "pos": enemy.pos,
-                            "source_id": unit.id,
-                            "source_pos": unit.pos,
-                        })
-                else:
-                    sunder_target = self.rng.choice(enemies_in_range)
-                    if self.last_action is None:
-                        self.last_action = {}
-                    self.last_action.setdefault("sunder_events", []).append({
-                        "type": "sunder",
-                        "target_id": sunder_target.id,
-                        "amount": sunder_val,
-                        "pos": sunder_target.pos,
-                        "source_id": unit.id,
-                        "source_pos": unit.pos,
-                    })
-
-        # Repair ability (heal all adjacent allies)
-        self._apply_repair(unit)
-
-        # Bombardment ability (extra ranged damage)
-        self._apply_bombardment(unit)
-
-        # Charge / Summon ability
-        self._apply_charge_summon(unit)
-
-        # Followup ability (extra end-of-turn attacks)
-        self._apply_followup(unit)
+        # Periodic abilities (end of turn)
+        self._trigger_abilities(unit, "periodic", {"target": None})
 
         unit.has_acted = True
         self.current_index += 1
@@ -1007,31 +902,143 @@ class Battle:
 
 # --- GUI ---
 
-ABILITY_DESCRIPTIONS = {
-    "armor": "Reduces incoming damage by {value}",
-    "heal": "Heals allies in range for {value} HP per turn",
-    "sunder": "Reduces enemy armor in range by {value} after attacking",
-    "push": "Pushes the target {value} hex(es) away horizontally after attacking",
-    "ramp": "Increases damage by {value} after each successful attack",
-    "amplify": "Increases nearby allies' ability values by {value}",
-    "aura_armor": "Grants {value} armor to nearby allies",
-    "retreat": "Moves one hex away after attacking",
-    "harvest": "Allies near the harvester gain +{value} max/current HP when enemies fall",
-    "lifesteal": "Heals {value} HP when killing an enemy",
-    "freeze": "Exhausts {value} ready enemies in range after attacking",
-    "shadowstep_charge": "Every {value} turns, shadowstep adjacent to the furthest enemy",
-    "followup_damage": "Deals {value} extra damage to a nearby enemy at end of turn",
-    "global_boost": "Allied units gain {value} attack damage",
-    "lament_damage": "Triggers lament damage of {value} when allies die nearby",
-    "aura_vengeance": "Allies in range gain {value} damage when adjacent allies die",
-    "undying": "Allies within 2 hexes lose {value} attack instead of dying",
-    "splash": "Deals {value} damage to all enemies adjacent to the target after attacking",
-    "repair": "Heals all adjacent allies by {value} at end of turn",
-    "bombardment": "Deals {value} damage to a random enemy in range at end of turn",
-    "rage": "Gains {value} attack damage after taking damage",
-    "vengeance": "Gains {value} attack damage when an adjacent ally dies",
-    "charge": "Every {value} turns, summons Blades adjacent to this unit",
-}
+def format_ability(ability):
+    parts = []
+    aura = ability.get("aura")
+    if aura:
+        parts.append(f"Aura {aura}")
+    charge = ability.get("charge")
+    if charge:
+        parts.append(f"Charge {charge}")
+    trigger = ability.get("trigger")
+    if trigger:
+        parts.append(trigger.capitalize())
+    target = ability.get("target")
+    if target and target != "self":
+        parts.append(target.capitalize())
+    effect = ability.get("effect", "").replace("_", " ").title()
+    if effect:
+        parts.append(effect)
+    value = ability.get("value")
+    if value is not None:
+        rng = ability.get("range")
+        if rng is not None:
+            parts.append(f"{value}/{rng}")
+        else:
+            parts.append(str(value))
+    count = ability.get("count")
+    if count is not None and ability.get("effect") == "summon":
+        parts.append(f"x{count}")
+    return " ".join(parts)
+
+
+def describe_ability(ability):
+    trigger = ability.get("trigger")
+    effect = ability.get("effect")
+    target = ability.get("target", "self")
+    value = ability.get("value")
+    rng = ability.get("range")
+    aura = ability.get("aura")
+    count = ability.get("count")
+    charge = ability.get("charge")
+    range_text = f"{rng} range" if rng is not None else "attack range"
+
+    if charge:
+        if trigger == "periodic":
+            prefix = f"Every {charge} turns, "
+        elif trigger == "onhit":
+            prefix = f"Every {charge} hits, "
+        elif trigger == "onkill":
+            prefix = f"Every {charge} kills, "
+        elif trigger == "wounded":
+            prefix = f"Every {charge} times this unit is damaged, "
+        elif trigger == "lament":
+            prefix = f"Every {charge} allies that die within {range_text}, "
+        elif trigger == "harvest":
+            prefix = f"Every {charge} enemies that die within {range_text}, "
+        else:
+            prefix = f"Every {charge} triggers, "
+    else:
+        if trigger == "periodic":
+            prefix = "At end of turn, "
+        elif trigger == "onhit":
+            prefix = "After attacking, "
+        elif trigger == "onkill":
+            prefix = "After killing an enemy, "
+        elif trigger == "wounded":
+            prefix = "When this unit is damaged, "
+        elif trigger == "lament":
+            prefix = f"When an ally dies within {range_text}, "
+        elif trigger == "harvest":
+            prefix = f"When an enemy dies within {range_text}, "
+        elif trigger == "passive":
+            prefix = ""
+        else:
+            prefix = ""
+
+    if effect == "armor":
+        if aura:
+            return f"Allies within {aura} range gain {value} armor (reduces damage by {value})."
+        return f"Reduces all damage taken by {value}."
+    if effect == "amplify":
+        return f"Allied ability values within {aura} range are increased by {value}."
+    if effect == "boost":
+        return f"All allied units gain +{value} attack damage."
+    if effect == "undying":
+        return (
+            f"Allies within {aura} range that would die instead lose {value} attack damage."
+        )
+    if effect == "lament_aura":
+        return (
+            f"Allies within {aura} range gain {value} attack damage when an ally within {rng} of them dies."
+        )
+    if effect == "ramp":
+        return f"{prefix}gain {value} attack damage."
+    if effect == "push":
+        return f"{prefix}push the attacked target {value} hex{'es' if value != 1 else ''} horizontally if possible."
+    if effect == "retreat":
+        return f"{prefix}move 1 hex away from the attacked target."
+    if effect == "freeze":
+        return f"{prefix}exhaust {value} random ready enemies within attack range."
+    if effect == "splash":
+        return f"{prefix}deal {value} damage to enemies adjacent to the attacked target."
+    if effect in ("heal", "repair"):
+        verb = "heal" if effect == "heal" else "repair"
+        if target == "self":
+            return f"{prefix}{verb} {value} HP."
+        if target == "random":
+            return f"{prefix}{verb} a random ally within {range_text} for {value} HP."
+        if target == "area":
+            return f"{prefix}{verb} all allies within {range_text} for {value} HP."
+    if effect == "fortify":
+        if target == "area":
+            return f"{prefix}grant {value} max and current HP to all allies within {range_text}."
+        return f"{prefix}grant {value} max and current HP."
+    if effect == "sunder":
+        if target == "random":
+            return f"{prefix}reduce armor of a random enemy within {range_text} by {value}."
+        if target == "area":
+            return f"{prefix}reduce armor of all enemies within {range_text} by {value}."
+        if target == "target":
+            return f"{prefix}reduce armor of the attacked enemy by {value}."
+    if effect == "strike":
+        if target == "random":
+            return f"{prefix}deal {value} damage to a random enemy within {range_text}."
+        if target == "area":
+            return f"{prefix}deal {value} damage to all enemies within {range_text}."
+        if target == "target":
+            return f"{prefix}deal {value} damage to the attacked enemy."
+    if effect == "summon":
+        count_val = count or 1
+        target_hint = "adjacent to the summoner"
+        if ability.get("summon_target") == "highest":
+            target_hint = f"adjacent to the highest-health ally within {range_text}"
+        ready_hint = "They are ready." if ability.get("summon_ready") else "They are exhausted."
+        return f"{prefix}summon {count_val} Blade{'s' if count_val != 1 else ''} {target_hint}. {ready_hint}"
+    if effect == "shadowstep":
+        return f"{prefix}teleport adjacent to the furthest enemy instead of moving."
+
+    return format_ability(ability)
 
 
 class CombatGUI:
@@ -1044,6 +1051,7 @@ class CombatGUI:
         except AttributeError:
             pass
         self.battle = battle if battle is not None else Battle()
+        self.battle.apply_events_immediately = False
         self.on_complete = on_complete
 
         # layout
@@ -1171,15 +1179,20 @@ class CombatGUI:
         for u in b.units:
             if not u.alive:
                 continue
-            aura_range = 0
-            aura_color = ""
-            if u.amplify > 0:
-                aura_range = 1
-                aura_color = "#8844cc"  # purple for amplify
-            elif u.undying > 0:
-                aura_range = 2
-                aura_color = "#ccaa22"  # gold for undying
-            if aura_range > 0:
+            aura_specs = []
+            for ab in u.abilities:
+                if ab.get("trigger") != "passive":
+                    continue
+                aura_range = ab.get("aura")
+                if not aura_range:
+                    continue
+                if ab.get("effect") == "amplify":
+                    aura_specs.append((aura_range, "#8844cc"))  # purple for amplify
+                elif ab.get("effect") == "undying":
+                    aura_specs.append((aura_range, "#ccaa22"))  # gold for undying
+                elif ab.get("effect") == "armor":
+                    aura_specs.append((aura_range, "#5aa7ff"))  # blue for armor aura
+            for aura_range, aura_color in aura_specs:
                 # Draw faint highlight on all hexes within aura range
                 for r2 in range(b.ROWS):
                     for c2 in range(b.COLS):
@@ -1231,13 +1244,14 @@ class CombatGUI:
                 self.status_var.set("Stalemate - Draw!")
             else:
                 self.status_var.set(f"Player {b.winner} wins!")
-            if self.on_complete and not self.return_btn:
-                p1_survivors = sum(1 for u in b.units if u.alive and u.player == 1)
-                p2_survivors = sum(1 for u in b.units if u.alive and u.player == 2)
-                self.return_btn = tk.Button(
-                    self.canvas, text="Return to Overworld", font=("Arial", 14),
-                    command=lambda: self.on_complete(b.winner, p1_survivors, p2_survivors)
-                )
+            if self.on_complete:
+                if not self.return_btn:
+                    p1_survivors = sum(1 for u in b.units if u.alive and u.player == 1)
+                    p2_survivors = sum(1 for u in b.units if u.alive and u.player == 2)
+                    self.return_btn = tk.Button(
+                        self.canvas, text="Return to Overworld", font=("Arial", 14),
+                        command=lambda: self.on_complete(b.winner, p1_survivors, p2_survivors)
+                    )
                 self.canvas.create_window(
                     self.canvas.winfo_reqwidth() // 2,
                     self.canvas.winfo_reqheight() // 2,
@@ -1245,6 +1259,9 @@ class CombatGUI:
                 )
         else:
             self.status_var.set(f"Round {b.round_num}")
+            if self.return_btn:
+                self.return_btn.destroy()
+                self.return_btn = None
 
         # update log
         self._update_log_display()
@@ -1299,27 +1316,17 @@ class CombatGUI:
             tk.Label(tw, text=main_text, fg="white", bg="#222",
                      font=("Arial", 10, "bold"), padx=6, pady=2).pack(anchor="w")
 
-            abilities = []
-            for ab_key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                           "aura_armor", "retreat",
-                           "harvest", "lifesteal", "freeze", "shadowstep_charge",
-                           "followup_damage", "global_boost", "lament_damage", "aura_vengeance",
-                           "undying", "splash", "repair", "bombardment",
-                           "rage", "vengeance", "charge"):
-                val = getattr(unit, ab_key, 0)
-                if val > 0 and ab_key in ABILITY_DESCRIPTIONS:
-                    abilities.append((ab_key, val))
-
-            if abilities:
+            if unit.abilities:
                 row = tk.Frame(tw, bg="#222")
                 row.pack(anchor="w", padx=4, pady=(0, 2))
-                for ability_name, value in abilities:
-                    lbl = tk.Label(row, text=f"{ability_name.capitalize()}:{value}",
+                for ability in unit.abilities:
+                    text = format_ability(ability)
+                    description = describe_ability(ability)
+                    lbl = tk.Label(row, text=text,
                                    fg="#aaffaa", bg="#333", font=("Arial", 9),
                                    padx=4, pady=1, relief=tk.RAISED, borderwidth=1)
                     lbl.pack(side=tk.LEFT, padx=2)
-                    desc = ABILITY_DESCRIPTIONS[ability_name].format(value=value)
-                    self._bind_ability_hover(lbl, tw, desc)
+                    self._bind_ability_hover(lbl, tw, description)
         else:
             if not shift_held:
                 self._hide_tooltip()
@@ -1699,6 +1706,13 @@ class CombatGUI:
             anims.append(lambda done, s=bsrc, d=bdst, e=event: self._animate_bombardment_arrow(
                 s, d, lambda: self._apply_event(e, done)
             ))
+        # Strike — orange arrow from source to target
+        for event in action.get("strike_events", []):
+            bsrc = event.get("source_pos")
+            bdst = event["pos"]
+            anims.append(lambda done, s=bsrc, d=bdst, e=event: self._animate_bombardment_arrow(
+                s, d, lambda: self._apply_event(e, done)
+            ))
 
         self._chain_anims(anims, on_done)
 
@@ -1712,11 +1726,15 @@ class CombatGUI:
 
     def _play_heal_if_needed(self, action, on_done):
         """Play heal animations and apply their effects in sequence."""
-        if not action or not action.get("heal_events"):
+        events = []
+        if action:
+            events.extend(action.get("heal_events", []))
+            events.extend(action.get("fortify_events", []))
+        if not events:
             on_done()
             return
         anims = []
-        for event in action["heal_events"]:
+        for event in events:
             pos = event["pos"]
             anims.append(lambda done, p=pos, e=event: self._animate_heal(
                 p, lambda: self._apply_event(e, done)
@@ -1725,12 +1743,17 @@ class CombatGUI:
 
     def _apply_event(self, event, on_done):
         self.battle.apply_effect_event(event)
+        event["_applied"] = True
         self._draw()
         on_done()
 
     def _play_post_attack_anims(self, action, on_done):
         """Chain: heal -> ability effects."""
-        self._play_heal_if_needed(action, lambda: self._play_ability_anims(action, on_done))
+        def finalize():
+            self._apply_all_events(action)
+            self._draw()
+            on_done()
+        self._play_heal_if_needed(action, lambda: self._play_ability_anims(action, finalize))
 
     def on_step(self):
         self.battle.step()
@@ -1775,8 +1798,28 @@ class CombatGUI:
         self.auto_running = False
         self.auto_btn.config(text="Auto")
         while self.battle.step():
-            pass
+            self._apply_all_events(self.battle.last_action)
         self._draw()
+
+    def _apply_all_events(self, action):
+        if not action:
+            return
+        keys = ("heal_events", "fortify_events", "sunder_events",
+                "splash_events", "repair_events", "bombardment_events", "strike_events")
+        while True:
+            applied_any = False
+            for key in keys:
+                events = action.get(key, [])
+                idx = 0
+                while idx < len(events):
+                    event = events[idx]
+                    if not event.get("_applied"):
+                        self.battle.apply_effect_event(event)
+                        event["_applied"] = True
+                        applied_any = True
+                    idx += 1
+            if not applied_any:
+                break
 
     def toggle_auto(self):
         self.auto_running = not self.auto_running

@@ -6,7 +6,7 @@ import threading
 
 import websockets
 
-from protocol import encode, decode
+from .protocol import encode, decode
 
 
 class GameClient:

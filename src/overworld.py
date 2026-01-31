@@ -1,32 +1,46 @@
 import tkinter as tk
 import math
 from dataclasses import dataclass
-from combat import Battle, CombatGUI, Unit, hex_neighbors, ABILITY_DESCRIPTIONS
-from heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
-from upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
+from .combat import Battle, CombatGUI, Unit, hex_neighbors, format_ability, describe_ability
+from .ability_defs import ability
+from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
+from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 
 # Canonical unit stats
 UNIT_STATS = {
     # Custodians (yellow/orange)
-    "Page":       {"max_hp": 3,  "damage": 1, "range": 1, "value": 2},
-    "Librarian":  {"max_hp": 2,  "damage": 0, "range": 3, "sunder": 1, "value": 12},
-    "Steward":    {"max_hp": 20, "damage": 3, "range": 1, "value": 10},
-    "Gatekeeper": {"max_hp": 32, "damage": 4, "range": 2, "undying": 2, "value": 25},
+    "Page":       {"max_hp": 3,  "damage": 1, "range": 1, "value": 2, "abilities": []},
+    "Librarian":  {"max_hp": 2,  "damage": 0, "range": 3, "value": 12,
+                   "abilities": [ability("periodic", "sunder", target="random", value=1, range=3, amplify=False)]},
+    "Steward":    {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
+    "Gatekeeper": {"max_hp": 32, "damage": 4, "range": 2, "value": 25,
+                   "abilities": [ability("passive", "undying", value=2, aura=2, amplify=False)]},
     # Weavers (purple/blue)
-    "Apprentice": {"max_hp": 8,  "damage": 1, "range": 2, "push": 1, "value": 5},
-    "Conduit":    {"max_hp": 5,  "damage": 2, "range": 3, "amplify": 1, "value": 10},
-    "Seeker":     {"max_hp": 3,  "damage": 1, "range": 4, "ramp": 1, "value": 10},
-    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "splash": 1, "value": 25},
+    "Apprentice": {"max_hp": 8,  "damage": 1, "range": 2, "value": 5,
+                   "abilities": [ability("onhit", "push", target="target", value=1, amplify=False)]},
+    "Conduit":    {"max_hp": 5,  "damage": 2, "range": 3, "value": 10,
+                   "abilities": [ability("passive", "amplify", value=1, aura=1, amplify=False)]},
+    "Seeker":     {"max_hp": 3,  "damage": 1, "range": 4, "value": 10,
+                   "abilities": [ability("onhit", "ramp", target="self", value=1)]},
+    "Savant":     {"max_hp": 6,  "damage": 4, "range": 4, "value": 25,
+                   "abilities": [ability("onhit", "splash", target="target", value=1)]},
     # Artificers (gray/black)
-    "Tincan":     {"max_hp": 11, "damage": 2, "range": 1, "value": 6},
-    "Golem":      {"max_hp": 16, "damage": 2, "range": 1, "armor": 2, "value": 14},
-    "Kitboy":     {"max_hp": 6,  "damage": 2, "range": 2, "repair": 1, "value": 10},
-    "Artillery":  {"max_hp": 8,  "damage": 4, "range": 4, "bombardment": 2, "bombardment_range": 6, "value": 25},
+    "Tincan":     {"max_hp": 11, "damage": 2, "range": 1, "value": 6, "abilities": []},
+    "Golem":      {"max_hp": 16, "damage": 2, "range": 1, "value": 14,
+                   "abilities": [ability("passive", "armor", value=2, amplify=False)]},
+    "Kitboy":     {"max_hp": 6,  "damage": 2, "range": 2, "value": 10,
+                   "abilities": [ability("periodic", "repair", target="area", value=1, range=1)]},
+    "Artillery":  {"max_hp": 8,  "damage": 4, "range": 4, "value": 25,
+                   "abilities": [ability("periodic", "strike", target="random", value=2, range=6)]},
     # Purifiers (red/white)
-    "Penitent":   {"max_hp": 5,  "damage": 1, "range": 1, "rage": 1, "value": 5},
-    "Priest":     {"max_hp": 3,  "damage": 1, "range": 3, "heal": 1, "value": 10},
-    "Avenger":    {"max_hp": 20, "damage": 3, "range": 1, "vengeance": 1, "value": 12},
-    "Herald":     {"max_hp": 6,  "damage": 1, "range": 4, "charge": 3, "summon_count": 2, "value": 25},
+    "Penitent":   {"max_hp": 5,  "damage": 1, "range": 1, "value": 5,
+                   "abilities": [ability("wounded", "ramp", target="self", value=1)]},
+    "Priest":     {"max_hp": 3,  "damage": 1, "range": 3, "value": 10,
+                   "abilities": [ability("periodic", "heal", target="random", value=3, range=3)]},
+    "Avenger":    {"max_hp": 20, "damage": 3, "range": 1, "value": 12,
+                   "abilities": [ability("lament", "ramp", target="self", value=1, range=1)]},
+    "Herald":     {"max_hp": 6,  "damage": 1, "range": 4, "value": 25,
+                   "abilities": [ability("periodic", "summon", target="self", count=2, charge=3, amplify=False)]},
 }
 
 ALL_UNIT_STATS = {**UNIT_STATS, **HERO_STATS}
@@ -57,6 +71,13 @@ PLAYER_COLORS_EXHAUSTED = {
 
 def unit_count(name):
     return ARMY_BUDGET // UNIT_STATS[name]["value"]
+
+
+def _ability_texts(stats):
+    return [format_ability(ab) for ab in stats.get("abilities", [])]
+
+def _ability_descriptions(stats):
+    return [describe_ability(ab) for ab in stats.get("abilities", [])]
 
 
 @dataclass
@@ -404,13 +425,13 @@ class OverworldGUI:
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
-                for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                           "aura_armor", "retreat",
-                           "undying", "splash", "repair", "bombardment",
-                           "rage", "vengeance", "charge"):
-                    if s.get(ab, 0):
-                        desc += f" {ab.capitalize()}:{s[ab]}"
-                tk.Label(frame, text=desc, font=("Arial", 9), anchor="w").pack(anchor="w")
+                for ab_text in _ability_texts(s):
+                    desc += f" {ab_text}"
+                label = tk.Label(frame, text=desc, font=("Arial", 9), anchor="w")
+                label.pack(anchor="w")
+                ability_lines = _ability_descriptions(s)
+                if ability_lines:
+                    self._bind_ability_hover(label, "\n".join(ability_lines))
             tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
                       command=lambda fn=faction_name: self._select_faction(fn, dialog)).pack(pady=5)
 
@@ -458,7 +479,7 @@ class OverworldGUI:
         if not faction:
             return ALL_UNIT_STATS
         upgrade_id = self.player_upgrades.get(player_id)
-        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys()))
+        faction_units = FACTIONS.get(faction, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction, [])
         return apply_upgrade_to_unit_stats(ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units)
 
     def _show_upgrade_dialog(self, faction_name, player_factions, player_heroes, on_select):
@@ -541,14 +562,14 @@ class OverworldGUI:
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
-                for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                           "aura_armor", "retreat",
-                           "undying", "splash", "repair", "bombardment",
-                           "rage", "vengeance", "charge"):
-                    if s.get(ab, 0):
-                        desc += f" {ab.capitalize()}:{s[ab]}"
-                tk.Label(frame, text=desc, font=("Arial", 9), anchor="w",
-                         fg="gray" if is_taken else "black").pack(anchor="w")
+                for ab_text in _ability_texts(s):
+                    desc += f" {ab_text}"
+                label = tk.Label(frame, text=desc, font=("Arial", 9), anchor="w",
+                                 fg="gray" if is_taken else "black")
+                label.pack(anchor="w")
+                ability_lines = _ability_descriptions(s)
+                if ability_lines:
+                    self._bind_ability_hover(label, "\n".join(ability_lines))
             btn = tk.Button(frame, text=f"Play {faction_name}", font=("Arial", 11),
                             state=tk.DISABLED if is_taken else tk.NORMAL,
                             command=lambda fn=faction_name, d=dialog: self._select_faction_mp(fn, d))
@@ -611,12 +632,8 @@ class OverworldGUI:
             cost = stats["value"]
             hotkey = idx + 1
             text = f"[{hotkey}] {name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
-            for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                       "aura_armor", "retreat",
-                       "undying", "splash", "repair", "bombardment",
-                       "rage", "vengeance", "charge"):
-                if stats.get(ab, 0):
-                    text += f" {ab.capitalize()}:{stats[ab]}"
+            for ab_text in _ability_texts(stats):
+                text += f" {ab_text}"
             btn = tk.Button(tw, text=text, font=("Arial", 10),
                             command=lambda n=name: self._do_build(n))
             btn.pack(fill=tk.X, padx=10, pady=2)
@@ -628,15 +645,10 @@ class OverworldGUI:
             tw.bind(str(i + 1), lambda e, n=uname: self._do_build(n))
 
             # Ability hover tooltip for build buttons
-            ability_lines = []
-            for ab in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                       "aura_armor", "retreat",
-                       "undying", "splash", "repair", "bombardment",
-                       "rage", "vengeance", "charge"):
-                if stats.get(ab, 0):
-                    ability_lines.append(f"{ab.capitalize()}: {ABILITY_DESCRIPTIONS[ab].format(value=stats[ab])}")
+            unit_stats = effective_stats[uname]
+            ability_lines = _ability_descriptions(unit_stats)
             if ability_lines:
-                self._bind_build_ability_hover(btn, "\n".join(ability_lines))
+                self._bind_ability_hover(btn, "\n".join(ability_lines))
 
         tk.Button(tw, text="Close", command=self._close_build_panel).pack(pady=5)
         self._refresh_build_panel()
@@ -648,7 +660,7 @@ class OverworldGUI:
         tw.protocol("WM_DELETE_WINDOW", self._close_build_panel)
         tw.focus_force()
 
-    def _bind_build_ability_hover(self, widget, description):
+    def _bind_ability_hover(self, widget, description):
         tip = [None]
         def on_enter(e):
             tip[0] = tw = tk.Toplevel(widget)
@@ -993,23 +1005,9 @@ class OverworldGUI:
         for name, count in army.units:
             s = effective_stats[name]
             spec = {"name": name, "max_hp": s["max_hp"], "damage": s["damage"],
-                    "range": s["range"], "count": count}
-            # Copy all ability keys
-            for key in ("armor", "heal", "sunder", "push", "ramp", "amplify",
-                        "amplify_range", "aura_armor", "aura_armor_range",
-                        "retreat", "heal_all", "sunder_all",
-                        "undying", "splash", "repair", "bombardment", "bombardment_range",
-                        "bombardment_charge", "bombardment_all", "bombardment_requires_attack",
-                        "rage", "vengeance", "charge", "summon_count",
-                        "summon_ready", "summon_target_highest",
-                        "harvest", "harvest_range", "lifesteal", "freeze",
-                        "shadowstep_charge",
-                        "followup_damage", "followup_range", "followup_count",
-                        "global_boost",
-                        "lament_threshold", "lament_range", "lament_damage",
-                        "aura_vengeance", "aura_vengeance_range"):
-                if s.get(key, 0):
-                    spec[key] = s[key]
+                    "range": s["range"], "count": count,
+                    "abilities": s.get("abilities", []),
+                    "armor": s.get("armor", 0)}
             result.append(spec)
         return result
 
