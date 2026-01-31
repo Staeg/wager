@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from .ability_defs import ability
-from .combat import format_ability
+from .combat_gui import format_ability
 
 
 UPGRADE_DEFS = {

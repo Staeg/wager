@@ -222,7 +222,7 @@ class LauncherGUI:
     def _connect_client(self):
         """Create a GameClient and switch to overworld GUI."""
         from .client import GameClient
-        from .overworld import OverworldGUI
+        from .overworld_gui import OverworldGUI
 
         host = self.host_var.get()
         port = int(self.port_var.get())
@@ -240,7 +240,7 @@ class LauncherGUI:
 
     def _single_player(self):
         """Launch single-player overworld."""
-        from .overworld import OverworldGUI
+        from .overworld_gui import OverworldGUI
 
         for w in self.root.winfo_children():
             w.destroy()

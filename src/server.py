@@ -10,21 +10,21 @@ import websockets
 from .compat import setup_frozen_path
 
 from .combat import Battle
+from .constants import NEUTRAL_PLAYER, ARMY_MOVE_RANGE
+from .game_state import get_effective_unit_stats, is_hidden_objective_guard
 from .overworld import (
     Overworld,
     UNIT_STATS,
     ALL_UNIT_STATS,
-    ARMY_MOVE_RANGE,
     FACTIONS,
     OverworldArmy,
 )
 from .battle_resolution import make_battle_units, resolve_battle
 from .hex import hex_neighbors, reachable_hexes
-from .heroes import get_heroes_for_faction, HEROES_BY_FACTION
+from .heroes import get_heroes_for_faction
 from .upgrades import (
     get_upgrades_for_faction,
     get_upgrade_by_id,
-    apply_upgrades_to_unit_stats,
 )
 from .protocol import (
     serialize_armies,
@@ -146,9 +146,7 @@ class GameServer:
             "armies": serialize_armies(armies),
             "bases": serialize_bases(self.world.bases),
             "gold": self.world.gold,
-            "gold_piles": serialize_gold_piles(
-                getattr(self.world, "gold_piles", [])
-            ),
+            "gold_piles": serialize_gold_piles(getattr(self.world, "gold_piles", [])),
             "objectives": objectives,
             "current_player": self.current_player,
             "message": message,
@@ -171,14 +169,16 @@ class GameServer:
 
     def _players_with_armies(self):
         """Return set of player IDs that still have armies or alive bases (excluding neutrals)."""
-        players = {a.player for a in self.world.armies if a.player != 0}
+        players = {a.player for a in self.world.armies if a.player != NEUTRAL_PLAYER}
         players |= {b.player for b in self.world.bases if b.alive}
         return players
 
     def _active_human_players(self):
         humans = set(self.players.keys())
         players = {a.player for a in self.world.armies if a.player in humans}
-        players |= {b.player for b in self.world.bases if b.alive and b.player in humans}
+        players |= {
+            b.player for b in self.world.bases if b.alive and b.player in humans
+        }
         return players
 
     def _objectives_for_player(self, player_id):
@@ -194,18 +194,18 @@ class GameServer:
         objectives = {o.pos: o.faction for o in getattr(self.world, "objectives", [])}
         armies = []
         for a in self.world.armies:
-            if a.player == 0 and a.pos in objectives and objectives[a.pos] != faction:
+            if (
+                a.player == NEUTRAL_PLAYER
+                and a.pos in objectives
+                and objectives[a.pos] != faction
+            ):
                 continue
             armies.append(a)
         return armies
 
     def _is_hidden_objective_guard(self, army, player_id):
-        if army.player != 0:
-            return False
-        objective = self._objective_at(army.pos)
-        if not objective:
-            return False
-        return objective.faction != self.player_factions.get(player_id)
+        faction = self.player_factions.get(player_id)
+        return is_hidden_objective_guard(army, faction, self._objective_at)
 
     def _visible_armies_at(self, pos, player_id):
         armies = [a for a in self.world.armies if a.pos == pos]
@@ -214,7 +214,7 @@ class GameServer:
     @staticmethod
     def _pick_target_army(armies, player_id):
         for a in armies:
-            if a.player not in (0, player_id):
+            if a.player not in (NEUTRAL_PLAYER, player_id):
                 return a
         for a in armies:
             if a.player == player_id:
@@ -234,7 +234,7 @@ class GameServer:
         if not objective or objective.faction != faction:
             return None
         for a in self.world.armies:
-            if a.pos == pos and a.player == 0:
+            if a.pos == pos and a.player == NEUTRAL_PLAYER:
                 return a
         return None
 
@@ -256,11 +256,8 @@ class GameServer:
         cached = self._effective_stats_cache.get(player)
         if cached and cached.get("key") == cache_key:
             return cached["stats"]
-        faction_units = FACTIONS.get(
-            faction, list(UNIT_STATS.keys())
-        ) + HEROES_BY_FACTION.get(faction, [])
-        stats = apply_upgrades_to_unit_stats(
-            ALL_UNIT_STATS, upgrade_ids, faction_units
+        stats = get_effective_unit_stats(
+            faction, upgrade_ids, ALL_UNIT_STATS, UNIT_STATS, FACTIONS
         )
         self._effective_stats_cache[player] = {"key": cache_key, "stats": stats}
         return stats
@@ -475,7 +472,7 @@ class GameServer:
         target = validation["target"]
         is_enemy = validation["is_enemy"]
 
-        if is_enemy and target.player == 0:
+        if is_enemy and target.player == NEUTRAL_PLAYER:
             objective = self._objective_at(target.pos)
             if objective and objective.faction != self.player_factions.get(player_id):
                 await self.send_to(
@@ -491,7 +488,7 @@ class GameServer:
             if await self._check_game_over():
                 return
             guard_battle, game_over = (False, False)
-            if army in self.world.armies and target.player != 0:
+            if army in self.world.armies and target.player != NEUTRAL_PLAYER:
                 guard_battle, game_over = await self._fight_objective_guard_if_present(
                     army
                 )
@@ -537,7 +534,7 @@ class GameServer:
             )
             return
 
-        if is_enemy and target.player == 0:
+        if is_enemy and target.player == NEUTRAL_PLAYER:
             objective = self._objective_at(target.pos)
             if objective and objective.faction != self.player_factions.get(player_id):
                 await self.send_to(
@@ -583,7 +580,7 @@ class GameServer:
             if await self._check_game_over():
                 return
             guard_battle, game_over = (False, False)
-            if moving_army in self.world.armies and target.player != 0:
+            if moving_army in self.world.armies and target.player != NEUTRAL_PLAYER:
                 guard_battle, game_over = await self._fight_objective_guard_if_present(
                     moving_army
                 )
@@ -890,7 +887,7 @@ class GameServer:
                 self.world.build_unit(player_id, name)
 
     async def _handle_objective_capture(self, attacker, defender, ow_winner):
-        if defender.player != 0 or ow_winner != attacker.player:
+        if defender.player != NEUTRAL_PLAYER or ow_winner != attacker.player:
             return
         objective = self._objective_at(defender.pos)
         if not objective:
@@ -1062,4 +1059,3 @@ if __name__ == "__main__":
         if getattr(sys, "frozen", False):
             input("Press Enter to exit...")
         raise
-

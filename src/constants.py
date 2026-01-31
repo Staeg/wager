@@ -1,0 +1,39 @@
+"""Shared constants for Wager of War."""
+
+NEUTRAL_PLAYER = 0
+
+ARMY_MOVE_RANGE = 3
+ARMY_BUDGET = 100
+STARTING_GOLD = 100
+GOLD_PILE_COUNT = 16
+GOLD_PILE_MIN = 10
+GOLD_PILE_MAX = 20
+BASE_INCOME = 5
+OBJECTIVE_GUARD_VALUE = 50
+OBJECTIVE_NEAR_DISTANCE = 2
+
+PLAYER_COLORS = {
+    0: "#888888",
+    1: "#4488ff",
+    2: "#ff4444",
+    3: "#44cc44",
+    4: "#cc44cc",
+}
+
+PLAYER_COLORS_EXHAUSTED = {
+    0: "#444444",
+    1: "#223366",
+    2: "#882222",
+    3: "#226622",
+    4: "#662266",
+}
+
+# Combat zone boundaries
+COMBAT_P1_ZONE_END = 6
+COMBAT_P2_ZONE_START = 11
+
+# Hex rendering constants
+HEX_COL_SPACING = 1.75
+HEX_ROW_SPACING = 1.5
+HEX_ODD_ROW_OFFSET = 0.875
+HEX_POLYGON_SCALE = 0.85

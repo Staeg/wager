@@ -2,7 +2,8 @@ import tkinter as tk
 import pytest
 import random
 from src.ability_defs import ability
-from src.combat import Battle, CombatGUI
+from src.combat import Battle
+from src.combat_gui import CombatGUI
 
 
 # --- Range-based spawn ordering ---
