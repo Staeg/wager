@@ -369,39 +369,60 @@ class Battle:
         def _assign_with_range_ordering(positions, unit_list, descending_col):
             """Assign positions front-to-back, skipping to next column when range tier changes."""
             from collections import defaultdict
+            from itertools import groupby
+
             by_col = defaultdict(list)
             for c, r in positions:
                 by_col[c].append((c, r))
-            for col_positions in by_col.values():
-                self.rng.shuffle(col_positions)
             sorted_cols = sorted(by_col.keys(), reverse=descending_col)
-
-            flat_positions = []
-            col_boundaries = []
-            for col in sorted_cols:
-                col_boundaries.append(len(flat_positions))
-                flat_positions.extend(by_col[col])
+            num_rows = len(by_col[sorted_cols[0]])  # rows per column
 
             unit_list.sort(key=lambda u: u.attack_range)
             # Shuffle within each range tier to interleave different unit types
-            from itertools import groupby
             shuffled = []
             for _, group in groupby(unit_list, key=lambda u: u.attack_range):
                 tier = list(group)
                 self.rng.shuffle(tier)
                 shuffled.extend(tier)
             unit_list[:] = shuffled
+
+            # First pass: figure out column boundaries and count units per column
+            col_boundaries = []
+            for col in sorted_cols:
+                col_boundaries.append(len(col_boundaries) * num_rows)
+
+            # Determine which column each unit lands in
+            units_per_col = defaultdict(int)
             pos_i = 0
             prev_range = None
             for u in unit_list:
                 if prev_range is not None and u.attack_range != prev_range:
                     for b in col_boundaries:
-                        if b > pos_i:
+                        if b >= pos_i:
                             pos_i = b
                             break
-                u.pos = flat_positions[pos_i]
+                col_idx = pos_i // num_rows
+                units_per_col[col_idx] += 1
                 pos_i += 1
                 prev_range = u.attack_range
+
+            # Second pass: build centered positions for each column
+            flat_positions = []
+            for ci, col in enumerate(sorted_cols):
+                k = units_per_col.get(ci, 0)
+                if k == 0:
+                    continue
+                rows_in_col = sorted(r for _, r in by_col[col])
+                mid = num_rows // 2
+                # Pick the k rows closest to the center
+                centered = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
+                centered_positions = [(col, r) for r in centered]
+                self.rng.shuffle(centered_positions)
+                flat_positions.extend(centered_positions)
+
+            # Assign positions to units
+            for i, u in enumerate(unit_list):
+                u.pos = flat_positions[i]
 
         p1_unit_list = []
         for spec in p1_units:
