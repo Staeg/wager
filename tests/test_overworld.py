@@ -2,8 +2,13 @@ from src.overworld import Overworld, UNIT_STATS
 
 
 class TestAddUnitsToArmy:
-    def test_add_to_empty_pos(self):
+    def _empty_overworld(self):
         ow = Overworld(num_players=2)
+        ow.armies.clear()
+        return ow
+
+    def test_add_to_empty_pos(self):
+        ow = self._empty_overworld()
         ow._add_units_to_army((3, 3), 1, "Page", 5)
         army = ow.get_army_at((3, 3))
         assert army is not None
@@ -11,14 +16,14 @@ class TestAddUnitsToArmy:
         assert army.units == [("Page", 5)]
 
     def test_add_to_existing_army_same_unit(self):
-        ow = Overworld(num_players=2)
+        ow = self._empty_overworld()
         ow._add_units_to_army((3, 3), 1, "Page", 3)
         ow._add_units_to_army((3, 3), 1, "Page", 2)
         army = ow.get_army_at((3, 3))
         assert army.units == [("Page", 5)]
 
     def test_add_different_unit_to_existing_army(self):
-        ow = Overworld(num_players=2)
+        ow = self._empty_overworld()
         ow._add_units_to_army((3, 3), 1, "Page", 3)
         ow._add_units_to_army((3, 3), 1, "Librarian", 2)
         army = ow.get_army_at((3, 3))
@@ -59,6 +64,11 @@ class TestGoldCollection:
             assert ow.gold[1] == initial_gold + value
 
     def test_collect_gold_at_empty(self):
-        ow = Overworld(num_players=2)
-        collected = ow.collect_gold_at((0, 0), 1)
+        ow = Overworld(num_players=2, rng_seed=42)
+        # Pick a position with no gold pile
+        occupied = {p.pos for p in ow.gold_piles}
+        empty_pos = next(
+            (c, r) for r in range(ow.ROWS) for c in range(ow.COLS) if (c, r) not in occupied
+        )
+        collected = ow.collect_gold_at(empty_pos, 1)
         assert collected == 0
