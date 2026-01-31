@@ -32,6 +32,7 @@ from .upgrades import (
 from .protocol import (
     serialize_armies,
     serialize_bases,
+    serialize_gold_piles,
     encode,
     decode,
     JOIN,
@@ -129,10 +130,9 @@ class GameServer:
             "armies": serialize_armies(self.world.armies),
             "bases": serialize_bases(self.world.bases),
             "gold": self.world.gold,
-            "gold_piles": [
-                {"pos": list(p.pos), "value": p.value}
-                for p in getattr(self.world, "gold_piles", [])
-            ],
+            "gold_piles": serialize_gold_piles(
+                getattr(self.world, "gold_piles", [])
+            ),
             "current_player": self.current_player,
             "message": message,
             "player_factions": self.player_factions,
@@ -731,10 +731,9 @@ class GameServer:
                     "armies": serialize_armies(self.world.armies),
                     "bases": serialize_bases(self.world.bases),
                     "gold": self.world.gold,
-                    "gold_piles": [
-                        {"pos": list(p.pos), "value": p.value}
-                        for p in getattr(self.world, "gold_piles", [])
-                    ],
+                    "gold_piles": serialize_gold_piles(
+                        getattr(self.world, "gold_piles", [])
+                    ),
                     "current_player": self.current_player,
                     "player_id": pid,
                     "faction": self.player_factions.get(pid),

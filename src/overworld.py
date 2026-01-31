@@ -17,6 +17,8 @@ from .hex import hex_neighbors, reachable_hexes
 from .protocol import (
     deserialize_armies,
     deserialize_bases,
+    deserialize_gold_piles,
+    serialize_gold_piles,
     SPLIT_MOVE,
     MOVE_ARMY,
     END_TURN,
@@ -466,9 +468,7 @@ class Overworld:
                 {"player": b.player, "pos": list(b.pos), "alive": b.alive}
                 for b in self.bases
             ],
-            "gold_piles": [
-                {"pos": list(p.pos), "value": p.value} for p in self.gold_piles
-            ],
+            "gold_piles": serialize_gold_piles(self.gold_piles),
         }
 
     @classmethod
@@ -491,10 +491,7 @@ class Overworld:
             Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
             for d in data.get("bases", [])
         ]
-        ow.gold_piles = [
-            GoldPile(pos=tuple(p["pos"]), value=p["value"])
-            for p in data.get("gold_piles", [])
-        ]
+        ow.gold_piles = deserialize_gold_piles(data.get("gold_piles", []))
         return ow
 
     def get_army_at(self, pos):
@@ -1903,10 +1900,7 @@ class OverworldGUI:
         self.world.armies = deserialize_armies(msg["armies"])
         self.world.bases = deserialize_bases(msg.get("bases", []))
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
-        self.world.gold_piles = [
-            GoldPile(pos=tuple(p["pos"]), value=p["value"])
-            for p in msg.get("gold_piles", [])
-        ]
+        self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
         self._update_gold_display()
         if self._is_my_turn():
             self.status_var.set(
@@ -1920,10 +1914,7 @@ class OverworldGUI:
         self.world.armies = deserialize_armies(msg["armies"])
         self.world.bases = deserialize_bases(msg.get("bases", []))
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
-        self.world.gold_piles = [
-            GoldPile(pos=tuple(p["pos"]), value=p["value"])
-            for p in msg.get("gold_piles", [])
-        ]
+        self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
         if "player_factions" in msg:
             self.player_factions = {
                 int(k): v for k, v in msg.get("player_factions", {}).items()

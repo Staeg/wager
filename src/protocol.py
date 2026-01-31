@@ -53,26 +53,41 @@ def serialize_armies(armies):
     return [serialize_army(a) for a in armies]
 
 
+def serialize_gold_piles(gold_piles):
+    """Convert a list of GoldPile objects to serializable list."""
+    return [{"pos": list(p.pos), "value": p.value} for p in gold_piles]
+
+
+def deserialize_gold_piles(data):
+    """Convert serialized gold pile dicts back to GoldPile objects."""
+    from .overworld import GoldPile
+
+    return [GoldPile(pos=tuple(p["pos"]), value=p["value"]) for p in data]
+
+
 def deserialize_armies(data):
     """Convert serialized army dicts back to OverworldArmy objects."""
     from .overworld import OverworldArmy
+
     armies = []
     for d in data:
-        armies.append(OverworldArmy(
-            player=d["player"],
-            units=[tuple(u) for u in d["units"]],
-            pos=tuple(d["pos"]),
-            exhausted=d["exhausted"],
-        ))
+        armies.append(
+            OverworldArmy(
+                player=d["player"],
+                units=[tuple(u) for u in d["units"]],
+                pos=tuple(d["pos"]),
+                exhausted=d["exhausted"],
+            )
+        )
     return armies
 
 
 def deserialize_bases(data):
     """Convert serialized base dicts back to Base objects."""
     from .overworld import Base
+
     return [
-        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"])
-        for d in data
+        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"]) for d in data
     ]
 
 
