@@ -100,8 +100,8 @@ class GameServer:
         }
 
     def _players_with_armies(self):
-        """Return set of player IDs that still have armies or alive bases."""
-        players = {a.player for a in self.world.armies}
+        """Return set of player IDs that still have armies or alive bases (excluding neutrals)."""
+        players = {a.player for a in self.world.armies if a.player != 0}
         players |= {b.player for b in self.world.bases if b.alive}
         return players
 
@@ -126,11 +126,8 @@ class GameServer:
         battle_id = self.next_battle_id
         self.next_battle_id += 1
 
-        # Ensure lower-numbered overworld player is always battle P1
-        if attacker.player <= defender.player:
-            ow_p1, ow_p2 = attacker, defender
-        else:
-            ow_p1, ow_p2 = defender, attacker
+        # Attacker is always battle P1 (left side of screen)
+        ow_p1, ow_p2 = attacker, defender
 
         p1_units = make_battle_units(ow_p1, self._get_effective_stats(ow_p1.player))
         p2_units = make_battle_units(ow_p2, self._get_effective_stats(ow_p2.player))

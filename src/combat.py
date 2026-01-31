@@ -406,19 +406,43 @@ class Battle:
                 pos_i += 1
                 prev_range = u.attack_range
 
-            # Second pass: build centered positions for each column
+            # Count frontline units (first column with units)
+            first_col_count = 0
+            for ci in range(len(sorted_cols)):
+                if units_per_col.get(ci, 0) > 0:
+                    first_col_count = units_per_col[ci]
+                    break
+
+            # Second pass: build positions for each column
             flat_positions = []
             for ci, col in enumerate(sorted_cols):
                 k = units_per_col.get(ci, 0)
                 if k == 0:
                     continue
                 rows_in_col = sorted(r for _, r in by_col[col])
-                mid = num_rows // 2
-                # Pick the k rows closest to the center
-                centered = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
-                centered_positions = [(col, r) for r in centered]
-                self.rng.shuffle(centered_positions)
-                flat_positions.extend(centered_positions)
+                is_frontline = (ci == 0 or units_per_col.get(ci - 1, 0) == 0)
+                if is_frontline or k >= num_rows:
+                    # Frontline or overflow: center-pack
+                    mid = num_rows // 2
+                    selected = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
+                else:
+                    # Backline: evenly space, aligned to frontline extent
+                    extent = max(first_col_count, k)
+                    extent = min(extent, num_rows)
+                    mid = num_rows // 2
+                    extent_rows = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:extent]
+                    extent_rows.sort()
+                    if k >= extent:
+                        selected = extent_rows
+                    else:
+                        # Evenly pick k rows from the extent rows
+                        step = (len(extent_rows) - 1) / max(1, k - 1) if k > 1 else 0
+                        indices = [round(i * step) for i in range(k)]
+                        selected = [extent_rows[i] for i in indices]
+                selected.sort()
+                col_positions = [(col, r) for r in selected]
+                self.rng.shuffle(col_positions)
+                flat_positions.extend(col_positions)
 
             # Assign positions to units
             for i, u in enumerate(unit_list):
@@ -1719,6 +1743,7 @@ class CombatGUI:
             p2_units=self.battle._init_p2_units,
             rng_seed=self.battle.rng_seed,
         )
+        self.battle.apply_events_immediately = False
         self._draw()
 
     def _speed_down(self):

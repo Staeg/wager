@@ -84,9 +84,8 @@ class LauncherGUI:
             server_exe = os.path.join(exe_dir, "wager-server.exe")
             if os.path.isfile(server_exe):
                 return [server_exe]
-        # Non-frozen: run server.py with Python
-        server_script = os.path.join(os.path.dirname(__file__), "server.py")
-        return [sys.executable, server_script]
+        # Non-frozen: run server module with Python
+        return [sys.executable, "-m", "src.server"]
 
     def _host_and_play(self):
         """Start a server subprocess, then connect as a client."""
@@ -112,9 +111,10 @@ class LauncherGUI:
             return
         rc = self._server_proc.poll()
         if rc is not None:
-            self._server_status_var.set(f"Server stopped (exit code {rc})")
-            self._server_indicator.config(fg="red")
             self._server_proc = None
+            if self._server_indicator.winfo_exists():
+                self._server_status_var.set(f"Server stopped (exit code {rc})")
+                self._server_indicator.config(fg="red")
         else:
             self.root.after(1000, self._poll_server)
 
@@ -124,8 +124,9 @@ class LauncherGUI:
             self._server_proc.terminate()
             self._server_proc.wait()
             self._server_proc = None
-        self._server_status_var.set("Server stopped")
-        self._server_indicator.config(fg="red")
+        if self._server_indicator.winfo_exists():
+            self._server_status_var.set("Server stopped")
+            self._server_indicator.config(fg="red")
 
     def _on_close(self):
         """Clean up server process on window close."""

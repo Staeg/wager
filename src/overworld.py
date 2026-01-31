@@ -1110,6 +1110,8 @@ class OverworldGUI:
         self.combat_frame.pack(fill=tk.BOTH, expand=True)
 
         def on_battle_complete(winner, p1_survivors, p2_survivors):
+            # Use the GUI's current battle (may differ from original after reset)
+            current_battle = self._combat_gui.battle if hasattr(self, '_combat_gui') and self._combat_gui else battle
             if hasattr(self, '_combat_gui') and self._combat_gui:
                 self._combat_gui._close_log()
                 self._combat_gui = None
@@ -1125,12 +1127,12 @@ class OverworldGUI:
                 ow_winner = 0
 
             if winner == 0:
-                update_survivors(ow_p1, battle, 1)
-                update_survivors(ow_p2, battle, 2)
+                update_survivors(ow_p1, current_battle, 1)
+                update_survivors(ow_p2, current_battle, 2)
                 attacker.exhausted = True
             elif ow_winner == attacker.player:
                 # Attacker won — advance to defender's position
-                update_survivors(attacker, battle, 1 if attacker is ow_p1 else 2)
+                update_survivors(attacker, current_battle, 1 if attacker is ow_p1 else 2)
                 self.world.armies.remove(defender)
                 self.world.move_army(attacker, defender.pos)
                 attacker.exhausted = True
@@ -1140,7 +1142,7 @@ class OverworldGUI:
                     self._update_gold_display()
             else:
                 # Defender won — attacker is destroyed, defender stays
-                update_survivors(defender, battle, 1 if defender is ow_p1 else 2)
+                update_survivors(defender, current_battle, 1 if defender is ow_p1 else 2)
                 self.world.armies.remove(attacker)
 
             summary = f"P{ow_p1.player} vs P{ow_p2.player}: P{ow_winner} wins ({p1_survivors} vs {p2_survivors} survivors)"
