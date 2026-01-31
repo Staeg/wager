@@ -560,6 +560,9 @@ class Overworld:
                 return a
         return None
 
+    def get_armies_at(self, pos):
+        return [a for a in self.armies if a.pos == pos]
+
     def move_army(self, army, new_pos):
         army.pos = new_pos
 
@@ -642,6 +645,7 @@ class OverworldGUI:
             self.world.grant_income(1)
 
         self.selected_army = None
+        self.selected_armies = []
         self.build_panel = None  # track build popup
         self.build_base_pos = None
 
@@ -853,6 +857,20 @@ class OverworldGUI:
             return False
         objective = self.world.get_objective_at(army.pos)
         return objective is not None and objective.faction != my_faction
+
+    def _visible_armies_at(self, pos, my_faction):
+        armies = self.world.get_armies_at(pos)
+        return [a for a in armies if not self._is_hidden_objective_guard(a, my_faction)]
+
+    @staticmethod
+    def _pick_target_army(armies, my_player):
+        for a in armies:
+            if a.player not in (0, my_player):
+                return a
+        for a in armies:
+            if a.player == my_player:
+                return a
+        return armies[0] if armies else None
 
     def _grant_objective_reward_local(self, player_id, reward):
         if reward == "gold":
@@ -1197,10 +1215,20 @@ class OverworldGUI:
     def _refresh_army_info_panel(self, force=False):
         if self.selected_army and self.selected_army not in self.world.armies:
             self.selected_army = None
-        if not self.selected_army:
+        if self.selected_army is None:
+            self.selected_armies = []
+        if self.selected_armies:
+            self.selected_armies = [
+                a for a in self.selected_armies if a in self.world.armies
+            ]
+        if not self.selected_armies and self.selected_army:
+            self.selected_armies = [self.selected_army]
+        if not self.selected_armies:
             key = None
         else:
-            key = (self.selected_army.player, tuple(self.selected_army.units))
+            key = tuple(
+                (a.player, a.pos, tuple(a.units)) for a in self.selected_armies
+            )
         if not force and key == self._army_info_key:
             return
         self._army_info_key = key
@@ -1208,31 +1236,53 @@ class OverworldGUI:
         for child in self.army_info_units_frame.winfo_children():
             child.destroy()
 
-        if not self.selected_army:
+        if not self.selected_armies:
             self.army_info_title.set("No army selected.")
             return
 
-        owner = (
-            "Neutral"
-            if self.selected_army.player == 0
-            else f"P{self.selected_army.player}"
-        )
-        self.army_info_title.set(
-            f"{owner} Army - {self.selected_army.total_count} units"
-        )
-        effective_stats = self._get_effective_unit_stats(self.selected_army.player)
-        for name, count in self.selected_army.units:
-            label = tk.Label(
+        if len(self.selected_armies) == 1:
+            army = self.selected_armies[0]
+            owner = "Neutral" if army.player == 0 else f"P{army.player}"
+            self.army_info_title.set(f"{owner} Army - {army.total_count} units")
+            effective_stats = self._get_effective_unit_stats(army.player)
+            for name, count in army.units:
+                label = tk.Label(
+                    self.army_info_units_frame,
+                    text=f"{count}x {name}",
+                    font=("Arial", 9),
+                    anchor="w",
+                    justify=tk.LEFT,
+                )
+                label.pack(anchor="w")
+                stats = effective_stats.get(name)
+                if stats:
+                    self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
+            return
+
+        self.army_info_title.set("Armies at hex")
+        for army in self.selected_armies:
+            owner = "Neutral" if army.player == 0 else f"P{army.player}"
+            header = tk.Label(
                 self.army_info_units_frame,
-                text=f"{count}x {name}",
-                font=("Arial", 9),
+                text=f"{owner} Army - {army.total_count} units",
+                font=("Arial", 9, "bold"),
                 anchor="w",
                 justify=tk.LEFT,
             )
-            label.pack(anchor="w")
-            stats = effective_stats.get(name)
-            if stats:
-                self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
+            header.pack(anchor="w", pady=(4, 0))
+            effective_stats = self._get_effective_unit_stats(army.player)
+            for name, count in army.units:
+                label = tk.Label(
+                    self.army_info_units_frame,
+                    text=f"{count}x {name}",
+                    font=("Arial", 9),
+                    anchor="w",
+                    justify=tk.LEFT,
+                )
+                label.pack(anchor="w")
+                stats = effective_stats.get(name)
+                if stats:
+                    self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
 
     def _refresh_build_panel(self):
         """Update gold display and button states in the build panel."""
@@ -1511,15 +1561,19 @@ class OverworldGUI:
             return
 
         my_player = self.player_id if self._multiplayer else 1
-        clicked_army = self.world.get_army_at(clicked)
+        my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
+        clicked_armies = self._visible_armies_at(clicked, my_faction)
+        clicked_army = self._pick_target_army(clicked_armies, my_player)
 
         if not self._is_my_turn():
             if clicked_army:
                 if self.selected_army and clicked == self.selected_army.pos:
                     self.selected_army = None
+                    self.selected_armies = []
                     self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
                 else:
                     self.selected_army = clicked_army
+                    self.selected_armies = clicked_armies
                     if clicked_army.player == my_player:
                         self.status_var.set(
                             f"Selected: {clicked_army.label}. Waiting for your turn."
@@ -1532,6 +1586,7 @@ class OverworldGUI:
             else:
                 if self.selected_army:
                     self.selected_army = None
+                    self.selected_armies = []
                     self._draw()
                 self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
@@ -1561,6 +1616,7 @@ class OverworldGUI:
                     self.status_var.set("That army is exhausted. End Turn to ready it.")
                     return
                 self.selected_army = clicked_army
+                self.selected_armies = clicked_armies
                 if clicked_army.player == my_player:
                     self.status_var.set(
                         f"Selected: {clicked_army.label}. Right-click to move."
@@ -1577,6 +1633,7 @@ class OverworldGUI:
         # Click the same army -> deselect
         if clicked == self.selected_army.pos:
             self.selected_army = None
+            self.selected_armies = []
             self.status_var.set("Selection cancelled.")
             self._draw()
             return
@@ -1587,6 +1644,7 @@ class OverworldGUI:
                 self.status_var.set("That army is exhausted. End Turn to ready it.")
                 return
             self.selected_army = clicked_army
+            self.selected_armies = clicked_armies
             if clicked_army.player == my_player:
                 self.status_var.set(
                     f"Selected: {clicked_army.label}. Right-click to move."
@@ -1600,6 +1658,7 @@ class OverworldGUI:
 
         # Left-click on non-own hex with selection: just deselect
         self.selected_army = None
+        self.selected_armies = []
         self.status_var.set("Selection cancelled.")
         self._draw()
 
@@ -1621,14 +1680,18 @@ class OverworldGUI:
             return
 
         shift_held = event.state & 0x1
-        clicked_army = self.world.get_army_at(clicked)
+        my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
+        clicked_armies = self._visible_armies_at(clicked, my_faction)
+        clicked_army = self._pick_target_army(clicked_armies, my_player)
         is_own = clicked_army and clicked_army.player == my_player
 
         # Check reachability within move range
         occupied = {
             a.pos
             for a in self.world.armies
-            if a is not self.selected_army and a is not clicked_army
+            if a is not self.selected_army
+            and not self._is_hidden_objective_guard(a, my_faction)
+            and a.pos != clicked
         }
         reachable = reachable_hexes(
             self.selected_army.pos,
@@ -1660,7 +1723,7 @@ class OverworldGUI:
                 return
 
         if shift_held:
-            self._open_split_dialog(clicked, clicked_army)
+            self._open_split_dialog(clicked, clicked_armies)
             return
 
         if self._multiplayer:
@@ -1685,11 +1748,13 @@ class OverworldGUI:
                     return
             army = self.selected_army
             self.selected_army = None
+            self.selected_armies = []
             self._start_battle(army, clicked_army)
             return
         if is_own:
             moving = self.selected_army
             self.selected_army = None
+            self.selected_armies = []
             self.world.merge_armies(clicked_army, moving)
             clicked_army.exhausted = True
             gained = self.world.collect_gold_at(clicked, clicked_army.player)
@@ -1704,6 +1769,7 @@ class OverworldGUI:
         # Empty hex -> move
         army = self.selected_army
         self.selected_army = None
+        self.selected_armies = []
         self.world.move_army(army, clicked)
         army.exhausted = True
         gained = self.world.collect_gold_at(clicked, army.player)
@@ -1735,6 +1801,7 @@ class OverworldGUI:
                 return
             self.client.send({"type": END_TURN})
             self.selected_army = None
+            self.selected_armies = []
             self._refresh_army_info_panel(force=True)
             return
 
@@ -1744,6 +1811,7 @@ class OverworldGUI:
                 army.exhausted = False
         income = self.world.grant_income(1)
         self.selected_army = None
+        self.selected_armies = []
         if income:
             self.status_var.set(
                 f"New turn. Gained {income} gold from bases. Click a P1 army to select it."
@@ -1867,7 +1935,7 @@ class OverworldGUI:
             defender_player=ow_p2.player,
         )
 
-    def _open_split_dialog(self, dest_pos, dest_army):
+    def _open_split_dialog(self, dest_pos, dest_armies):
         if dest_pos == self.selected_army.pos:
             self.status_var.set("Select a different destination to split.")
             return
@@ -1940,15 +2008,16 @@ class OverworldGUI:
                 command=lambda n=name, c=count: _move_units(n, -c),
             ).pack(side=tk.LEFT)
 
-        if dest_army:
-            owner = "Neutral" if dest_army.player == 0 else f"P{dest_army.player}"
-            tk.Label(right, text=f"{owner} Army", font=("Arial", 9, "bold")).pack(
-                anchor="w"
-            )
-            for name, count in dest_army.units:
-                tk.Label(
-                    right, text=f"{count}x {name}", font=("Arial", 9), anchor="w"
-                ).pack(anchor="w")
+        if dest_armies:
+            for dest_army in dest_armies:
+                owner = "Neutral" if dest_army.player == 0 else f"P{dest_army.player}"
+                tk.Label(right, text=f"{owner} Army", font=("Arial", 9, "bold")).pack(
+                    anchor="w"
+                )
+                for name, count in dest_army.units:
+                    tk.Label(
+                        right, text=f"{count}x {name}", font=("Arial", 9), anchor="w"
+                    ).pack(anchor="w")
         else:
             tk.Label(right, text="Empty", font=("Arial", 9), anchor="w").pack(
                 anchor="w"
@@ -2004,6 +2073,7 @@ class OverworldGUI:
                 player=source.player, units=moving_units, pos=source.pos
             )
 
+            dest_army = self._pick_target_army(dest_armies, source.player)
             if dest_army and dest_army.player != source.player:
                 if dest_army.player == 0:
                     objective = self.world.get_objective_at(dest_pos)
@@ -2012,6 +2082,7 @@ class OverworldGUI:
                         return
                 self.world.armies.append(moving_army)
                 self.selected_army = None
+                self.selected_armies = []
                 dialog.destroy()
                 self._start_battle(moving_army, dest_army)
                 return
@@ -2039,6 +2110,7 @@ class OverworldGUI:
 
             dialog.destroy()
             self.selected_army = None
+            self.selected_armies = []
             self._update_gold_display()
             self._draw()
 
@@ -2098,6 +2170,7 @@ class OverworldGUI:
         self.world.gold = {int(k): v for k, v in msg.get("gold", {}).items()}
         self.world.gold_piles = deserialize_gold_piles(msg.get("gold_piles", []))
         self.world.objectives = deserialize_objectives(msg.get("objectives", []))
+        self.selected_armies = []
         if "player_factions" in msg:
             self.player_factions = self._coerce_int_keys(msg.get("player_factions", {}))
         if "player_heroes" in msg:

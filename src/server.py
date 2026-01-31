@@ -198,10 +198,43 @@ class GameServer:
             armies.append(a)
         return armies
 
+    def _is_hidden_objective_guard(self, army, player_id):
+        if army.player != 0:
+            return False
+        objective = self._objective_at(army.pos)
+        if not objective:
+            return False
+        return objective.faction != self.player_factions.get(player_id)
+
+    def _visible_armies_at(self, pos, player_id):
+        armies = [a for a in self.world.armies if a.pos == pos]
+        return [a for a in armies if not self._is_hidden_objective_guard(a, player_id)]
+
+    @staticmethod
+    def _pick_target_army(armies, player_id):
+        for a in armies:
+            if a.player not in (0, player_id):
+                return a
+        for a in armies:
+            if a.player == player_id:
+                return a
+        return armies[0] if armies else None
+
     def _objective_at(self, pos):
         for o in getattr(self.world, "objectives", []):
             if o.pos == pos:
                 return o
+        return None
+
+    def _objective_guard_for_faction_at(self, pos, faction):
+        if not faction:
+            return None
+        objective = self._objective_at(pos)
+        if not objective or objective.faction != faction:
+            return None
+        for a in self.world.armies:
+            if a.pos == pos and a.player == 0:
+                return a
         return None
 
     def _next_player(self):
@@ -348,9 +381,14 @@ class GameServer:
             )
             return None
 
-        target = self.world.get_army_at(to_pos)
+        visible_armies = self._visible_armies_at(to_pos, player_id)
+        target = self._pick_target_army(visible_armies, player_id)
         occupied = {
-            a.pos for a in self.world.armies if a.pos != from_pos and a is not target
+            a.pos
+            for a in self.world.armies
+            if a.pos != from_pos
+            and a.pos != to_pos
+            and not self._is_hidden_objective_guard(a, player_id)
         }
         reachable = reachable_hexes(
             from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
@@ -451,9 +489,17 @@ class GameServer:
                 self._check_base_destruction(army.pos, army.player)
             if await self._check_game_over():
                 return
-            await self._broadcast_state(
-                f"Battle resolved between P{army.player} and P{target.player}."
-            )
+            guard_battle, game_over = (False, False)
+            if army in self.world.armies and target.player != 0:
+                guard_battle, game_over = await self._fight_objective_guard_if_present(
+                    army
+                )
+            if game_over:
+                return
+            message = f"Battle resolved between P{army.player} and P{target.player}."
+            if guard_battle:
+                message = f"{message} Objective guards engaged."
+            await self._broadcast_state(message)
         elif target and target.player == player_id:
             self.world.merge_armies(target, army)
             target.exhausted = True
@@ -535,9 +581,19 @@ class GameServer:
                 self._check_base_destruction(moving_army.pos, moving_army.player)
             if await self._check_game_over():
                 return
-            await self._broadcast_state(
+            guard_battle, game_over = (False, False)
+            if moving_army in self.world.armies and target.player != 0:
+                guard_battle, game_over = await self._fight_objective_guard_if_present(
+                    moving_army
+                )
+            if game_over:
+                return
+            message = (
                 f"Battle resolved between P{moving_army.player} and P{target.player}."
             )
+            if guard_battle:
+                message = f"{message} Objective guards engaged."
+            await self._broadcast_state(message)
         elif target and target.player == player_id:
             self.world.merge_armies(target, moving_army)
             target.exhausted = True
@@ -850,6 +906,17 @@ class GameServer:
                 "gold": 50,
             },
         )
+
+    async def _fight_objective_guard_if_present(self, attacker):
+        faction = self.player_factions.get(attacker.player)
+        guard = self._objective_guard_for_faction_at(attacker.pos, faction)
+        if not guard:
+            return False, False
+        await self._run_battle(attacker, guard)
+        if attacker in self.world.armies:
+            self._check_base_destruction(attacker.pos, attacker.player)
+        game_over = await self._check_game_over()
+        return True, game_over
 
     async def _prompt_next_faction(self):
         """Send a faction prompt to the next player who needs to pick."""
