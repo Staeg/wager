@@ -250,6 +250,72 @@ class GameServer:
         """Return list of missing field names."""
         return [f for f in fields if f not in msg]
 
+    async def _validate_move_request(self, player_id, msg):
+        if not self.started:
+            await self.send_to(
+                player_id, {"type": ERROR, "message": "Game not started"}
+            )
+            return None
+        if player_id != self.current_player:
+            await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
+            return None
+        missing = self._validate_fields(msg, "from", "to")
+        if missing:
+            await self.send_to(
+                player_id, {"type": ERROR, "message": f"Missing fields: {missing}"}
+            )
+            return None
+
+        from_pos = tuple(msg["from"])
+        to_pos = tuple(msg["to"])
+
+        army = self.world.get_army_at(from_pos)
+        if not army or army.player != player_id:
+            await self.send_to(player_id, {"type": ERROR, "message": "Not your army"})
+            return None
+        if army.exhausted:
+            await self.send_to(
+                player_id, {"type": ERROR, "message": "Army is exhausted"}
+            )
+            return None
+
+        target = self.world.get_army_at(to_pos)
+        occupied = {
+            a.pos for a in self.world.armies if a.pos != from_pos and a is not target
+        }
+        reachable = reachable_hexes(
+            from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
+        )
+
+        if target and target.player == player_id and to_pos not in reachable:
+            await self.send_to(
+                player_id, {"type": ERROR, "message": "Out of move range"}
+            )
+            return None
+
+        is_enemy = target and target.player != player_id
+        if to_pos not in reachable and not is_enemy:
+            await self.send_to(
+                player_id, {"type": ERROR, "message": "Out of move range"}
+            )
+            return None
+        if is_enemy and to_pos not in reachable:
+            adj = hex_neighbors(to_pos[0], to_pos[1], Overworld.COLS, Overworld.ROWS)
+            if not any(h in reachable or h == from_pos for h in adj):
+                await self.send_to(
+                    player_id, {"type": ERROR, "message": "Out of move range"}
+                )
+                return None
+
+        return {
+            "army": army,
+            "from_pos": from_pos,
+            "to_pos": to_pos,
+            "target": target,
+            "reachable": reachable,
+            "is_enemy": is_enemy,
+        }
+
     async def _handle_join(self, websocket, player_id, msg):
         if self.started:
             await websocket.send(
@@ -293,61 +359,13 @@ class GameServer:
         return new_id
 
     async def _handle_move_army(self, player_id, msg):
-        if not self.started:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Game not started"}
-            )
+        validation = await self._validate_move_request(player_id, msg)
+        if not validation:
             return
-        if player_id != self.current_player:
-            await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
-            return
-        missing = self._validate_fields(msg, "from", "to")
-        if missing:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": f"Missing fields: {missing}"}
-            )
-            return
-
-        from_pos = tuple(msg["from"])
-        to_pos = tuple(msg["to"])
-
-        army = self.world.get_army_at(from_pos)
-        if not army or army.player != player_id:
-            await self.send_to(player_id, {"type": ERROR, "message": "Not your army"})
-            return
-        if army.exhausted:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Army is exhausted"}
-            )
-            return
-
-        target = self.world.get_army_at(to_pos)
-        occupied = {
-            a.pos for a in self.world.armies if a.pos != from_pos and a is not target
-        }
-        reachable = reachable_hexes(
-            from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
-        )
-
-        if target and target.player == player_id and to_pos not in reachable:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Out of move range"}
-            )
-            return
-
-        is_enemy = target and target.player != player_id
-        if to_pos not in reachable and not is_enemy:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Out of move range"}
-            )
-            return
-        if is_enemy and to_pos not in reachable:
-            adj = hex_neighbors(to_pos[0], to_pos[1], Overworld.COLS, Overworld.ROWS)
-            if not any(h in reachable or h == from_pos for h in adj):
-                await self.send_to(
-                    player_id, {"type": ERROR, "message": "Out of move range"}
-                )
-                return
+        army = validation["army"]
+        to_pos = validation["to_pos"]
+        target = validation["target"]
+        is_enemy = validation["is_enemy"]
 
         if is_enemy:
             await self._run_battle(army, target)
@@ -383,34 +401,15 @@ class GameServer:
             await self.broadcast(self._state_update_msg(status))
 
     async def _handle_split_move(self, player_id, msg):
-        if not self.started:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Game not started"}
-            )
+        validation = await self._validate_move_request(player_id, msg)
+        if not validation:
             return
-        if player_id != self.current_player:
-            await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
-            return
-        missing = self._validate_fields(msg, "from", "to")
-        if missing:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": f"Missing fields: {missing}"}
-            )
-            return
-
-        from_pos = tuple(msg["from"])
-        to_pos = tuple(msg["to"])
+        army = validation["army"]
+        from_pos = validation["from_pos"]
+        to_pos = validation["to_pos"]
+        target = validation["target"]
+        is_enemy = validation["is_enemy"]
         moving = msg.get("units", [])
-
-        army = self.world.get_army_at(from_pos)
-        if not army or army.player != player_id:
-            await self.send_to(player_id, {"type": ERROR, "message": "Not your army"})
-            return
-        if army.exhausted:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Army is exhausted"}
-            )
-            return
         if not moving:
             await self.send_to(
                 player_id, {"type": ERROR, "message": "No units selected"}
@@ -432,32 +431,6 @@ class GameServer:
                 player_id, {"type": ERROR, "message": "Invalid unit selection"}
             )
             return
-
-        target = self.world.get_army_at(to_pos)
-        occupied = {
-            a.pos for a in self.world.armies if a.pos != from_pos and a is not target
-        }
-        reachable = reachable_hexes(
-            from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
-        )
-        if target and target.player == player_id and to_pos not in reachable:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Out of move range"}
-            )
-            return
-        is_enemy = target and target.player != player_id
-        if to_pos not in reachable and not is_enemy:
-            await self.send_to(
-                player_id, {"type": ERROR, "message": "Out of move range"}
-            )
-            return
-        if is_enemy and to_pos not in reachable:
-            adj = hex_neighbors(to_pos[0], to_pos[1], Overworld.COLS, Overworld.ROWS)
-            if not any(h in reachable or h == from_pos for h in adj):
-                await self.send_to(
-                    player_id, {"type": ERROR, "message": "Out of move range"}
-                )
-                return
 
         moving_units = [(name, cnt) for name, cnt in moving_counts.items() if cnt > 0]
         remaining_units = []
