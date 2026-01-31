@@ -1866,6 +1866,16 @@ class OverworldGUI:
     def _coerce_int_keys(mapping):
         return {int(k): v for k, v in (mapping or {}).items()}
 
+    def _set_turn_status(self, base_message, my_turn_message=None):
+        if self._is_my_turn():
+            if my_turn_message:
+                self.status_var.set(my_turn_message)
+                return
+            suffix = f" Your turn (P{self.player_id})."
+        else:
+            suffix = f" Waiting for P{self.current_player}."
+        self.status_var.set(f"{base_message}{suffix}")
+
     def _apply_world_state(self, msg):
         self.world.armies = deserialize_armies(msg["armies"])
         self.world.bases = deserialize_bases(msg.get("bases", []))
@@ -1886,12 +1896,13 @@ class OverworldGUI:
         if not self.faction and self.player_factions:
             self.faction = self.player_factions.get(self.player_id)
         self._update_gold_display()
-        if self._is_my_turn():
-            self.status_var.set(
-                f"Game started! Your turn (P{self.player_id}). Click your base to build units."
-            )
-        else:
-            self.status_var.set(f"Game started! Waiting for P{self.current_player}.")
+        self._set_turn_status(
+            "Game started!",
+            my_turn_message=(
+                f"Game started! Your turn (P{self.player_id}). "
+                "Click your base to build units."
+            ),
+        )
         self._draw()
 
     def _msg_state_update(self, msg):
@@ -1901,11 +1912,7 @@ class OverworldGUI:
         self.current_player = msg["current_player"]
         self.selected_army = None
         status = msg.get("message", "")
-        if self._is_my_turn():
-            status += f" Your turn (P{self.player_id})."
-        else:
-            status += f" Waiting for P{self.current_player}."
-        self.status_var.set(status)
+        self._set_turn_status(status)
         self._draw()
 
     def _msg_battle_end(self, msg):
