@@ -6,7 +6,7 @@ import threading
 
 import websockets
 
-from .protocol import encode, decode
+from .protocol import encode, decode, JOIN, ERROR
 
 
 class GameClient:
@@ -49,15 +49,19 @@ class GameClient:
             async with websockets.connect(uri) as ws:
                 self._ws = ws
                 # Send join message
-                await ws.send(encode({
-                    "type": "join",
-                    "player_name": self.player_name,
-                }))
+                await ws.send(
+                    encode(
+                        {
+                            "type": JOIN,
+                            "player_name": self.player_name,
+                        }
+                    )
+                )
                 async for raw in ws:
                     msg = decode(raw)
                     self._queue.put(msg)
         except Exception as e:
-            self._queue.put({"type": "error", "message": f"Connection error: {e}"})
+            self._queue.put({"type": ERROR, "message": f"Connection error: {e}"})
 
     def _poll(self):
         """Poll the message queue from the tkinter main thread."""

@@ -14,7 +14,26 @@ from .combat import (
 from .battle_resolution import make_battle_units, resolve_battle
 from .compat import get_asset_dir
 from .hex import hex_neighbors, reachable_hexes
-from .protocol import deserialize_armies, deserialize_bases, SPLIT_MOVE
+from .protocol import (
+    deserialize_armies,
+    deserialize_bases,
+    SPLIT_MOVE,
+    MOVE_ARMY,
+    END_TURN,
+    REQUEST_REPLAY,
+    BUILD_UNIT,
+    SELECT_FACTION,
+    SELECT_UPGRADE,
+    JOINED,
+    FACTION_PROMPT,
+    UPGRADE_PROMPT,
+    GAME_START,
+    STATE_UPDATE,
+    BATTLE_END,
+    REPLAY_DATA,
+    GAME_OVER,
+    ERROR,
+)
 from .ability_defs import ability
 from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
 from .upgrades import (
@@ -862,7 +881,7 @@ class OverworldGUI:
             if dialog:
                 dialog.destroy()
             if upgrade_id:
-                self.client.send({"type": "select_upgrade", "upgrade_id": upgrade_id})
+                self.client.send({"type": SELECT_UPGRADE, "upgrade_id": upgrade_id})
 
         self._show_upgrade_dialog(
             faction, player_factions, self.player_heroes, on_select
@@ -928,7 +947,7 @@ class OverworldGUI:
 
     def _select_faction_mp(self, faction_name, dialog):
         """Send faction selection to server in multiplayer."""
-        self.client.send({"type": "select_faction", "faction": faction_name})
+        self.client.send({"type": SELECT_FACTION, "faction": faction_name})
         dialog.destroy()
 
     def _auto_build_p2(self):
@@ -1115,7 +1134,7 @@ class OverworldGUI:
         if not self.build_panel or not self.build_panel.winfo_exists():
             return
         if self._multiplayer:
-            payload = {"type": "build_unit", "unit_name": unit_name}
+            payload = {"type": BUILD_UNIT, "unit_name": unit_name}
             if self.build_base_pos:
                 payload["base_pos"] = list(self.build_base_pos)
             self.client.send(payload)
@@ -1481,7 +1500,7 @@ class OverworldGUI:
         if self._multiplayer:
             self.client.send(
                 {
-                    "type": "move_army",
+                    "type": MOVE_ARMY,
                     "from": list(self.selected_army.pos),
                     "to": list(clicked),
                 }
@@ -1543,7 +1562,7 @@ class OverworldGUI:
         if self._multiplayer:
             if not self._is_my_turn():
                 return
-            self.client.send({"type": "end_turn"})
+            self.client.send({"type": END_TURN})
             self.selected_army = None
             self._refresh_army_info_panel(force=True)
             return
@@ -1941,15 +1960,15 @@ class OverworldGUI:
         self.status_var.set(f"Error: {msg['message']}")
 
     _SERVER_MSG_DISPATCH = {
-        "joined": _msg_joined,
-        "faction_prompt": _msg_faction_prompt,
-        "upgrade_prompt": _msg_upgrade_prompt,
-        "game_start": _msg_game_start,
-        "state_update": _msg_state_update,
-        "battle_end": _msg_battle_end,
-        "replay_data": _msg_replay_data,
-        "game_over": _msg_game_over,
-        "error": _msg_error,
+        JOINED: _msg_joined,
+        FACTION_PROMPT: _msg_faction_prompt,
+        UPGRADE_PROMPT: _msg_upgrade_prompt,
+        GAME_START: _msg_game_start,
+        STATE_UPDATE: _msg_state_update,
+        BATTLE_END: _msg_battle_end,
+        REPLAY_DATA: _msg_replay_data,
+        GAME_OVER: _msg_game_over,
+        ERROR: _msg_error,
     }
 
     def _on_server_message(self, msg):
@@ -1978,7 +1997,7 @@ class OverworldGUI:
                 if self.client:
                     self.client.send(
                         {
-                            "type": "request_replay",
+                            "type": REQUEST_REPLAY,
                             "battle_id": battle_id,
                         }
                     )
