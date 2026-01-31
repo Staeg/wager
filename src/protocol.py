@@ -5,6 +5,7 @@ import json
 # Message types - Client -> Server
 JOIN = "join"
 MOVE_ARMY = "move_army"
+SPLIT_MOVE = "split_move"
 END_TURN = "end_turn"
 REQUEST_REPLAY = "request_replay"
 BUILD_UNIT = "build_unit"

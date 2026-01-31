@@ -426,19 +426,9 @@ class Battle:
                     mid = num_rows // 2
                     selected = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
                 else:
-                    # Backline: evenly space, aligned to frontline extent
-                    extent = max(first_col_count, k)
-                    extent = min(extent, num_rows)
+                    # Backline: tighter center-pack to reduce spread
                     mid = num_rows // 2
-                    extent_rows = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:extent]
-                    extent_rows.sort()
-                    if k >= extent:
-                        selected = extent_rows
-                    else:
-                        # Evenly pick k rows from the extent rows
-                        step = (len(extent_rows) - 1) / max(1, k - 1) if k > 1 else 0
-                        indices = [round(i * step) for i in range(k)]
-                        selected = [extent_rows[i] for i in indices]
+                    selected = sorted(rows_in_col, key=lambda r: abs(r - rows_in_col[mid]))[:k]
                 selected.sort()
                 col_positions = [(col, r) for r in selected]
                 self.rng.shuffle(col_positions)
@@ -730,6 +720,26 @@ class Battle:
                 if events:
                     self.last_action[key] = []
             if not any(self.last_action.get(key) for key in keys):
+                break
+
+    def apply_all_events(self, action):
+        if not action:
+            return
+        keys = ("heal_events", "fortify_events", "sunder_events",
+                "splash_events", "repair_events", "bombardment_events", "strike_events")
+        while True:
+            applied_any = False
+            for key in keys:
+                events = action.get(key, [])
+                idx = 0
+                while idx < len(events):
+                    event = events[idx]
+                    if not event.get("_applied"):
+                        self.apply_effect_event(event)
+                        event["_applied"] = True
+                        applied_any = True
+                    idx += 1
+            if not applied_any:
                 break
     def step(self):
         """Execute one unit's turn. Returns True if battle continues.
@@ -1024,7 +1034,7 @@ def bind_keyword_hover(label, parent, description):
 class CombatGUI:
     HEX_SIZE = 32
 
-    def __init__(self, root, battle=None, on_complete=None):
+    def __init__(self, root, battle=None, on_complete=None, attacker_player=None, defender_player=None):
         self.root = root
         try:
             root.title("Wager of War v3 - Combat")
@@ -1033,6 +1043,8 @@ class CombatGUI:
         self.battle = battle if battle is not None else Battle()
         self.battle.apply_events_immediately = False
         self.on_complete = on_complete
+        self.attacker_player = attacker_player
+        self.defender_player = defender_player
 
         # layout
         top = tk.Frame(root)
@@ -1218,7 +1230,9 @@ class CombatGUI:
             d[u.name] = d.get(u.name, 0) + 1
         p1_str = "  ".join(f"{n}:{c}" for n, c in p1_counts.items())
         p2_str = "  ".join(f"{n}:{c}" for n, c in p2_counts.items())
-        self.score_var.set(f"P1 [{p1_str}]  |  P2 [{p2_str}]")
+        left_label = f"Attacker: {self.attacker_player}" if self.attacker_player else "Attacker"
+        right_label = f"Defender: {self.defender_player}" if self.defender_player else "Defender"
+        self.score_var.set(f"{left_label} [{p1_str}]  |  {right_label} [{p2_str}]")
         if b.winner is not None:
             if b.winner == 0:
                 self.status_var.set("Stalemate - Draw!")
@@ -1770,24 +1784,7 @@ class CombatGUI:
         self._draw()
 
     def _apply_all_events(self, action):
-        if not action:
-            return
-        keys = ("heal_events", "fortify_events", "sunder_events",
-                "splash_events", "repair_events", "bombardment_events", "strike_events")
-        while True:
-            applied_any = False
-            for key in keys:
-                events = action.get(key, [])
-                idx = 0
-                while idx < len(events):
-                    event = events[idx]
-                    if not event.get("_applied"):
-                        self.battle.apply_effect_event(event)
-                        event["_applied"] = True
-                        applied_any = True
-                    idx += 1
-            if not applied_any:
-                break
+        self.battle.apply_all_events(action)
 
     def toggle_auto(self):
         self.auto_running = not self.auto_running

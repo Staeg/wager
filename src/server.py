@@ -20,7 +20,7 @@ from .heroes import get_heroes_for_faction
 from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
 from .protocol import (
     serialize_armies, serialize_bases, encode, decode,
-    JOIN, MOVE_ARMY, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION, SELECT_UPGRADE,
+    JOIN, MOVE_ARMY, SPLIT_MOVE, END_TURN, REQUEST_REPLAY, BUILD_UNIT, SELECT_FACTION, SELECT_UPGRADE,
     JOINED, GAME_START, STATE_UPDATE, BATTLE_END,
     REPLAY_DATA, ERROR, GAME_OVER, FACTION_PROMPT, UPGRADE_PROMPT,
 )
@@ -29,13 +29,15 @@ from .protocol import (
 class BattleRecord:
     """Stores a completed battle for replay."""
 
-    def __init__(self, battle_id, p1_units, p2_units, rng_seed, winner, summary):
+    def __init__(self, battle_id, p1_units, p2_units, rng_seed, winner, summary, attacker_player, defender_player):
         self.battle_id = battle_id
         self.p1_units = p1_units
         self.p2_units = p2_units
         self.rng_seed = rng_seed
         self.winner = winner
         self.summary = summary
+        self.attacker_player = attacker_player
+        self.defender_player = defender_player
 
 
 class GameServer:
@@ -54,7 +56,7 @@ class GameServer:
         self.player_factions = {}  # player_id -> faction name
         self._faction_selection_order = []  # order of players to pick factions
         self._faction_selection_idx = 0  # which player is currently picking
-        self.player_heroes = {}  # player_id -> hero name
+        self.player_heroes = {}  # player_id -> list of hero names
         self.player_upgrades = {}  # player_id -> upgrade id
         self._upgrade_selection_order = []  # order of players to pick upgrades
         self._upgrade_selection_idx = 0  # which player is currently picking
@@ -134,9 +136,15 @@ class GameServer:
         rng_seed = random.randint(0, 2**31)
 
         # Run battle to completion
-        battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed, record_history=False)
+        battle = Battle(
+            p1_units=p1_units,
+            p2_units=p2_units,
+            rng_seed=rng_seed,
+            apply_events_immediately=False,
+            record_history=False,
+        )
         while battle.step():
-            pass
+            battle.apply_all_events(battle.last_action)
 
         battle_winner = battle.winner
         p1_survivors = sum(1 for u in battle.units if u.alive and u.player == 1)
@@ -179,6 +187,8 @@ class GameServer:
             rng_seed=rng_seed,
             winner=ow_winner,
             summary=summary,
+            attacker_player=attacker.player,
+            defender_player=defender.player,
         ))
 
         # Broadcast battle result
@@ -323,6 +333,105 @@ class GameServer:
                             msg = f"P{player_id} moved army and collected {gained} gold."
                         await self.broadcast(self._state_update_msg(msg))
 
+                elif msg_type == SPLIT_MOVE:
+                    if not self.started:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Game not started"})
+                        continue
+                    if player_id != self.current_player:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
+                        continue
+
+                    from_pos = tuple(msg["from"])
+                    to_pos = tuple(msg["to"])
+                    moving = msg.get("units", [])
+
+                    army = self.world.get_army_at(from_pos)
+                    if not army or army.player != player_id:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Not your army"})
+                        continue
+                    if army.exhausted:
+                        await self.send_to(player_id, {"type": ERROR, "message": "Army is exhausted"})
+                        continue
+                    if not moving:
+                        await self.send_to(player_id, {"type": ERROR, "message": "No units selected"})
+                        continue
+
+                    available = {name: count for name, count in army.units}
+                    moving_counts = {}
+                    for name, count in moving:
+                        if name not in available or count <= 0:
+                            await self.send_to(player_id, {"type": ERROR, "message": "Invalid unit selection"})
+                            break
+                        moving_counts[name] = moving_counts.get(name, 0) + count
+                    else:
+                        if any(moving_counts[name] > available.get(name, 0) for name in moving_counts):
+                            await self.send_to(player_id, {"type": ERROR, "message": "Invalid unit selection"})
+                            continue
+
+                        target = self.world.get_army_at(to_pos)
+                        occupied = {a.pos for a in self.world.armies if a.pos != from_pos and a is not target}
+                        reachable = reachable_hexes(
+                            from_pos, ARMY_MOVE_RANGE, Overworld.COLS, Overworld.ROWS, occupied
+                        )
+                        if target and target.player == player_id and to_pos not in reachable:
+                            await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
+                            continue
+                        is_enemy = target and target.player != player_id
+                        if to_pos not in reachable and not is_enemy:
+                            await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
+                            continue
+                        if is_enemy and to_pos not in reachable:
+                            adj = hex_neighbors(to_pos[0], to_pos[1], Overworld.COLS, Overworld.ROWS)
+                            if not any(h in reachable or h == from_pos for h in adj):
+                                await self.send_to(player_id, {"type": ERROR, "message": "Out of move range"})
+                                continue
+
+                        moving_units = [(name, cnt) for name, cnt in moving_counts.items() if cnt > 0]
+                        remaining_units = []
+                        for name, count in army.units:
+                            remaining = count - moving_counts.get(name, 0)
+                            if remaining > 0:
+                                remaining_units.append((name, remaining))
+                        if not remaining_units and army in self.world.armies:
+                            self.world.armies.remove(army)
+                        else:
+                            army.units = remaining_units
+
+                        moving_army = OverworldArmy(player=player_id, units=moving_units, pos=from_pos)
+
+                        if is_enemy:
+                            self.world.armies.append(moving_army)
+                            await self._run_battle(moving_army, target)
+                            if moving_army in self.world.armies:
+                                self._check_base_destruction(moving_army.pos, moving_army.player)
+                            if await self._check_game_over():
+                                continue
+                            await self.broadcast(self._state_update_msg(
+                                f"Battle resolved between P{moving_army.player} and P{target.player}."
+                            ))
+                        elif target and target.player == player_id:
+                            self.world.merge_armies(target, moving_army)
+                            target.exhausted = True
+                            gained = self.world.collect_gold_at(to_pos, player_id)
+                            if await self._check_game_over():
+                                continue
+                            msg = f"P{player_id} combined armies at {to_pos}."
+                            if gained:
+                                msg = f"P{player_id} combined armies and collected {gained} gold."
+                            await self.broadcast(self._state_update_msg(msg))
+                        else:
+                            self.world.armies.append(moving_army)
+                            self.world.move_army(moving_army, to_pos)
+                            moving_army.exhausted = True
+                            gained = self.world.collect_gold_at(to_pos, player_id)
+                            self._check_base_destruction(to_pos, player_id)
+                            if await self._check_game_over():
+                                continue
+                            msg = f"P{player_id} moved army to {to_pos}."
+                            if gained:
+                                msg = f"P{player_id} moved army and collected {gained} gold."
+                            await self.broadcast(self._state_update_msg(msg))
+
                 elif msg_type == SELECT_FACTION:
                     faction_name = msg.get("faction")
                     if not self._faction_selection_order:
@@ -341,8 +450,9 @@ class GameServer:
                         continue
                     self.player_factions[player_id] = faction_name
                     if player_id not in self.player_heroes:
-                        heroes = get_heroes_for_faction(faction_name)
-                        self.player_heroes[player_id] = random.choice(heroes) if heroes else None
+                        heroes = list(get_heroes_for_faction(faction_name))
+                        random.shuffle(heroes)
+                        self.player_heroes[player_id] = heroes[:min(2, len(heroes))]
                     self._faction_selection_idx += 1
                     if self._faction_selection_idx >= len(self._faction_selection_order):
                         # All players have picked — start upgrade selection
@@ -383,12 +493,18 @@ class GameServer:
                         await self.send_to(player_id, {"type": ERROR, "message": "Not your turn"})
                         continue
                     unit_name = msg.get("unit_name", "")
+                    base_pos = msg.get("base_pos")
+                    if base_pos is not None:
+                        base_pos = tuple(base_pos)
                     # Restrict to player's faction
                     faction = self.player_factions.get(player_id)
                     if faction and unit_name not in FACTIONS[faction]:
                         await self.send_to(player_id, {"type": ERROR, "message": f"Cannot build {unit_name} — not in your faction"})
                         continue
-                    err = self.world.build_unit(player_id, unit_name)
+                    if base_pos is not None:
+                        err = self.world.build_unit_at_pos(player_id, unit_name, base_pos)
+                    else:
+                        err = self.world.build_unit(player_id, unit_name)
                     if err:
                         await self.send_to(player_id, {"type": ERROR, "message": err})
                     else:
@@ -419,6 +535,8 @@ class GameServer:
                             "p1_units": record.p1_units,
                             "p2_units": record.p2_units,
                             "rng_seed": record.rng_seed,
+                            "attacker_player": record.attacker_player,
+                            "defender_player": record.defender_player,
                         })
                     else:
                         await self.send_to(player_id, {"type": ERROR, "message": f"Battle {bid} not found"})
@@ -472,9 +590,10 @@ class GameServer:
         self.world = self._build_world()
         self.current_player = 1
 
-        for pid, hero_name in self.player_heroes.items():
-            if hero_name:
-                self.world.add_unit_at_base(pid, hero_name)
+        for pid, hero_names in self.player_heroes.items():
+            bases = self.world.get_player_bases(pid)
+            for hero_name, base in zip(hero_names, bases):
+                self.world.add_unit_at_pos(pid, hero_name, base.pos)
 
         for pid in self.players:
             await self.send_to(pid, {
