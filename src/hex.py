@@ -48,6 +48,7 @@ def bfs_next_step(start, goal, occupied, cols, rows):
         horizontal = 0 if nb[1] == current[1] else 1
         return (closer, horizontal, next_dist)
 
+    start_dist = hex_distance(start, goal)
     queue = deque()
     queue.append((start, [start]))
     visited = {start}
@@ -58,23 +59,24 @@ def bfs_next_step(start, goal, occupied, cols, rows):
         for nb in neighbors:
             if nb in visited:
                 continue
+            # Every step must be strictly closer to the goal than the start
+            if hex_distance(nb, goal) >= start_dist:
+                continue
             visited.add(nb)
             new_path = path + [nb]
             if nb == goal:
                 return new_path[1]
             if nb not in occupied:
                 queue.append((nb, new_path))
-    # No full path found — move to the adjacent unoccupied hex closest to goal
+    # No full path — move to the unoccupied neighbor closest to goal (but
+    # never equal or farther than current distance; stay put if none closer)
     best = start
-    best_dist = hex_distance(start, goal)
-    best_horizontal = 1
+    best_dist = start_dist
     for nb in hex_neighbors(start[0], start[1], cols, rows):
         if nb not in occupied:
             d = hex_distance(nb, goal)
-            horiz = 0 if nb[1] == start[1] else 1
-            if d < best_dist or (d == best_dist and horiz < best_horizontal):
+            if d < best_dist:
                 best_dist = d
-                best_horizontal = horiz
                 best = nb
     return best
 
