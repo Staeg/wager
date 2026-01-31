@@ -98,6 +98,7 @@ class GameServer:
         self.player_upgrades = {}  # player_id -> upgrade id
         self._upgrade_selection_order = []  # order of players to pick upgrades
         self._upgrade_selection_idx = 0  # which player is currently picking
+        self._effective_stats_cache = {}
 
     def _build_world(self):
         """Create an Overworld with bases and gold, no starting armies."""
@@ -157,12 +158,18 @@ class GameServer:
         """Return unit stats with the player's upgrade applied."""
         faction = self.player_factions.get(player)
         upgrade_id = self.player_upgrades.get(player)
+        cache_key = (faction, upgrade_id)
+        cached = self._effective_stats_cache.get(player)
+        if cached and cached.get("key") == cache_key:
+            return cached["stats"]
         faction_units = FACTIONS.get(
             faction, list(UNIT_STATS.keys())
         ) + HEROES_BY_FACTION.get(faction, [])
-        return apply_upgrade_to_unit_stats(
+        stats = apply_upgrade_to_unit_stats(
             ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units
         )
+        self._effective_stats_cache[player] = {"key": cache_key, "stats": stats}
+        return stats
 
     async def _run_battle(self, attacker, defender):
         """Run a battle server-side and broadcast the result."""

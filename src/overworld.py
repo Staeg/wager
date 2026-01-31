@@ -540,6 +540,7 @@ class OverworldGUI:
         self.player_factions = {}
         self.player_upgrades = {}
         self.player_heroes = {}
+        self._effective_stats_cache = {}
         self.ai_faction = None
         self.ai_upgrade = None
         self.ai_hero = None
@@ -767,12 +768,18 @@ class OverworldGUI:
         if not faction:
             return ALL_UNIT_STATS
         upgrade_id = self.player_upgrades.get(player_id)
+        cache_key = (faction, upgrade_id)
+        cached = self._effective_stats_cache.get(player_id)
+        if cached and cached.get("key") == cache_key:
+            return cached["stats"]
         faction_units = FACTIONS.get(
             faction, list(UNIT_STATS.keys())
         ) + HEROES_BY_FACTION.get(faction, [])
-        return apply_upgrade_to_unit_stats(
+        stats = apply_upgrade_to_unit_stats(
             ALL_UNIT_STATS, get_upgrade_by_id(upgrade_id), faction_units
         )
+        self._effective_stats_cache[player_id] = {"key": cache_key, "stats": stats}
+        return stats
 
     def _show_upgrade_dialog(
         self, faction_name, player_factions, player_heroes, on_select
