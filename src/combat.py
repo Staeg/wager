@@ -106,7 +106,14 @@ class Battle:
             # Parse specs to find the minimum range tier and count those units
             parsed = []
             for spec in specs:
-                parsed.append((spec["range"], spec["count"]))
+                if isinstance(spec, dict):
+                    rng = spec["range"]
+                    cnt = spec["count"]
+                else:
+                    # Tuple format: (name, max_hp, damage, range, count, ...)
+                    rng = spec[3]
+                    cnt = spec[4]
+                parsed.append((rng, cnt))
             min_range = min(r for r, _ in parsed)
             return sum(c for r, c in parsed if r == min_range)
 
