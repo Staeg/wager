@@ -315,6 +315,7 @@ class OverworldGUI:
 
         self.tooltip = None
         self._hovered_army = None
+        self._reward_tooltip = None
         self.combat_frame = None
 
         if self._multiplayer:
@@ -818,37 +819,35 @@ class OverworldGUI:
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
 
-    def _bind_reward_hover(self, widget, summary_lines, keywords):
-        tip = [None]
+    def _hide_reward_tooltip(self):
+        if self._reward_tooltip:
+            self._reward_tooltip.destroy()
+            self._reward_tooltip = None
 
-        def _render_tip(x_root, y_root):
-            if tip[0]:
-                tip[0].destroy()
-            tip[0] = tw = tk.Toplevel(widget)
+    def _bind_reward_hover(self, widget, summary_lines, keywords):
+        def _show_tip(x_root, y_root):
+            if self._reward_tooltip:
+                self._hide_reward_tooltip()
+            self._reward_tooltip = tw = tk.Toplevel(widget)
             tw.wm_overrideredirect(True)
-            tw.wm_geometry(f"+{x_root + 10}+{y_root + 20}")
-            tw.bind(
-                "<Leave>",
-                lambda e: (tip[0].destroy(), tip.__setitem__(0, None))
-                if tip[0]
-                else None,
-            )
+            tw.wm_geometry(f"+{x_root + 15}+{y_root + 10}")
+            tw.configure(bg="#222")
 
             text = "\n".join(summary_lines)
             tk.Label(
                 tw,
                 text=text,
                 fg="white",
-                bg="#444",
-                font=("Arial", 9),
+                bg="#222",
+                font=("Arial", 10, "bold"),
                 padx=6,
-                pady=4,
+                pady=2,
                 justify=tk.LEFT,
             ).pack(anchor="w")
 
             if keywords:
-                row = tk.Frame(tw, bg="#444")
-                row.pack(anchor="w", padx=6, pady=(4, 2))
+                row = tk.Frame(tw, bg="#222")
+                row.pack(anchor="w", padx=4, pady=(0, 2))
                 for label, ability in keywords:
                     lbl = tk.Label(
                         row,
@@ -865,37 +864,31 @@ class OverworldGUI:
                     bind_keyword_hover(lbl, tw, describe_ability(ability))
 
         def on_enter(e):
-            _render_tip(e.x_root, e.y_root)
+            _show_tip(e.x_root, e.y_root)
 
         def on_motion(e):
-            if not tip[0]:
+            if not self._reward_tooltip:
                 return
             shift_held = bool(e.state & 0x1)
             if not shift_held:
-                tip[0].wm_geometry(f"+{e.x_root + 10}+{e.y_root + 20}")
+                self._reward_tooltip.wm_geometry(f"+{e.x_root + 15}+{e.y_root + 10}")
 
         def on_leave(e):
             shift_held = bool(e.state & 0x1)
-            if shift_held:
-                return
-            if tip[0]:
-                tip[0].destroy()
-                tip[0] = None
+            if not shift_held:
+                self._hide_reward_tooltip()
 
         def on_shift_release(e):
-            if not tip[0]:
+            if not self._reward_tooltip:
                 return
             try:
                 mx = self.root.winfo_pointerx()
                 my = self.root.winfo_pointery()
                 widget_at = self.root.winfo_containing(mx, my)
-                if widget_at not in (widget, tip[0]):
-                    tip[0].destroy()
-                    tip[0] = None
+                if widget_at not in (widget, self._reward_tooltip):
+                    self._hide_reward_tooltip()
             except Exception:
-                if tip[0]:
-                    tip[0].destroy()
-                    tip[0] = None
+                self._hide_reward_tooltip()
 
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
