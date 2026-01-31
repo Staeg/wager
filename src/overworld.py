@@ -1411,7 +1411,12 @@ class OverworldGUI:
         )
         my_faction = self.player_factions.get(my_player) if self._multiplayer else self.faction
         if show_reachable:
-            occupied = {a.pos for a in w.armies if a is not self.selected_army}
+            occupied = {
+                a.pos
+                for a in w.armies
+                if a is not self.selected_army
+                and not self._is_hidden_objective_guard(a, my_faction)
+            }
             neighbors = reachable_hexes(
                 self.selected_army.pos, ARMY_MOVE_RANGE, w.COLS, w.ROWS, occupied
             )
