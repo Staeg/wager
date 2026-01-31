@@ -866,7 +866,7 @@ class Battle:
 
 # --- GUI ---
 
-def format_ability(ability):
+def format_ability(ability, include_self_target=False):
     parts = []
     aura = ability.get("aura")
     if aura:
@@ -878,7 +878,7 @@ def format_ability(ability):
     if trigger:
         parts.append(trigger.capitalize())
     target = ability.get("target")
-    if target and target != "self":
+    if target and (target != "self" or include_self_target):
         parts.append(target.capitalize())
     effect = ability.get("effect", "").replace("_", " ").title()
     if effect:
@@ -1003,6 +1003,22 @@ def describe_ability(ability):
         return f"{prefix}teleport adjacent to the furthest enemy instead of moving."
 
     return format_ability(ability)
+
+
+def bind_keyword_hover(label, parent, description):
+    sub_tip = [None]
+    def on_enter(e):
+        sub_tip[0] = st = tk.Toplevel(parent)
+        st.wm_overrideredirect(True)
+        st.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 18}")
+        tk.Label(st, text=description, fg="white", bg="#444",
+                 font=("Arial", 9), padx=4, pady=2).pack()
+    def on_leave(e):
+        if sub_tip[0]:
+            sub_tip[0].destroy()
+            sub_tip[0] = None
+    label.bind("<Enter>", on_enter)
+    label.bind("<Leave>", on_leave)
 
 
 class CombatGUI:
@@ -1296,19 +1312,7 @@ class CombatGUI:
                 self._hide_tooltip()
 
     def _bind_ability_hover(self, label, parent, description):
-        sub_tip = [None]
-        def on_enter(e):
-            sub_tip[0] = st = tk.Toplevel(parent)
-            st.wm_overrideredirect(True)
-            st.wm_geometry(f"+{e.x_root + 10}+{e.y_root + 18}")
-            tk.Label(st, text=description, fg="white", bg="#444",
-                     font=("Arial", 9), padx=4, pady=2).pack()
-        def on_leave(e):
-            if sub_tip[0]:
-                sub_tip[0].destroy()
-                sub_tip[0] = None
-        label.bind("<Enter>", on_enter)
-        label.bind("<Leave>", on_leave)
+        bind_keyword_hover(label, parent, description)
 
     def _on_leave(self, event):
         shift_held = event.state & 0x1

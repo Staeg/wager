@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from .ability_defs import ability
+from .combat import format_ability
 
 
 UPGRADE_DEFS = {
@@ -96,7 +97,7 @@ UPGRADE_DEFS = {
             "id": "artificer_carpet_bombing",
             "name": "Carpet Bombing",
             "tier": 3,
-            "description": "Random Followup abilities become Charge 2 Area Followup abilities.",
+            "description": "Random Strike abilities become Charge 2 Area Strike abilities.",
             "effects": [
                 {
                     "type": "modify_abilities",
@@ -200,3 +201,87 @@ def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
                 stats[unit][stat] = stats[unit].get(stat, 0) + effect.get("delta", 0)
 
     return stats
+
+
+def _find_matching_ability(base_stats, faction_units, match):
+    if not base_stats or not faction_units or not match:
+        return None
+    for unit in faction_units:
+        stats = base_stats.get(unit, {})
+        for ability in stats.get("abilities", []):
+            if all(ability.get(k) == v for k, v in match.items()):
+                return ability
+    return None
+
+
+def upgrade_effect_keywords(upgrade_def, base_stats=None, faction_units=None):
+    keywords = []
+    for effect in upgrade_def.get("effects", []):
+        etype = effect.get("type")
+        if etype == "append_ability":
+            text = format_ability(effect["ability"], include_self_target=True)
+            if text:
+                keywords.append((text, effect["ability"]))
+        elif etype == "modify_abilities":
+            match = dict(effect.get("match", {}))
+            sample = _find_matching_ability(base_stats, faction_units, match)
+            base_ability = sample or match
+            base = format_ability(base_ability, include_self_target=True)
+            if base:
+                keywords.append((base, base_ability))
+            merged = dict(base_ability)
+            for key, value in effect.get("set", {}).items():
+                if value is None:
+                    merged.pop(key, None)
+                else:
+                    merged[key] = value
+            updated = format_ability(merged, include_self_target=True)
+            if updated and updated != base:
+                keywords.append((updated, merged))
+    return keywords
+
+
+def upgrade_effect_summaries(upgrade_def, base_stats=None, faction_units=None):
+    summaries = []
+    for effect in upgrade_def.get("effects", []):
+        etype = effect.get("type")
+        unit = effect.get("unit")
+        unit_prefix = ""
+        if unit and unit != "__all__":
+            unit_prefix = f"{unit} "
+        elif unit == "__all__":
+            unit_prefix = "All units "
+
+        if etype == "append_ability":
+            ability_text = format_ability(effect["ability"], include_self_target=True)
+            if ability_text:
+                summaries.append(f"{unit_prefix}gain {ability_text}.")
+        elif etype == "add_stat":
+            stat = effect.get("stat")
+            delta = effect.get("delta", 0)
+            sign = "+" if delta >= 0 else ""
+            if stat:
+                summaries.append(f"{unit_prefix}gain {sign}{delta} {stat}.")
+        elif etype == "modify_abilities":
+            match = dict(effect.get("match", {}))
+            sample = _find_matching_ability(base_stats, faction_units, match)
+            base_ability = sample or match
+            base = format_ability(base_ability, include_self_target=True)
+            merged = dict(base_ability)
+            for key, value in effect.get("set", {}).items():
+                if value is None:
+                    merged.pop(key, None)
+                else:
+                    merged[key] = value
+            updated = format_ability(merged, include_self_target=True)
+            if base and updated and base != updated:
+                if unit_prefix:
+                    summaries.append(f"{unit_prefix}{base} abilities become {updated}.")
+                else:
+                    summaries.append(f"{base} abilities become {updated}.")
+            elif updated:
+                if unit_prefix:
+                    summaries.append(f"{unit_prefix}abilities become {updated}.")
+                else:
+                    summaries.append(f"Abilities become {updated}.")
+    return summaries

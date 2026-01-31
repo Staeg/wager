@@ -19,7 +19,7 @@ Artificer
 * T2:
    * Armor kits: Kitboys gain the ability “Passive Aura 1 - Armor 1”, which passively increases the armor for all allies within 1 hex by 1
 * T3:
-   * Carpet bombing: Random Followup abilities become Charge 2 Area Followup abilities, which hit all enemies within range instead of randomly, but occur half as often
+   * Carpet bombing: Random Strike abilities become Charge 2 Area Strike abilities, which hit all enemies within range instead of randomly, but occur half as often
 Purifier
 * T1:
    * Alacrity: Blades are now created adjacent to the highest health ally in range instead of the summoner, and they are ready instead of exhausted

@@ -5,12 +5,18 @@ import random
 import sys
 from dataclasses import dataclass
 from PIL import Image, ImageTk
-from .combat import Battle, CombatGUI, format_ability, describe_ability
+from .combat import Battle, CombatGUI, format_ability, describe_ability, bind_keyword_hover
 from .hex import hex_neighbors, reachable_hexes
 from .protocol import deserialize_armies, deserialize_bases
 from .ability_defs import ability
 from .heroes import HERO_STATS, HEROES_BY_FACTION, get_heroes_for_faction
-from .upgrades import get_upgrades_for_faction, get_upgrade_by_id, apply_upgrade_to_unit_stats
+from .upgrades import (
+    get_upgrades_for_faction,
+    get_upgrade_by_id,
+    apply_upgrade_to_unit_stats,
+    upgrade_effect_keywords,
+    upgrade_effect_summaries,
+)
 
 # Canonical unit stats
 UNIT_STATS = {
@@ -89,6 +95,62 @@ def _ability_texts(stats):
 
 def _ability_descriptions(stats):
     return [describe_ability(ab) for ab in stats.get("abilities", [])]
+
+def _unit_tooltip_text(name, stats):
+    armor = stats.get("armor", 0)
+    stats_line = f"{name} - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+    if armor:
+        stats_line += f" Armor:{armor}"
+    ability_lines = _ability_descriptions(stats)
+    if ability_lines:
+        return "\n".join([stats_line, ""] + ability_lines)
+    return stats_line
+
+def _upgrade_referenced_units(upgrade, base_stats, faction_units):
+    units = set()
+    for effect in upgrade.get("effects", []):
+        unit = effect.get("unit")
+        if unit == "__all__":
+            units.update(faction_units or [])
+            continue
+        if unit:
+            units.add(unit)
+            continue
+        if effect.get("type") == "modify_abilities":
+            match = effect.get("match", {})
+            for fname in faction_units or []:
+                stats = base_stats.get(fname, {})
+                for ability in stats.get("abilities", []):
+                    if all(ability.get(k) == v for k, v in match.items()):
+                        units.add(fname)
+                        break
+    return sorted(units)
+
+def _add_upgrade_hover_rows(parent, upgrade, effective_stats, faction_units, bind_unit_tooltip):
+    units = _upgrade_referenced_units(upgrade, effective_stats, faction_units)
+    if units:
+        row = tk.Frame(parent)
+        row.pack(anchor="w", pady=(2, 0))
+        tk.Label(row, text="Units:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 4))
+        for unit_name in units:
+            stats = effective_stats.get(unit_name)
+            if not stats:
+                continue
+            lbl = tk.Label(row, text=unit_name, fg="#2244aa", bg=row.cget("bg"),
+                           font=("Arial", 9, "underline"), padx=3)
+            lbl.pack(side=tk.LEFT, padx=2)
+            bind_unit_tooltip(lbl, _unit_tooltip_text(unit_name, stats))
+
+    keywords = upgrade_effect_keywords(upgrade, effective_stats, faction_units)
+    if keywords:
+        row = tk.Frame(parent, bg=parent.cget("bg"))
+        row.pack(anchor="w", pady=(2, 0))
+        tk.Label(row, text="Keywords:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 4))
+        for text, ability in keywords:
+            lbl = tk.Label(row, text=text, fg="#aaffaa", bg="#333", font=("Arial", 9),
+                           padx=4, pady=1, relief=tk.RAISED, borderwidth=1)
+            lbl.pack(side=tk.LEFT, padx=2)
+            bind_keyword_hover(lbl, parent, describe_ability(ability))
 
 
 def make_battle_units(army, effective_stats):
@@ -430,10 +492,21 @@ class OverworldGUI:
         self.end_turn_btn = tk.Button(left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn)
         self.end_turn_btn.pack(pady=5)
 
+        self.army_info_title = tk.StringVar(value="No army selected.")
+        self._army_info_key = None
+
         # Battle log panel (right side)
         right_frame = tk.Frame(self.main_frame, width=250)
         right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
         right_frame.pack_propagate(False)
+        self.army_info_frame = tk.Frame(right_frame, relief=tk.GROOVE, borderwidth=2, padx=6, pady=6)
+        self.army_info_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(self.army_info_frame, text="Army Info", font=("Arial", 11, "bold")).pack(anchor="w")
+        tk.Label(self.army_info_frame, textvariable=self.army_info_title,
+                 font=("Arial", 9), justify=tk.LEFT).pack(anchor="w")
+        self.army_info_units_frame = tk.Frame(self.army_info_frame)
+        self.army_info_units_frame.pack(fill=tk.X, pady=(4, 0))
+
         tk.Label(right_frame, text="Battle Log", font=("Arial", 11, "bold")).pack()
         self.battle_log = tk.Listbox(right_frame, font=("Consolas", 9), selectmode=tk.SINGLE)
         self.battle_log.pack(fill=tk.BOTH, expand=True)
@@ -542,6 +615,7 @@ class OverworldGUI:
         if not upgrades:
             on_select(None, None)
             return
+        faction_units = FACTIONS.get(faction_name, list(UNIT_STATS.keys())) + HEROES_BY_FACTION.get(faction_name, [])
         dialog = tk.Toplevel(self.root)
         dialog.title("Choose Your Upgrade")
         dialog.transient(self.root)
@@ -556,14 +630,22 @@ class OverworldGUI:
         if player_heroes:
             tk.Label(dialog, text="Heroes:", font=("Arial", 11, "bold")).pack(anchor="w", padx=12, pady=(6, 0))
             for pid in sorted(player_heroes.keys()):
-                tk.Label(dialog, text=f"P{pid}: {player_heroes[pid]}", font=("Arial", 10)).pack(anchor="w", padx=20)
+                hero_name = player_heroes[pid]
+                hero_label = tk.Label(dialog, text=f"P{pid}: {hero_name}", font=("Arial", 10))
+                hero_label.pack(anchor="w", padx=20)
+                hero_stats = ALL_UNIT_STATS.get(hero_name)
+                if hero_stats:
+                    self._bind_ability_hover(hero_label, _unit_tooltip_text(hero_name, hero_stats))
 
         for upgrade in upgrades:
             frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
             frame.pack(fill=tk.X, padx=15, pady=6)
             tk.Label(frame, text=upgrade["name"], font=("Arial", 12, "bold")).pack(anchor="w")
-            tk.Label(frame, text=upgrade["description"], font=("Arial", 9), wraplength=360,
+            summary_lines = upgrade_effect_summaries(upgrade, ALL_UNIT_STATS, faction_units)
+            summary_text = "\n".join(summary_lines) if summary_lines else upgrade.get("description", "")
+            tk.Label(frame, text=summary_text, font=("Arial", 9), wraplength=360,
                      justify=tk.LEFT).pack(anchor="w")
+            _add_upgrade_hover_rows(frame, upgrade, ALL_UNIT_STATS, faction_units, self._bind_ability_hover)
             tk.Button(frame, text=f"Choose {upgrade['name']}", font=("Arial", 10),
                       command=lambda u=upgrade: on_select(u["id"], dialog)).pack(pady=4)
 
@@ -694,16 +776,11 @@ class OverworldGUI:
             btn.pack(fill=tk.X, padx=10, pady=2)
             self._build_buttons[name] = btn
             self._build_order.append(name)
+            self._bind_ability_hover(btn, _unit_tooltip_text(name, stats))
 
         # Bind number hotkeys
         for i, uname in enumerate(self._build_order):
             tw.bind(str(i + 1), lambda e, n=uname: self._do_build(n))
-
-            # Ability hover tooltip for build buttons
-            unit_stats = effective_stats[uname]
-            ability_lines = _ability_descriptions(unit_stats)
-            if ability_lines:
-                self._bind_ability_hover(btn, "\n".join(ability_lines))
 
         tk.Button(tw, text="Close", command=self._close_build_panel).pack(pady=5)
         self._refresh_build_panel()
@@ -729,6 +806,35 @@ class OverworldGUI:
                 tip[0] = None
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+
+    def _refresh_army_info_panel(self, force=False):
+        if self.selected_army and self.selected_army not in self.world.armies:
+            self.selected_army = None
+        if not self.selected_army:
+            key = None
+        else:
+            key = (self.selected_army.player, tuple(self.selected_army.units))
+        if not force and key == self._army_info_key:
+            return
+        self._army_info_key = key
+
+        for child in self.army_info_units_frame.winfo_children():
+            child.destroy()
+
+        if not self.selected_army:
+            self.army_info_title.set("No army selected.")
+            return
+
+        owner = "Neutral" if self.selected_army.player == 0 else f"P{self.selected_army.player}"
+        self.army_info_title.set(f"{owner} Army - {self.selected_army.total_count} units")
+        effective_stats = self._get_effective_unit_stats(self.selected_army.player)
+        for name, count in self.selected_army.units:
+            label = tk.Label(self.army_info_units_frame, text=f"{count}x {name}",
+                             font=("Arial", 9), anchor="w", justify=tk.LEFT)
+            label.pack(anchor="w")
+            stats = effective_stats.get(name)
+            if stats:
+                self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
 
     def _refresh_build_panel(self):
         """Update gold display and button states in the build panel."""
@@ -788,7 +894,9 @@ class OverworldGUI:
 
         # Determine reachable hexes for selected army
         neighbors = set()
-        if self.selected_army:
+        my_player = self.player_id if self._multiplayer else 1
+        show_reachable = self.selected_army and self.selected_army.player == my_player and self._is_my_turn()
+        if show_reachable:
             occupied = {a.pos for a in w.armies if a is not self.selected_army}
             neighbors = reachable_hexes(
                 self.selected_army.pos, ARMY_MOVE_RANGE, w.COLS, w.ROWS, occupied
@@ -843,6 +951,8 @@ class OverworldGUI:
                 color = PLAYER_COLORS.get(army.player, "#888888")
             self.canvas.create_oval(cx - 16, cy - 16, cx + 16, cy + 16, fill=color, outline="white", width=2)
             self.canvas.create_text(cx, cy, text=str(army.total_count), fill="white", font=("Arial", 12, "bold"))
+
+        self._refresh_army_info_panel()
 
     def _pixel_to_hex(self, px, py):
         best = None
@@ -917,7 +1027,24 @@ class OverworldGUI:
         clicked_army = self.world.get_army_at(clicked)
 
         if not self._is_my_turn():
-            self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
+            if clicked_army:
+                if self.selected_army and clicked == self.selected_army.pos:
+                    self.selected_army = None
+                    self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
+                else:
+                    self.selected_army = clicked_army
+                    if clicked_army.player == my_player:
+                        self.status_var.set(f"Selected: {clicked_army.label}. Waiting for your turn.")
+                    elif clicked_army.player == 0:
+                        self.status_var.set("Neutral army selected.")
+                    else:
+                        self.status_var.set("Enemy army selected.")
+                self._draw()
+            else:
+                if self.selected_army:
+                    self.selected_army = None
+                    self._draw()
+                self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
 
         # Click own base -> build panel only if no own army, or army already selected
@@ -936,15 +1063,20 @@ class OverworldGUI:
 
         # No army selected yet
         if self.selected_army is None:
-            if clicked_army and clicked_army.player == my_player:
-                if clicked_army.exhausted:
+            if clicked_army:
+                if clicked_army.player == my_player and clicked_army.exhausted:
                     self.status_var.set("That army is exhausted. End Turn to ready it.")
                     return
                 self.selected_army = clicked_army
-                self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+                if clicked_army.player == my_player:
+                    self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+                elif clicked_army.player == 0:
+                    self.status_var.set("Neutral army selected.")
+                else:
+                    self.status_var.set("Enemy army selected.")
                 self._draw()
             else:
-                self.status_var.set(f"Click a P{my_player} army to select it.")
+                self.status_var.set("Click an army to select it.")
             return
 
         # Click the same army -> deselect
@@ -954,13 +1086,18 @@ class OverworldGUI:
             self._draw()
             return
 
-        # Click another own army -> switch selection
-        if clicked_army and clicked_army.player == my_player:
-            if clicked_army.exhausted:
+        # Click another army -> switch selection
+        if clicked_army:
+            if clicked_army.player == my_player and clicked_army.exhausted:
                 self.status_var.set("That army is exhausted. End Turn to ready it.")
                 return
             self.selected_army = clicked_army
-            self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+            if clicked_army.player == my_player:
+                self.status_var.set(f"Selected: {clicked_army.label}. Right-click to move.")
+            elif clicked_army.player == 0:
+                self.status_var.set("Neutral army selected.")
+            else:
+                self.status_var.set("Enemy army selected.")
             self._draw()
             return
 
@@ -978,6 +1115,9 @@ class OverworldGUI:
             return
 
         my_player = self.player_id if self._multiplayer else 1
+        if self.selected_army.player != my_player:
+            self.status_var.set("Cannot move an enemy army.")
+            return
 
         if not self._is_my_turn():
             self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
@@ -1016,6 +1156,7 @@ class OverworldGUI:
                 "to": list(clicked),
             })
             self.selected_army = None
+            self._refresh_army_info_panel(force=True)
             return
 
         # Local single-player mode
@@ -1073,6 +1214,7 @@ class OverworldGUI:
                 return
             self.client.send({"type": "end_turn"})
             self.selected_army = None
+            self._refresh_army_info_panel(force=True)
             return
 
         # Local single-player
