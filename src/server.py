@@ -143,6 +143,18 @@ class GameServer:
             "player_upgrades": self.player_upgrades,
         }
 
+    @staticmethod
+    def _format_move_status(kind, player_id, to_pos, gained):
+        if kind == "combined":
+            base = f"P{player_id} combined armies at {to_pos}."
+            if gained:
+                return f"P{player_id} combined armies and collected {gained} gold."
+            return base
+        base = f"P{player_id} moved army to {to_pos}."
+        if gained:
+            return f"P{player_id} moved army and collected {gained} gold."
+        return base
+
     def _players_with_armies(self):
         """Return set of player IDs that still have armies or alive bases (excluding neutrals)."""
         players = {a.player for a in self.world.armies if a.player != 0}
@@ -392,10 +404,9 @@ class GameServer:
             gained = self.world.collect_gold_at(to_pos, player_id)
             if await self._check_game_over():
                 return
-            status = f"P{player_id} combined armies at {to_pos}."
-            if gained:
-                status = f"P{player_id} combined armies and collected {gained} gold."
-            await self._broadcast_state(status)
+            await self._broadcast_state(
+                self._format_move_status("combined", player_id, to_pos, gained)
+            )
         else:
             self.world.move_army(army, to_pos)
             army.exhausted = True
@@ -403,10 +414,9 @@ class GameServer:
             self._check_base_destruction(to_pos, player_id)
             if await self._check_game_over():
                 return
-            status = f"P{player_id} moved army to {to_pos}."
-            if gained:
-                status = f"P{player_id} moved army and collected {gained} gold."
-            await self._broadcast_state(status)
+            await self._broadcast_state(
+                self._format_move_status("moved", player_id, to_pos, gained)
+            )
 
     async def _handle_split_move(self, player_id, msg):
         validation = await self._validate_move_request(player_id, msg)
@@ -469,10 +479,9 @@ class GameServer:
             gained = self.world.collect_gold_at(to_pos, player_id)
             if await self._check_game_over():
                 return
-            status = f"P{player_id} combined armies at {to_pos}."
-            if gained:
-                status = f"P{player_id} combined armies and collected {gained} gold."
-            await self._broadcast_state(status)
+            await self._broadcast_state(
+                self._format_move_status("combined", player_id, to_pos, gained)
+            )
         else:
             self.world.armies.append(moving_army)
             self.world.move_army(moving_army, to_pos)
@@ -481,10 +490,9 @@ class GameServer:
             self._check_base_destruction(to_pos, player_id)
             if await self._check_game_over():
                 return
-            status = f"P{player_id} moved army to {to_pos}."
-            if gained:
-                status = f"P{player_id} moved army and collected {gained} gold."
-            await self._broadcast_state(status)
+            await self._broadcast_state(
+                self._format_move_status("moved", player_id, to_pos, gained)
+            )
 
     async def _handle_select_faction(self, player_id, msg):
         faction_name = msg.get("faction")
