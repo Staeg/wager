@@ -13,7 +13,7 @@ from .combat import (
 )
 from .battle_resolution import make_battle_units, resolve_battle
 from .compat import get_asset_dir
-from .hex import hex_neighbors, reachable_hexes
+from .hex import hex_neighbors, reachable_hexes, hex_distance
 from .protocol import (
     deserialize_armies,
     deserialize_bases,
@@ -180,7 +180,7 @@ GOLD_PILE_MIN = 10
 GOLD_PILE_MAX = 20
 BASE_INCOME = 5
 OBJECTIVE_GUARD_VALUE = 50
-OBJECTIVES_PER_FACTION = 1
+OBJECTIVE_NEAR_DISTANCE = 2
 
 PLAYER_COLORS = {
     0: "#888888",
@@ -381,7 +381,7 @@ class Overworld:
                 OverworldArmy(player=0, units=[(name, count)], pos=pile.pos)
             )
 
-    def _spawn_objectives(self, count_per_faction=OBJECTIVES_PER_FACTION):
+    def _spawn_objectives(self):
         excluded = {b.pos for b in self.bases if b.alive}
         excluded |= {p.pos for p in self.gold_piles}
         excluded |= {a.pos for a in self.armies}
@@ -391,12 +391,21 @@ class Overworld:
             for c in range(self.COLS)
             if (c, r) not in excluded
         ]
-        for faction_name in FACTIONS:
-            for _ in range(count_per_faction):
-                if not available:
+
+        faction_list = list(FACTIONS.keys())
+        faction_slots = {faction: idx + 1 for idx, faction in enumerate(faction_list)}
+        base_by_player = {p: [b.pos for b in self.bases if b.player == p] for p in range(1, 5)}
+
+        for faction_name in faction_list:
+            home_slot = faction_slots.get(faction_name)
+            for enemy_slot in range(1, 5):
+                if enemy_slot == home_slot:
+                    continue
+                pos = self._pick_objective_pos_near(
+                    base_by_player.get(enemy_slot, []), available
+                )
+                if pos is None:
                     return
-                pos = self.rng.choice(available)
-                available.remove(pos)
                 self.objectives.append(Objective(pos=pos, faction=faction_name))
                 self._spawn_objective_guards(pos)
 
@@ -405,13 +414,24 @@ class Overworld:
         if len(unit_names) < 2:
             return
         choices = self.rng.sample(unit_names, 2)
-        per_type_value = OBJECTIVE_GUARD_VALUE / 4
         units = []
         for name in choices:
             value = UNIT_STATS[name]["value"]
-            count = max(1, round(2 * per_type_value / value))
+            count = max(1, round(OBJECTIVE_GUARD_VALUE / value))
             units.append((name, count))
         self.armies.append(OverworldArmy(player=0, units=units, pos=pos))
+
+    def _pick_objective_pos_near(self, base_positions, available):
+        if not available:
+            return None
+        candidates = []
+        for pos in available:
+            if any(hex_distance(pos, bpos) <= OBJECTIVE_NEAR_DISTANCE for bpos in base_positions):
+                candidates.append(pos)
+        pool = candidates or list(available)
+        pos = self.rng.choice(pool)
+        available.remove(pos)
+        return pos
 
     def get_gold_pile_at(self, pos):
         for pile in self.gold_piles:
@@ -1374,6 +1394,20 @@ class OverworldGUI:
                 text="O",
                 fill=color,
                 font=("Arial", 8, "bold"),
+            )
+            # Reward indicator (upward arrow) at top-right of hex
+            s = self.HEX_SIZE
+            ax = cx + s * 0.45
+            ay = cy - s * 0.45
+            self.canvas.create_polygon(
+                ax,
+                ay - 6,
+                ax - 5,
+                ay + 4,
+                ax + 5,
+                ay + 4,
+                fill=color,
+                outline="",
             )
 
         # Draw armies
