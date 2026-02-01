@@ -837,8 +837,7 @@ class GameServer:
     def _assign_heroes(self, player_id, faction_name):
         if player_id not in self.player_heroes:
             heroes = list(get_heroes_for_faction(faction_name))
-            random.shuffle(heroes)
-            self.player_heroes[player_id] = heroes[: min(2, len(heroes))]
+            self.player_heroes[player_id] = heroes
 
     def _assign_ai_factions(self):
         taken = set(self.player_factions.values())

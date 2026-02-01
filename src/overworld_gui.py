@@ -361,6 +361,26 @@ class OverworldGUI:
                 ability_lines = _ability_descriptions(s)
                 if ability_lines:
                     self._bind_ability_hover(label, "\n".join(ability_lines))
+            hero_names = HEROES_BY_FACTION.get(faction_name, [])
+            if hero_names:
+                tk.Label(frame, text="Heroes:", font=("Arial", 10, "bold")).pack(
+                    anchor="w"
+                )
+                for hname in hero_names:
+                    hs = ALL_UNIT_STATS.get(hname)
+                    if hs:
+                        hdesc = f"  {hname} — HP:{hs['max_hp']} Dmg:{hs['damage']} Rng:{hs['range']}"
+                        for ab_text in _ability_texts(hs):
+                            hdesc += f" {ab_text}"
+                        hlabel = tk.Label(
+                            frame, text=hdesc, font=("Arial", 9), anchor="w"
+                        )
+                        hlabel.pack(anchor="w")
+                        ability_lines = _ability_descriptions(hs)
+                        if ability_lines:
+                            self._bind_ability_hover(
+                                hlabel, "\n".join(ability_lines)
+                            )
             tk.Button(
                 frame,
                 text=f"Play {faction_name}",
@@ -393,14 +413,9 @@ class OverworldGUI:
             self.ai_factions[pid] = faction_name
             self.player_factions[pid] = faction_name
 
-    def _choose_random_heroes(self, faction_name, count=2):
-        import random as rng
-
+    def _choose_random_heroes(self, faction_name, count=3):
         heroes = list(get_heroes_for_faction(faction_name))
-        if not heroes:
-            return []
-        rng.shuffle(heroes)
-        return heroes[: min(count, len(heroes))]
+        return heroes
 
     def _auto_pick_upgrade(self, faction_name):
         """Pick a random upgrade for an AI faction."""
@@ -489,25 +504,6 @@ class OverworldGUI:
                 tk.Label(
                     dialog, text=f"P{pid}: {player_factions[pid]}", font=("Arial", 10)
                 ).pack(anchor="w", padx=20)
-        if player_heroes:
-            tk.Label(dialog, text="Heroes:", font=("Arial", 11, "bold")).pack(
-                anchor="w", padx=12, pady=(6, 0)
-            )
-            for pid in sorted(player_heroes.keys()):
-                hero_list = player_heroes[pid]
-                if isinstance(hero_list, str):
-                    hero_list = [hero_list]
-                for hero_name in hero_list:
-                    hero_label = tk.Label(
-                        dialog, text=f"P{pid}: {hero_name}", font=("Arial", 10)
-                    )
-                    hero_label.pack(anchor="w", padx=20)
-                    hero_stats = ALL_UNIT_STATS.get(hero_name)
-                    if hero_stats:
-                        self._bind_ability_hover(
-                            hero_label, _unit_tooltip_text(hero_name, hero_stats)
-                        )
-
         for upgrade in upgrades:
             frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
             frame.pack(fill=tk.X, padx=15, pady=6)
@@ -628,6 +624,33 @@ class OverworldGUI:
                 ability_lines = _ability_descriptions(s)
                 if ability_lines:
                     self._bind_ability_hover(label, "\n".join(ability_lines))
+            hero_names = HEROES_BY_FACTION.get(faction_name, [])
+            if hero_names:
+                tk.Label(
+                    frame,
+                    text="Heroes:",
+                    font=("Arial", 10, "bold"),
+                    fg="gray" if is_taken else "black",
+                ).pack(anchor="w")
+                for hname in hero_names:
+                    hs = ALL_UNIT_STATS.get(hname)
+                    if hs:
+                        hdesc = f"  {hname} — HP:{hs['max_hp']} Dmg:{hs['damage']} Rng:{hs['range']}"
+                        for ab_text in _ability_texts(hs):
+                            hdesc += f" {ab_text}"
+                        hlabel = tk.Label(
+                            frame,
+                            text=hdesc,
+                            font=("Arial", 9),
+                            anchor="w",
+                            fg="gray" if is_taken else "black",
+                        )
+                        hlabel.pack(anchor="w")
+                        hability_lines = _ability_descriptions(hs)
+                        if hability_lines:
+                            self._bind_ability_hover(
+                                hlabel, "\n".join(hability_lines)
+                            )
             btn = tk.Button(
                 frame,
                 text=f"Play {faction_name}",

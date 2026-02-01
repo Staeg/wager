@@ -212,9 +212,9 @@ class Overworld:
         for p in range(1, num_players + 1):
             cols, rows = quadrants.get(p, quadrants[1])
             candidates = [(c, r) for r in rows for c in cols if (c, r) not in occupied]
-            if len(candidates) < 2:
+            if len(candidates) < 3:
                 break
-            picks = self.rng.sample(candidates, 2)
+            picks = self.rng.sample(candidates, 3)
             for pos in picks:
                 occupied.add(pos)
                 self.bases.append(Base(player=p, pos=pos))
