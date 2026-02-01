@@ -59,6 +59,12 @@ from .upgrades import (
     upgrade_effect_keywords,
     upgrade_effect_summaries,
 )
+from .quests import (
+    QUESTS_BY_FACTION,
+    generate_quest_location,
+    check_quest_completable,
+    get_unlockable_quests,
+)
 
 
 def unit_count(name):
@@ -159,7 +165,7 @@ def _add_upgrade_hover_rows(
 
 
 class OverworldGUI:
-    HEX_SIZE = 40
+    HEX_SIZE = 28
 
     def __init__(self, root, client=None, upgrade_mode="none"):
         """Initialize overworld GUI.
@@ -223,8 +229,13 @@ class OverworldGUI:
                 self._auto_build_ai(pid, faction_name)
             self.world.grant_income(1)
 
+        self.player_quests = {}
+        if not self._multiplayer and self.faction:
+            self._init_quests()
+
         self.selected_army = None
         self.selected_armies = []
+        self._highlighted_hex = None
         self.build_panel = None  # track build popup
         self.build_base_pos = None
         self.view_offset = [0, 0]
@@ -269,19 +280,32 @@ class OverworldGUI:
             pady=5
         )
 
+        controls_row = tk.Frame(left_frame)
+        controls_row.pack(pady=4)
+
         self.gold_var = tk.StringVar(value="")
         tk.Label(
-            left_frame,
+            controls_row,
             textvariable=self.gold_var,
             font=("Arial", 11, "bold"),
             fg="#B8960F",
-        ).pack(pady=2)
+        ).pack(side=tk.LEFT, padx=6)
         self._update_gold_display()
 
         self.end_turn_btn = tk.Button(
-            left_frame, text="End Turn", font=("Arial", 12), command=self._on_end_turn
+            controls_row, text="End Turn", font=("Arial", 11), command=self._on_end_turn
         )
-        self.end_turn_btn.pack(pady=5)
+        self.end_turn_btn.pack(side=tk.LEFT, padx=6)
+
+        if self.player_quests:
+            self.quest_btn = tk.Button(
+                controls_row,
+                text="Quests",
+                font=("Arial", 11),
+                command=self._show_quest_panel,
+            )
+            self.quest_btn.pack(side=tk.LEFT, padx=6)
+            root.bind("<KeyPress-q>", lambda e: self._show_quest_panel())
 
         self.army_info_title = tk.StringVar(value="No army selected.")
         self._army_info_key = None
@@ -1113,13 +1137,23 @@ class OverworldGUI:
                     width=outline_width,
                 )
 
+        # Draw highlighted hex
+        if self._highlighted_hex:
+            hx, hy = self._hex_center(*self._highlighted_hex)
+            self.canvas.create_polygon(
+                self._hex_polygon(hx, hy),
+                fill="",
+                outline="#00ffff",
+                width=3,
+            )
+
         # Draw bases (behind armies, larger square)
         for base in getattr(w, "bases", []):
             if not base.alive:
                 continue
             cx, cy = self._hex_center(base.pos[0], base.pos[1])
             color = PLAYER_COLORS.get(base.player, "#888888")
-            s = 22
+            s = 15
             outline = "white"
             outline_width = 2
             if self.build_panel and self.build_base_pos == base.pos:
@@ -1135,7 +1169,7 @@ class OverworldGUI:
                 width=outline_width,
             )
             self.canvas.create_text(
-                cx, cy - s + 8, text="B", fill="white", font=("Arial", 9, "bold")
+                cx, cy - s + 6, text="B", fill="white", font=("Arial", 7, "bold")
             )
 
         # Draw gold piles
@@ -1159,10 +1193,10 @@ class OverworldGUI:
             cx, cy = self._hex_center(obj.pos[0], obj.pos[1])
             color = PLAYER_COLORS.get(my_player, "#ffffff")
             self.canvas.create_oval(
-                cx - 8,
-                cy - 8,
-                cx + 8,
-                cy + 8,
+                cx - 5,
+                cy - 5,
+                cx + 5,
+                cy + 5,
                 outline=color,
                 width=2,
             )
@@ -1171,7 +1205,7 @@ class OverworldGUI:
                 cy,
                 text="O",
                 fill=color,
-                font=("Arial", 8, "bold"),
+                font=("Arial", 6, "bold"),
             )
             # Reward indicator (upward arrow) at top-right of hex
             s = self.HEX_SIZE
@@ -1179,13 +1213,27 @@ class OverworldGUI:
             ay = cy - s * 0.45
             self.canvas.create_polygon(
                 ax,
-                ay - 6,
-                ax - 5,
-                ay + 4,
-                ax + 5,
-                ay + 4,
+                ay - 4,
+                ax - 3,
+                ay + 3,
+                ax + 3,
+                ay + 3,
                 fill=color,
                 outline="",
+            )
+
+        # Draw quest markers
+        for qid, qstate in self.player_quests.items():
+            if qstate["status"] != "active":
+                continue
+            qx, qy = self._hex_center(qstate["pos"][0], qstate["pos"][1])
+            color = PLAYER_COLORS.get(my_player, "#ffffff")
+            self.canvas.create_text(
+                qx,
+                qy - self.HEX_SIZE * 0.55,
+                text="!",
+                fill=color,
+                font=("Arial", 10, "bold"),
             )
 
         # Draw armies
@@ -1198,14 +1246,14 @@ class OverworldGUI:
             else:
                 color = PLAYER_COLORS.get(army.player, "#888888")
             self.canvas.create_oval(
-                cx - 16, cy - 16, cx + 16, cy + 16, fill=color, outline="white", width=2
+                cx - 11, cy - 11, cx + 11, cy + 11, fill=color, outline="white", width=2
             )
             self.canvas.create_text(
                 cx,
                 cy,
                 text=str(army.total_count),
                 fill="white",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 8, "bold"),
             )
 
         self._refresh_army_info_panel()
@@ -1243,6 +1291,13 @@ class OverworldGUI:
         self.view_offset[1] += dy
         self._draw()
 
+    def _get_quest_at(self, pos):
+        """Return (quest_id, quest_state) for an active quest at pos, or None."""
+        for qid, qstate in self.player_quests.items():
+            if qstate["status"] == "active" and qstate["pos"] == pos:
+                return qid, qstate
+        return None
+
     def _on_hover(self, event):
         hovered = self._pixel_to_hex(event.x, event.y)
         if hovered:
@@ -1258,12 +1313,20 @@ class OverworldGUI:
             army = None
         shift_held = event.state & 0x1
 
-        if army is not self._hovered_army:
+        # Determine hover target: army takes priority, then quest
+        quest_info = None
+        if not army and hovered:
+            quest_info = self._get_quest_at(hovered)
+
+        hover_key = (army, quest_info[0] if quest_info else None) if True else None
+        prev_key = (self._hovered_army, getattr(self, "_hovered_quest_id", None))
+
+        if hover_key != prev_key:
             if shift_held and self.tooltip:
-                # Shift held — keep existing tooltip pinned
                 pass
             else:
                 self._hovered_army = army
+                self._hovered_quest_id = quest_info[0] if quest_info else None
                 if self.tooltip:
                     self.tooltip.destroy()
                     self.tooltip = None
@@ -1286,6 +1349,27 @@ class OverworldGUI:
                         pady=4,
                         relief=tk.SOLID,
                         borderwidth=1,
+                    ).pack()
+                elif quest_info:
+                    qid, qstate = quest_info
+                    quest = qstate["quest"]
+                    self.tooltip = tw = tk.Toplevel(self.root)
+                    tw.wm_overrideredirect(True)
+                    tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+                    text = f"{quest['name']}\n{quest['objective']}"
+                    if quest.get("wait_turns"):
+                        text += f"\nWaited: {qstate['wait_counter']}/{quest['wait_turns']}"
+                    tk.Label(
+                        tw,
+                        text=text,
+                        justify=tk.LEFT,
+                        bg="#ddeeff",
+                        font=("Arial", 10),
+                        padx=6,
+                        pady=4,
+                        relief=tk.SOLID,
+                        borderwidth=1,
+                        wraplength=300,
                     ).pack()
         elif self.tooltip:
             if not shift_held:
@@ -1335,6 +1419,7 @@ class OverworldGUI:
         )
         clicked_armies = self._visible_armies_at(clicked, my_faction)
         clicked_army = self._pick_target_army(clicked_armies, my_player)
+        self._highlighted_hex = None
 
         if not self._is_my_turn():
             if clicked_army:
@@ -1562,6 +1647,177 @@ class OverworldGUI:
                 base.player = moving_player
                 self.status_var.set(f"P{moving_player} captured a base!")
 
+    def _init_quests(self):
+        """Initialize tier-1 quests for the player's faction."""
+        faction_quests = QUESTS_BY_FACTION.get(self.faction, {})
+        for qid, quest in faction_quests.items():
+            if quest["tier"] == 1:
+                pos = generate_quest_location(quest, self.world, 1)
+                self.player_quests[qid] = {
+                    "quest": quest,
+                    "pos": pos,
+                    "status": "active",
+                    "wait_counter": 0,
+                }
+
+    def _show_quest_panel(self):
+        """Show a dialog listing all active quests."""
+        self._highlighted_hex = None
+        self._draw()
+        if not self.player_quests:
+            self.status_var.set("No quests available.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Quests")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Quests", font=("Arial", 14, "bold")).pack(pady=8)
+
+        for qid, qstate in self.player_quests.items():
+            quest = qstate["quest"]
+            status = qstate["status"]
+            frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
+            frame.pack(fill=tk.X, padx=15, pady=4)
+
+            title_text = quest["name"]
+            if status == "completed":
+                title_text += " (Completed)"
+            tk.Label(frame, text=title_text, font=("Arial", 11, "bold")).pack(
+                anchor="w"
+            )
+            tk.Label(
+                frame,
+                text=f"Questline: {quest['questline']}",
+                font=("Arial", 9),
+            ).pack(anchor="w")
+            tk.Label(
+                frame,
+                text=quest["intro"],
+                font=("Arial", 9),
+                wraplength=400,
+                justify=tk.LEFT,
+            ).pack(anchor="w", pady=(2, 0))
+            tk.Label(
+                frame,
+                text=f"Objective: {quest['objective']}",
+                font=("Arial", 9, "bold"),
+                wraplength=400,
+                justify=tk.LEFT,
+            ).pack(anchor="w", pady=(2, 0))
+            tk.Label(
+                frame,
+                text=f"Location: {qstate['pos']}",
+                font=("Arial", 9),
+            ).pack(anchor="w")
+
+            if quest.get("wait_turns") and status == "active":
+                tk.Label(
+                    frame,
+                    text=f"Turns waited: {qstate['wait_counter']}/{quest['wait_turns']}",
+                    font=("Arial", 9),
+                ).pack(anchor="w")
+
+            if status == "active":
+                btn_row = tk.Frame(frame)
+                btn_row.pack(pady=4)
+                completable = check_quest_completable(
+                    quest, qstate, self.world, 1
+                )
+                tk.Button(
+                    btn_row,
+                    text="Complete Quest",
+                    font=("Arial", 10),
+                    state=tk.NORMAL if completable else tk.DISABLED,
+                    command=lambda q=qid, d=dialog: self._complete_quest(q, d),
+                ).pack(side=tk.LEFT, padx=4)
+                tk.Button(
+                    btn_row,
+                    text="Show on Map",
+                    font=("Arial", 10),
+                    command=lambda pos=qstate["pos"], d=dialog: self._highlight_quest_hex(pos, d),
+                ).pack(side=tk.LEFT, padx=4)
+
+        tk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=(4, 8))
+
+    def _highlight_quest_hex(self, pos, dialog):
+        """Highlight a quest's hex on the map and close the quest panel."""
+        self._highlighted_hex = pos
+        dialog.destroy()
+        self._draw()
+
+    def _complete_quest(self, quest_id, dialog):
+        """Mark a quest as completed and handle side effects."""
+        qstate = self.player_quests[quest_id]
+        quest = qstate["quest"]
+
+        # Deduct gold cost
+        gold_cost = quest.get("gold_cost", 0)
+        if gold_cost > 0:
+            self.world.gold[1] = self.world.gold.get(1, 0) - gold_cost
+            self._update_gold_display()
+
+        qstate["status"] = "completed"
+        self.status_var.set(f"Quest completed: {quest['name']}!")
+
+        if quest.get("completion_text"):
+            self.status_var.set(
+                f"Quest completed: {quest['name']}! {quest['completion_text']}"
+            )
+
+        # Check for tier-2 unlocks
+        self._check_quest_unlocks()
+
+        dialog.destroy()
+        self._draw()
+
+    def _check_quest_unlocks(self):
+        """Unlock tier-2 quests whose prerequisites are all completed."""
+        completed = {
+            qid
+            for qid, qs in self.player_quests.items()
+            if qs["status"] == "completed"
+        }
+        faction_quests = QUESTS_BY_FACTION.get(self.faction, {})
+        unlockable = get_unlockable_quests(completed, faction_quests)
+        for qid in unlockable:
+            if qid not in self.player_quests:
+                quest = faction_quests[qid]
+                pos = generate_quest_location(quest, self.world, 1)
+                self.player_quests[qid] = {
+                    "quest": quest,
+                    "pos": pos,
+                    "status": "active",
+                    "wait_counter": 0,
+                }
+
+    def _update_quest_wait_counters(self):
+        """Increment wait counters for quests where the required hero is at the quest pos."""
+        for qid, qstate in self.player_quests.items():
+            if qstate["status"] != "active":
+                continue
+            quest = qstate["quest"]
+            wait_needed = quest.get("wait_turns", 0)
+            if wait_needed <= 0:
+                continue
+            pos = qstate["pos"]
+            required_heroes = quest["required_hero"]
+            hero_present = False
+            for army in self.world.get_armies_at(pos):
+                if army.player == 1:
+                    for unit_name, count in army.units:
+                        if unit_name in required_heroes and count > 0:
+                            hero_present = True
+                            break
+                if hero_present:
+                    break
+            if hero_present:
+                qstate["wait_counter"] += 1
+            else:
+                qstate["wait_counter"] = 0
+
     def _on_escape(self, event):
         if self.selected_army:
             self.selected_army = None
@@ -1579,6 +1835,8 @@ class OverworldGUI:
             return
 
         # Local single-player
+        self._update_quest_wait_counters()
+        self._check_quest_unlocks()
         for army in self.world.armies:
             if army.player == 1:
                 army.exhausted = False
