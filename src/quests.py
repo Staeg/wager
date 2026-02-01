@@ -22,6 +22,36 @@ CUSTODIAN_QUESTS = {
         "required_hero": ["Accursed"],
         "gold_cost": 100,
         "location_rule": "between_bases",
+        "decisions": [
+            {
+                "label": "Delve",
+                "description": "We must investigate.",
+                "hero_outcome": (
+                    "Accursed turns into Wraith, gains +8 HP and the "
+                    '"Passive Block 2" ability, which reduces the first 2 '
+                    "instances of damage taken on any turn to 0."
+                ),
+                "other_outcome": (
+                    'Gain the "What remains of the mighty" upgrade, which turns '
+                    "the Librarian Sunder 1 ability into Sunder 3 and the "
+                    "Gatekeeper Aura 2 - Undying 2 into Aura 3 - Undying 2."
+                ),
+                "outcome_text": "Bodies found.",
+            },
+            {
+                "label": "Seal",
+                "description": "Collapse the passages. Establish a citadel.",
+                "hero_outcome": (
+                    "Accursed turns into Abolisher; gains +4 DMG, +1 Range and "
+                    'the "Onhit Area 2 Silence" ability, which removes all '
+                    "abilities from enemies within 2 hexes after attacking."
+                ),
+                "other_outcome": (
+                    "Turns the hex of the quest into a Base that gives 20 income."
+                ),
+                "outcome_text": "We'll never know.",
+            },
+        ],
     },
     "curiosity_2": {
         "name": "Tracing the trail",
@@ -35,6 +65,38 @@ CUSTODIAN_QUESTS = {
         "gold_cost": 0,
         "location_rule": "enemy_base_weaver",
         "capture_base": True,
+        "decisions": [
+            {
+                "label": "Embrace",
+                "description": "Read them.",
+                "hero_outcome": (
+                    "Scribe/Judge turns into Necromancer; gains +16 HP and the "
+                    '"Harvest 3 - Area 6 Summon Servant" ability, which summons '
+                    "a Servant for every 3 enemies that die within 6 range."
+                ),
+                "other_outcome": (
+                    "Destroy the biggest Weaver army if one exists, then add "
+                    "12 Servants and 4 Gatekeepers to the Necromancer's army."
+                ),
+                "outcome_text": (
+                    "Forbidden knowledge found. No global consequences\u2026 yet."
+                ),
+            },
+            {
+                "label": "Spurn",
+                "description": "Torch them.",
+                "hero_outcome": (
+                    "Scribe/Judge turns into Lich; gains +8 DMG and the "
+                    '"Onkill Target Splash 14" ability, which deals 14 damage '
+                    "to all enemies adjacent to whoever this unit kills."
+                ),
+                "other_outcome": (
+                    'Destroy the base. Gain the "Lightbringers" upgrade, which '
+                    'gives all your units "Periodic Area [Range] Strike 1".'
+                ),
+                "outcome_text": "Gone for good.",
+            },
+        ],
     },
     "intent_1": {
         "name": "Seeking scope",
@@ -42,7 +104,8 @@ CUSTODIAN_QUESTS = {
         "tier": 1,
         "requires": [],
         "intro": (
-            "What is our purpose, given that we do not even remember all our creators wanted of us?"
+            "What is our purpose, given that we do not even remember all our "
+            "creators wanted of us?"
         ),
         "objective": "Bring the Neophyte and do not move him for 2 turns.",
         "completion_text": "",
@@ -50,6 +113,31 @@ CUSTODIAN_QUESTS = {
         "gold_cost": 0,
         "location_rule": "center",
         "wait_turns": 2,
+        "decisions": [
+            {
+                "label": "Hypothesize",
+                "description": "Extrapolate in reasonable directions.",
+                "hero_outcome": (
+                    "Neophyte turns into Scribe; gains +1 Range and the "
+                    '"Global Aura - Area Amplify 1" ability, which increases '
+                    "the Area values of all allied units' abilities by 1."
+                ),
+                "other_outcome": "",
+                "outcome_text": "Can't go wrong with more knowledge.",
+            },
+            {
+                "label": "Focus",
+                "description": "Do what you're certain you're supposed to.",
+                "hero_outcome": (
+                    "Neophyte turns into Judge; gains +4 DMG and the "
+                    '"Passive Aura 4 - Execute 2" ability, which causes this '
+                    "unit to kill any enemy within 4 range who falls to 2 "
+                    "health or lower but doesn't die."
+                ),
+                "other_outcome": "",
+                "outcome_text": "Can't go wrong with more power.",
+            },
+        ],
     },
     "intent_2": {
         "name": "Our role",
@@ -57,7 +145,8 @@ CUSTODIAN_QUESTS = {
         "tier": 2,
         "requires": ["intent_1", "doctrine_1"],
         "intro": (
-            "We must make a decision. What ought we be? The Purifiers are strong of conviction."
+            "We must make a decision. What ought we be? The Purifiers are "
+            "strong of conviction."
         ),
         "objective": "Bring Revenant/Guardian and take control of the base.",
         "completion_text": "Their ways, unfortunately, will not work for us. Instead\u2026",
@@ -65,6 +154,37 @@ CUSTODIAN_QUESTS = {
         "gold_cost": 0,
         "location_rule": "enemy_base_purifier",
         "capture_base": True,
+        "decisions": [
+            {
+                "label": "Dominion",
+                "description": "We must rule.",
+                "hero_outcome": (
+                    "Revenant/Guardian turns into Emperor, gains +8 DMG and "
+                    'the "Onkill Self Ready" ability, which allows it to '
+                    "become readied again after killing a unit."
+                ),
+                "other_outcome": (
+                    'Gain the "Soul eaters" upgrade, which grants all units '
+                    'the "Harvest 3 - Self Heal 2" ability, which lets them '
+                    "heal 1 health whenever an enemy within 3 hexes dies."
+                ),
+                "outcome_text": "They are gone.",
+            },
+            {
+                "label": "Protectorate",
+                "description": "We must bide our time.",
+                "hero_outcome": (
+                    "Revenant/Guardian turns into Regent, gains +16 HP and "
+                    'the "Global Aura 3 - Armor 3" ability, which increases '
+                    "the Armor of all allies in combat by 3."
+                ),
+                "other_outcome": (
+                    'Gain the "Until the end" upgrade, which increases your '
+                    "income by 3 every turn."
+                ),
+                "outcome_text": "They will return.",
+            },
+        ],
     },
     "doctrine_1": {
         "name": "Border control",
@@ -78,6 +198,36 @@ CUSTODIAN_QUESTS = {
         "gold_cost": 0,
         "location_rule": "own_base",
         "clear_gold_radius": 5,
+        "decisions": [
+            {
+                "label": "Hunger",
+                "description": "Spew forth.",
+                "hero_outcome": (
+                    "Watcher turns into Revenant; gains +4 Damage and the "
+                    '"Wounded Area 1 Strike 4" ability, which lets him deal '
+                    "4 damage to all enemies within 1 range whenever he takes damage."
+                ),
+                "other_outcome": (
+                    'Gain the "Tide of bones" upgrade, which increases the '
+                    "Speed of all friendly units by 0.4."
+                ),
+                "outcome_text": "Wash over them.",
+            },
+            {
+                "label": "Entrench",
+                "description": "Stay protected.",
+                "hero_outcome": (
+                    "Watcher turns into Guardian; gains +8 HP and the "
+                    '"Wounded Area 4 Heal 2" ability, which lets him heal '
+                    "2 health to all allies within 4 range whenever he takes damage."
+                ),
+                "other_outcome": (
+                    'Gain the "Mobile fortifications" upgrade, which increases '
+                    "the Armor of all friendly units by 1 when defending."
+                ),
+                "outcome_text": "Defense, though not amazing as offense, is still good.",
+            },
+        ],
     },
     "doctrine_2": {
         "name": "Stratagems",
@@ -91,6 +241,42 @@ CUSTODIAN_QUESTS = {
         "gold_cost": 0,
         "location_rule": "enemy_base_artificer",
         "capture_base": True,
+        "decisions": [
+            {
+                "label": "Gunpowder",
+                "description": "",
+                "hero_outcome": (
+                    "Wraith/Abolisher turns into Nightmare, gains +8 Damage "
+                    'and "Turnstart Shadowstep", which lets it move to a hex '
+                    "adjacent to the furthest enemy unit instead of moving "
+                    "normally every turn."
+                ),
+                "other_outcome": (
+                    'Your Pages gain the "Onhit Freeze 1/1" ability, which '
+                    "exhausts a random ready enemy within attack range after "
+                    "attacking and their Speed increases by 0.4."
+                ),
+                "outcome_text": (
+                    "Take after their designs of gunpowder. Do not give our "
+                    "foes a chance to respond."
+                ),
+            },
+            {
+                "label": "Metal",
+                "description": "",
+                "hero_outcome": (
+                    "Wraith/Abolisher turns into Reaper, gains +16 HP and "
+                    '"Turnend Global Strike 1", which lets it deal 1 damage '
+                    "to all enemies at the end of every turn."
+                ),
+                "other_outcome": (
+                    'Gain the "Eternal servitude" upgrade, which makes it so '
+                    "that winning a combat brings all your units that died in "
+                    "the combat back to life on the overworld."
+                ),
+                "outcome_text": "Take after their designs of metal. Outlast our foes.",
+            },
+        ],
     },
 }
 

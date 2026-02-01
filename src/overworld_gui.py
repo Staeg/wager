@@ -851,6 +851,7 @@ class OverworldGUI:
             bid = self.root.bind(str(i + 1), lambda e, n=uname: self._do_build(n))
             self._build_hotkey_ids.append((str(i + 1), bid))
         tw.protocol("WM_DELETE_WINDOW", self._close_build_panel)
+        tw.bind("<Escape>", lambda e: self._close_build_panel())
         tw.focus_force()
 
     def _bind_ability_hover(self, widget, description):
@@ -1257,6 +1258,7 @@ class OverworldGUI:
             )
 
         self._refresh_army_info_panel()
+        self._update_quest_button()
 
     def _pixel_to_hex(self, px, py):
         best = None
@@ -1298,19 +1300,30 @@ class OverworldGUI:
                 return qid, qstate
         return None
 
+    def _army_at_pixel(self, px, py):
+        """Return the army whose drawn circle contains (px, py), or None."""
+        ARMY_RADIUS = 11
+        my_player = self.player_id if self._multiplayer else 1
+        my_faction = (
+            self.player_factions.get(my_player)
+            if self._multiplayer
+            else self.faction
+        )
+        best = None
+        best_dist = float("inf")
+        for army in self.world.armies:
+            if self._is_hidden_objective_guard(army, my_faction):
+                continue
+            cx, cy = self._hex_center(army.pos[0], army.pos[1])
+            dist_sq = (px - cx) ** 2 + (py - cy) ** 2
+            if dist_sq <= ARMY_RADIUS ** 2 and dist_sq < best_dist:
+                best_dist = dist_sq
+                best = army
+        return best
+
     def _on_hover(self, event):
+        army = self._army_at_pixel(event.x, event.y)
         hovered = self._pixel_to_hex(event.x, event.y)
-        if hovered:
-            my_player = self.player_id if self._multiplayer else 1
-            my_faction = (
-                self.player_factions.get(my_player)
-                if self._multiplayer
-                else self.faction
-            )
-            armies = self._visible_armies_at(hovered, my_faction)
-            army = self._pick_target_army(armies, my_player)
-        else:
-            army = None
         shift_held = event.state & 0x1
 
         # Determine hover target: army takes priority, then quest
@@ -1647,6 +1660,24 @@ class OverworldGUI:
                 base.player = moving_player
                 self.status_var.set(f"P{moving_player} captured a base!")
 
+    def _any_quest_completable(self):
+        """Return True if any active quest can be completed right now."""
+        for qstate in self.player_quests.values():
+            if qstate["status"] != "active":
+                continue
+            if check_quest_completable(qstate["quest"], qstate, self.world, 1):
+                return True
+        return False
+
+    def _update_quest_button(self):
+        """Update the Quests button text to show '!' when a quest is completable."""
+        if not hasattr(self, "quest_btn"):
+            return
+        if self._any_quest_completable():
+            self.quest_btn.config(text="Quests (!)")
+        else:
+            self.quest_btn.config(text="Quests")
+
     def _init_quests(self):
         """Initialize tier-1 quests for the player's faction."""
         faction_quests = QUESTS_BY_FACTION.get(self.faction, {})
@@ -1668,7 +1699,7 @@ class OverworldGUI:
             self.status_var.set("No quests available.")
             return
 
-        dialog = tk.Toplevel(self.root)
+        self._quest_dialog = dialog = tk.Toplevel(self.root)
         dialog.title("Quests")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1749,7 +1780,7 @@ class OverworldGUI:
         self._draw()
 
     def _complete_quest(self, quest_id, dialog):
-        """Mark a quest as completed and handle side effects."""
+        """Deduct gold, close quest panel, then show decision dialog."""
         qstate = self.player_quests[quest_id]
         quest = qstate["quest"]
 
@@ -1759,17 +1790,87 @@ class OverworldGUI:
             self.world.gold[1] = self.world.gold.get(1, 0) - gold_cost
             self._update_gold_display()
 
-        qstate["status"] = "completed"
-        self.status_var.set(f"Quest completed: {quest['name']}!")
+        dialog.destroy()
+        self._show_quest_decision(quest_id)
+
+    def _show_quest_decision(self, quest_id):
+        """Show a dialog with the quest's completion text and two decisions."""
+        qstate = self.player_quests[quest_id]
+        quest = qstate["quest"]
+        decisions = quest.get("decisions", [])
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Quest Complete: {quest['name']}")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(
+            dialog, text=quest["name"], font=("Arial", 14, "bold")
+        ).pack(pady=(10, 4))
 
         if quest.get("completion_text"):
-            self.status_var.set(
-                f"Quest completed: {quest['name']}! {quest['completion_text']}"
-            )
+            tk.Label(
+                dialog,
+                text=quest["completion_text"],
+                font=("Arial", 10),
+                wraplength=450,
+                justify=tk.LEFT,
+            ).pack(padx=15, pady=(0, 8))
 
-        # Check for tier-2 unlocks
+        for decision in decisions:
+            frame = tk.Frame(dialog, relief=tk.RIDGE, borderwidth=2, padx=10, pady=6)
+            frame.pack(fill=tk.X, padx=15, pady=4)
+
+            title = decision["label"]
+            if decision.get("description"):
+                title += f" - {decision['description']}"
+            tk.Label(frame, text=title, font=("Arial", 11, "bold")).pack(anchor="w")
+
+            if decision.get("hero_outcome"):
+                tk.Label(
+                    frame,
+                    text=f"Hero: {decision['hero_outcome']}",
+                    font=("Arial", 9),
+                    wraplength=420,
+                    justify=tk.LEFT,
+                    fg="#5599dd",
+                ).pack(anchor="w", pady=(2, 0))
+
+            if decision.get("other_outcome"):
+                tk.Label(
+                    frame,
+                    text=f"Bonus: {decision['other_outcome']}",
+                    font=("Arial", 9),
+                    wraplength=420,
+                    justify=tk.LEFT,
+                    fg="#44aa44",
+                ).pack(anchor="w", pady=(2, 0))
+
+            tk.Button(
+                frame,
+                text=f"Choose: {decision['label']}",
+                font=("Arial", 10),
+                command=lambda d=decision, dlg=dialog: self._choose_quest_decision(
+                    quest_id, d, dlg
+                ),
+            ).pack(pady=4)
+
+    def _choose_quest_decision(self, quest_id, decision, dialog):
+        """Finalize quest completion with the chosen decision."""
+        qstate = self.player_quests[quest_id]
+        quest = qstate["quest"]
+
+        qstate["status"] = "completed"
+        qstate["chosen_decision"] = decision["label"]
+
+        outcome = decision.get("outcome_text", "")
+        if outcome:
+            self.status_var.set(f"{quest['name']}: {outcome}")
+        else:
+            self.status_var.set(f"Quest completed: {quest['name']}!")
+
         self._check_quest_unlocks()
-
         dialog.destroy()
         self._draw()
 
@@ -1819,6 +1920,13 @@ class OverworldGUI:
                 qstate["wait_counter"] = 0
 
     def _on_escape(self, event):
+        if self.build_panel and self.build_panel.winfo_exists():
+            self._close_build_panel()
+            return
+        if hasattr(self, "_quest_dialog") and self._quest_dialog and self._quest_dialog.winfo_exists():
+            self._quest_dialog.destroy()
+            self._quest_dialog = None
+            return
         if self.selected_army:
             self.selected_army = None
             self.status_var.set("Selection cancelled.")
