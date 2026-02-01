@@ -14,6 +14,7 @@ def make_battle_units(army, effective_stats):
             "count": count,
             "abilities": s.get("abilities", []),
             "armor": s.get("armor", 0),
+            "speed": s.get("speed", 1.0),
         }
         result.append(spec)
     return result

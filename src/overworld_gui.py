@@ -78,8 +78,11 @@ def _unit_tooltip_text(name, stats):
     stats_line = (
         f"{name} - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
     )
+    speed = stats.get("speed", 1.0)
     if armor:
         stats_line += f" Armor:{armor}"
+    if speed > 1.0:
+        stats_line += f" Spd:{speed}"
     ability_lines = _ability_descriptions(stats)
     if ability_lines:
         return "\n".join([stats_line, ""] + ability_lines)
@@ -354,6 +357,8 @@ class OverworldGUI:
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
+                if s.get("speed", 1.0) > 1.0:
+                    desc += f" Spd:{s['speed']}"
                 for ab_text in _ability_texts(s):
                     desc += f" {ab_text}"
                 label = tk.Label(frame, text=desc, font=("Arial", 9), anchor="w")
@@ -370,6 +375,8 @@ class OverworldGUI:
                     hs = ALL_UNIT_STATS.get(hname)
                     if hs:
                         hdesc = f"  {hname} — HP:{hs['max_hp']} Dmg:{hs['damage']} Rng:{hs['range']}"
+                        if hs.get("speed", 1.0) > 1.0:
+                            hdesc += f" Spd:{hs['speed']}"
                         for ab_text in _ability_texts(hs):
                             hdesc += f" {ab_text}"
                         hlabel = tk.Label(
@@ -611,6 +618,8 @@ class OverworldGUI:
             for uname in unit_names:
                 s = UNIT_STATS[uname]
                 desc = f"  {uname} — HP:{s['max_hp']} Dmg:{s['damage']} Rng:{s['range']} Cost:{s['value']}"
+                if s.get("speed", 1.0) > 1.0:
+                    desc += f" Spd:{s['speed']}"
                 for ab_text in _ability_texts(s):
                     desc += f" {ab_text}"
                 label = tk.Label(
@@ -636,6 +645,8 @@ class OverworldGUI:
                     hs = ALL_UNIT_STATS.get(hname)
                     if hs:
                         hdesc = f"  {hname} — HP:{hs['max_hp']} Dmg:{hs['damage']} Rng:{hs['range']}"
+                        if hs.get("speed", 1.0) > 1.0:
+                            hdesc += f" Spd:{hs['speed']}"
                         for ab_text in _ability_texts(hs):
                             hdesc += f" {ab_text}"
                         hlabel = tk.Label(
@@ -789,6 +800,8 @@ class OverworldGUI:
             cost = stats["value"]
             hotkey = idx + 1
             text = f"[{hotkey}] {name} (Cost: {cost}) - HP:{stats['max_hp']} Dmg:{stats['damage']} Rng:{stats['range']}"
+            if stats.get("speed", 1.0) > 1.0:
+                text += f" Spd:{stats['speed']}"
             for ab_text in _ability_texts(stats):
                 text += f" {ab_text}"
             btn = tk.Button(

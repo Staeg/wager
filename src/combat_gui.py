@@ -556,6 +556,8 @@ class CombatGUI:
             tw.configure(bg="#222")
 
             main_text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
+            if unit.speed > 1.0:
+                main_text += f"  Spd:{unit.speed}"
             tk.Label(
                 tw,
                 text=main_text,

@@ -119,6 +119,39 @@ def reachable_hexes(start, steps, cols, rows, occupied):
     return result
 
 
+def bfs_speed_move(start, goal, blocked, all_occupied, cols, rows):
+    """BFS up to 2 steps: cannot enter blocked (enemies), can traverse allies but must land on empty.
+
+    Returns (landing_pos, first_step_pos). If no improvement, returns (start, start).
+    """
+    if start == goal:
+        return start, start
+    # BFS up to depth 2; track (pos, path) where path includes start
+    queue = deque([(start, [start])])
+    visited = {start}
+    candidates = []  # (hex_distance_to_goal, path)
+    for _ in range(2):
+        next_queue = deque()
+        while queue:
+            pos, path = queue.popleft()
+            for nb in hex_neighbors(pos[0], pos[1], cols, rows):
+                if nb in visited or nb in blocked:
+                    continue
+                visited.add(nb)
+                new_path = path + [nb]
+                # Can only land on empty hex (not occupied by anyone)
+                if nb not in all_occupied:
+                    candidates.append((hex_distance(nb, goal), new_path))
+                if len(new_path) - 1 < 2:  # can still expand
+                    next_queue.append((nb, new_path))
+        queue = next_queue
+    if not candidates:
+        return start, start
+    candidates.sort(key=lambda c: c[0])
+    best_path = candidates[0][1]
+    return best_path[-1], best_path[1]
+
+
 def bfs_path(start, goal, cols, rows, occupied):
     """Return the path from start to goal avoiding occupied hexes, or None."""
     if start == goal:

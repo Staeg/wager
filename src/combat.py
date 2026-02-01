@@ -3,7 +3,7 @@ from .constants import (
     COMBAT_P1_ZONE_END,
     COMBAT_P2_ZONE_START,
 )
-from .hex import hex_distance, hex_neighbors, bfs_next_step, bfs_path_length
+from .hex import hex_distance, hex_neighbors, bfs_next_step, bfs_path_length, bfs_speed_move
 
 
 # --- Game classes ---
@@ -19,6 +19,7 @@ class Unit:
         player,
         abilities=None,
         armor=0,
+        speed=1.0,
         *,
         unit_id,
     ):
@@ -31,6 +32,7 @@ class Unit:
         self.player = player
         self.abilities = abilities or []
         self.armor = armor
+        self.speed = speed
         self._ramp_accumulated = 0
         self._rage_accumulated = 0
         self._vengeance_accumulated = 0
@@ -412,6 +414,7 @@ class Battle:
         count = spec["count"]
         abilities = spec.get("abilities", [])
         armor = spec.get("armor", 0)
+        speed = spec.get("speed", 1.0)
         for _ in range(count):
             units.append(
                 Unit(
@@ -422,6 +425,7 @@ class Battle:
                     player,
                     abilities=abilities,
                     armor=armor,
+                    speed=speed,
                     unit_id=self._next_unit_id(),
                 )
             )
@@ -1016,6 +1020,8 @@ class Battle:
             closest_dist = min(d for d, _ in enemy_dists)
             closest = [e for d, e in enemy_dists if d == closest_dist]
             target_enemy = self.rng.choice(closest)
+            # Speed bonus roll (consume rng deterministically)
+            speed_triggered = unit.speed > 1.0 and self.rng.random() < (unit.speed - 1.0)
             next_pos = bfs_next_step(
                 unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS
             )
@@ -1033,8 +1039,21 @@ class Battle:
                             self.log.append(f"{unit} shadowsteps {old}->{shadow_pos}")
                         break
             if not shadowstepped:
-                unit.pos = next_pos
-                self.log.append(f"{unit} moves {old}->{next_pos}")
+                if speed_triggered:
+                    enemy_positions = {e.pos for e in enemies}
+                    all_occupied = self._occupied() - {unit.pos}
+                    landing, first_step = bfs_speed_move(
+                        unit.pos, target_enemy.pos, enemy_positions, all_occupied, self.COLS, self.ROWS
+                    )
+                    unit.pos = first_step
+                    self.log.append(f"{unit} moves {old}->{first_step}")
+                    if landing != first_step:
+                        mid = first_step
+                        unit.pos = landing
+                        self.log.append(f"  Speed! {unit} moves extra {mid}->{landing}")
+                else:
+                    unit.pos = next_pos
+                    self.log.append(f"{unit} moves {old}->{next_pos}")
             moved_to = unit.pos
 
             # check if now in range

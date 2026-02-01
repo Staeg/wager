@@ -27,7 +27,7 @@ from .heroes import HERO_STATS
 # Canonical unit stats
 UNIT_STATS = {
     # Custodians (yellow/orange)
-    "Page": {"max_hp": 3, "damage": 1, "range": 1, "value": 2, "abilities": []},
+    "Page": {"max_hp": 3, "damage": 1, "range": 1, "value": 2, "speed": 1.2, "abilities": []},
     "Librarian": {
         "max_hp": 2,
         "damage": 0,
