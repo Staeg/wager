@@ -1064,6 +1064,7 @@ class Battle:
             killed = not target.alive
             if killed:
                 self.log.append(f"  {target.name}(P{target.player}) dies!")
+            prev_action = self.last_action or {}
             self.last_action = {
                 "type": "attack",
                 "attacker_pos": unit.pos,
@@ -1071,6 +1072,7 @@ class Battle:
                 "ranged": ranged,
                 "killed": killed,
             }
+            self.last_action.update(prev_action)
             self._trigger_abilities(unit, "onhit", {"target": target, "damage": actual})
         else:
             # move toward closest enemy by actual path length
@@ -1152,6 +1154,7 @@ class Battle:
                 killed = not target.alive
                 if killed:
                     self.log.append(f"  {target.name}(P{target.player}) dies!")
+                prev_action = self.last_action or {}
                 self.last_action = {
                     "type": "move_attack",
                     "from": old,
@@ -1160,6 +1163,7 @@ class Battle:
                     "ranged": ranged,
                     "killed": killed,
                 }
+                self.last_action.update(prev_action)
                 self._trigger_abilities(
                     unit, "onhit", {"target": target, "damage": actual}
                 )
