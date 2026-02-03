@@ -41,9 +41,7 @@ class Unit:
         self.abilities = abilities or []
         self.armor = armor
         self.speed = speed
-        self._ramp_accumulated = 0
-        self._rage_accumulated = 0
-        self._vengeance_accumulated = 0
+        self._ramp_accumulated = 0  # Tracks all damage gained (ramp, lament aura, etc.)
         self._frozen_turns = 0
         self._ability_counters = {}
         self._block_used = 0  # Track damage instances blocked this round
@@ -156,8 +154,6 @@ class Battle:
                 "has_acted": u.has_acted,
                 "damage": u.damage,
                 "_ramp_accumulated": u._ramp_accumulated,
-                "_rage_accumulated": u._rage_accumulated,
-                "_vengeance_accumulated": u._vengeance_accumulated,
                 "_frozen_turns": u._frozen_turns,
                 "_ability_counters": dict(u._ability_counters),
                 "armor": u.armor,
@@ -209,8 +205,6 @@ class Battle:
             u.has_acted = state["has_acted"]
             u.damage = state["damage"]
             u._ramp_accumulated = state["_ramp_accumulated"]
-            u._rage_accumulated = state["_rage_accumulated"]
-            u._vengeance_accumulated = state["_vengeance_accumulated"]
             u._frozen_turns = state.get("_frozen_turns", 0)
             u._ability_counters = dict(state.get("_ability_counters", {}))
             u.armor = state.get("armor", u.armor)
@@ -732,7 +726,7 @@ class Battle:
                         ):
                             value = self._ability_value(unit, ab)
                             ally.damage += value
-                            ally._vengeance_accumulated += value
+                            ally._ramp_accumulated += value
                             self.log.append(
                                 f"  {ally} gains {value} dmg from Aura Lament (now {ally.damage})"
                             )
