@@ -151,7 +151,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Abolisher",
             "stat_changes": {"damage": 4, "range": 1},
             "abilities": [
-                ability("onhit", "silence", target="area", value=2, amplify=False),
+                ability("onhit", "silence", target="area", range=2, amplify=False),
             ],
         },
     },

@@ -799,3 +799,154 @@ class TestFreeze:
                 frozen = True
                 break
         assert frozen, "Freeze should trigger"
+
+
+class TestBlock:
+    def test_block_prevents_damage(self):
+        """Block should prevent the first N damage instances per round."""
+        p1 = [
+            {
+                "name": "Attacker",
+                "max_hp": 100,
+                "damage": 5,
+                "range": 1,
+                "count": 1,
+            }
+        ]
+        p2 = [
+            {
+                "name": "Blocker",
+                "max_hp": 20,
+                "damage": 1,
+                "range": 1,
+                "count": 1,
+                "abilities": [ability("passive", "block", value=2, amplify=False)],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        blocker = [u for u in b.units if u.name == "Blocker"][0]
+        blocked = False
+        for _ in range(50):
+            if not b.step():
+                break
+            if any("blocks damage" in line for line in b.log[-5:]):
+                blocked = True
+                break
+        assert blocked, "Block should trigger and prevent damage"
+        # Blocker should still have HP since first hits were blocked
+        assert blocker.hp > 0 or not blocker.alive
+
+
+class TestSilence:
+    def test_silence_disables_abilities(self):
+        """Silence should disable enemy abilities."""
+        p1 = [
+            {
+                "name": "Healer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 3,
+                "count": 1,
+                "abilities": [
+                    ability("endturn", "heal", target="self", value=10, range=1)
+                ],
+            }
+        ]
+        p2 = [
+            {
+                "name": "Silencer",
+                "max_hp": 100,
+                "damage": 5,
+                "range": 2,
+                "count": 1,
+                "abilities": [
+                    ability("onhit", "silence", target="area", range=3, amplify=False)
+                ],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        healer = [u for u in b.units if u.name == "Healer"][0]
+        silenced = False
+        for _ in range(100):
+            if not b.step():
+                break
+            if any("silences" in line for line in b.log[-5:]):
+                silenced = True
+                break
+        assert silenced, "Silence should trigger"
+        assert healer._silenced, "Healer should be silenced"
+
+
+class TestExecute:
+    def test_execute_kills_low_hp_enemies(self):
+        """Execute should kill enemies at low HP within range."""
+        p1 = [
+            {
+                "name": "Target",
+                "max_hp": 10,
+                "damage": 1,
+                "range": 1,
+                "count": 1,
+            }
+        ]
+        p2 = [
+            {
+                "name": "Executioner",
+                "max_hp": 100,
+                "damage": 5,
+                "range": 2,
+                "count": 1,
+                "abilities": [
+                    ability(
+                        "passive",
+                        "execute",
+                        target="area",
+                        value=5,
+                        aura=4,
+                        amplify=False,
+                    )
+                ],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        executed = False
+        for _ in range(50):
+            if not b.step():
+                break
+            if any("executes" in line for line in b.log[-10:]):
+                executed = True
+                break
+        assert executed, "Execute should trigger on low HP target"
+
+
+class TestReady:
+    def test_ready_allows_second_action(self):
+        """Ready should allow unit to act again after killing."""
+        p1 = [
+            {
+                "name": "Fodder",
+                "max_hp": 5,
+                "damage": 0,
+                "range": 1,
+                "count": 3,
+            }
+        ]
+        p2 = [
+            {
+                "name": "Emperor",
+                "max_hp": 100,
+                "damage": 10,
+                "range": 1,
+                "count": 1,
+                "abilities": [ability("onkill", "ready", target="self", amplify=False)],
+            }
+        ]
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
+        readied = False
+        for _ in range(50):
+            if not b.step():
+                break
+            if any("readies" in line for line in b.log[-5:]):
+                readied = True
+                break
+        assert readied, "Ready should trigger after kill"

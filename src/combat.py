@@ -46,6 +46,9 @@ class Unit:
         self._vengeance_accumulated = 0
         self._frozen_turns = 0
         self._ability_counters = {}
+        self._block_used = 0  # Track damage instances blocked this round
+        self._silenced = False  # Whether abilities are silenced
+        self._ready_triggered = False  # Whether ready ability triggered this turn
         self.pos = None
         self.has_acted = False
         # For summoned units tracking
@@ -378,6 +381,21 @@ class Battle:
         for t in targets:
             self._queue_event("strike", unit, t, value, {"source_pos": unit.pos})
 
+    def _exec_silence(self, unit, ability, context, value):
+        """Silence enemies within range, disabling their abilities."""
+        silence_range = ability.get("range", unit.attack_range)
+        for enemy in self.units:
+            if enemy.alive and enemy.player != unit.player:
+                if hex_distance(unit.pos, enemy.pos) <= silence_range:
+                    if not enemy._silenced:
+                        enemy._silenced = True
+                        self.log.append(f"  {unit} silences {enemy}!")
+
+    def _exec_ready(self, unit, ability, context, value):
+        """Ready the unit, allowing it to act again this round."""
+        unit._ready_triggered = True
+        self.log.append(f"  {unit} readies for another action!")
+
     _ABILITY_DISPATCH = {
         "ramp": _exec_ramp,
         "push": _exec_push,
@@ -390,6 +408,8 @@ class Battle:
         "fortify": _exec_heal_or_fortify,
         "sunder": _exec_sunder,
         "strike": _exec_strike,
+        "silence": _exec_silence,
+        "ready": _exec_ready,
     }
 
     def _execute_ability(self, unit, ability, context):
@@ -400,6 +420,8 @@ class Battle:
             handler(self, unit, ability, context, value)
 
     def _trigger_abilities(self, unit, trigger, context):
+        if unit._silenced:
+            return  # Silenced units can't trigger abilities
         for idx, ability in enumerate(unit.abilities):
             if ability.get("trigger") != trigger:
                 continue
@@ -591,13 +613,27 @@ class Battle:
         self.round_num += 1
         for u in alive:
             u.has_acted = False
+            u._block_used = 0  # Reset block counter each round
         self.log.append(f"--- Round {self.round_num} ---")
 
     def _occupied(self):
         return {u.pos for u in self.units if u.alive}
 
     def _apply_damage(self, target, amount, source_unit=None):
-        """Apply damage to target, handling Armor, Undying, and Rage. Returns actual damage dealt."""
+        """Apply damage to target, handling Block, Armor, Undying, and Rage. Returns actual damage dealt."""
+        # Check for passive Block ability
+        if not target._silenced:
+            for ab in target.abilities:
+                if ab.get("trigger") == "passive" and ab.get("effect") == "block":
+                    block_value = ab.get("value", 0)
+                    if target._block_used < block_value:
+                        target._block_used += 1
+                        self.log.append(
+                            f"  {target} blocks damage! ({target._block_used}/{block_value} blocks used)"
+                        )
+                        return 0
+                    break  # Only one block ability matters
+
         eff_armor = self._effective_armor(target)
         actual = max(0, amount - eff_armor)
         if actual <= 0:
@@ -629,9 +665,33 @@ class Battle:
         target.hp -= actual
         if target.alive and actual > 0:
             self._trigger_abilities(target, "wounded", {"source": source_unit})
+            # Check for Execute: enemies with passive execute can kill low-HP targets
+            self._check_execute(target, source_unit)
         if not target.alive:
             self._handle_unit_death(target, source_unit)
         return actual
+
+    def _check_execute(self, target, source_unit):
+        """Check if any enemy with Execute can kill this low-HP target."""
+        if not target.alive:
+            return
+        for unit in self.units:
+            if not unit.alive or unit.player == target.player:
+                continue
+            if unit._silenced:
+                continue
+            for ab in unit.abilities:
+                if ab.get("trigger") == "passive" and ab.get("effect") == "execute":
+                    aura_range = ab.get("aura", 0)
+                    execute_threshold = ab.get("value", 0)
+                    if hex_distance(unit.pos, target.pos) <= aura_range:
+                        if target.hp <= execute_threshold:
+                            self.log.append(
+                                f"  {unit} executes {target}! (HP {target.hp} <= {execute_threshold})"
+                            )
+                            target.hp = 0
+                            self._handle_unit_death(target, unit)
+                            return  # Target is dead, stop checking
 
     def _handle_unit_death(self, dead_unit, source_unit=None):
         if source_unit and source_unit.alive:
@@ -1109,6 +1169,11 @@ class Battle:
         # End-of-turn abilities
         self._trigger_abilities(unit, "endturn", {"target": None})
 
-        unit.has_acted = True
+        # Check if ready was triggered (allows acting again)
+        if unit._ready_triggered:
+            unit._ready_triggered = False
+            # Don't mark as acted, allowing another turn this round
+        else:
+            unit.has_acted = True
         self.current_index += 1
         return True

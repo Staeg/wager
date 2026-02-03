@@ -33,12 +33,15 @@ def format_ability(ability, include_self_target=False):
     target = ability.get("target")
     if target and (target != "self" or include_self_target):
         parts.append(target.capitalize())
+    rng = ability.get("range")
+    value = ability.get("value")
+    # Show range after target if no value (e.g., "Area 2 Silence")
+    if rng is not None and value is None:
+        parts.append(str(rng))
     effect = ability.get("effect", "").replace("_", " ").title()
     if effect:
         parts.append(effect)
-    value = ability.get("value")
     if value is not None:
-        rng = ability.get("range")
         if rng is not None:
             parts.append(f"{value}/{rng}")
         else:
@@ -158,6 +161,16 @@ def describe_ability(ability):
         return f"{prefix}summon {count_val} Blade{'s' if count_val != 1 else ''} {target_hint}. {ready_hint}"
     if effect == "shadowstep":
         return f"{prefix}teleport adjacent to the furthest enemy instead of moving."
+    if effect == "block":
+        return f"Reduces the first {value} damage instances each round to 0."
+    if effect == "silence":
+        return f"{prefix}disable all abilities of enemies within {range_text}."
+    if effect == "execute":
+        return (
+            f"Enemies within {aura_text} that fall to {value} HP or below are killed."
+        )
+    if effect == "ready":
+        return f"{prefix}become ready to act again this round."
 
     return format_ability(ability)
 
