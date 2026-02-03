@@ -185,6 +185,7 @@ class OverworldGUI:
         self.player_factions = {}
         self.player_upgrades = {}
         self.player_heroes = {}
+        self.player_hero_evolutions = {}  # {player_id: {base_hero: [evolution_path]}}
         self._effective_stats_cache = {}
         self.ai_factions = {}
         self.ai_upgrades = {}
@@ -409,9 +410,7 @@ class OverworldGUI:
                         hlabel.pack(anchor="w")
                         ability_lines = _ability_descriptions(hs)
                         if ability_lines:
-                            self._bind_ability_hover(
-                                hlabel, "\n".join(ability_lines)
-                            )
+                            self._bind_ability_hover(hlabel, "\n".join(ability_lines))
             tk.Button(
                 frame,
                 text=f"Play {faction_name}",
@@ -458,17 +457,27 @@ class OverworldGUI:
         return rng.choice(upgrades)["id"]
 
     def _get_effective_unit_stats(self, player_id):
-        """Return a unit stats dict with the player's upgrade applied."""
+        """Return a unit stats dict with the player's upgrades and evolutions applied."""
         faction = self.player_factions.get(player_id)
         upgrade_ids = self.player_upgrades.get(player_id) or []
         if not isinstance(upgrade_ids, list):
             upgrade_ids = [upgrade_ids]
-        cache_key = (faction, tuple(upgrade_ids))
+        hero_evolutions = self.player_hero_evolutions.get(player_id) or {}
+        # Convert evolutions dict to hashable tuple for cache key
+        evolutions_key = tuple(
+            sorted((k, tuple(v)) for k, v in hero_evolutions.items())
+        )
+        cache_key = (faction, tuple(upgrade_ids), evolutions_key)
         cached = self._effective_stats_cache.get(player_id)
         if cached and cached.get("key") == cache_key:
             return cached["stats"]
         stats = get_effective_unit_stats(
-            faction, upgrade_ids, ALL_UNIT_STATS, UNIT_STATS, FACTIONS
+            faction,
+            upgrade_ids,
+            ALL_UNIT_STATS,
+            UNIT_STATS,
+            FACTIONS,
+            hero_evolutions=hero_evolutions,
         )
         self._effective_stats_cache[player_id] = {"key": cache_key, "stats": stats}
         return stats
@@ -683,9 +692,7 @@ class OverworldGUI:
                         hlabel.pack(anchor="w")
                         hability_lines = _ability_descriptions(hs)
                         if hability_lines:
-                            self._bind_ability_hover(
-                                hlabel, "\n".join(hability_lines)
-                            )
+                            self._bind_ability_hover(hlabel, "\n".join(hability_lines))
             btn = tk.Button(
                 frame,
                 text=f"Play {faction_name}",
@@ -989,9 +996,10 @@ class OverworldGUI:
             self.army_info_title.set(f"{owner} Army - {army.total_count} units")
             effective_stats = self._get_effective_unit_stats(army.player)
             for name, count in army.units:
+                display_name = self._get_unit_display_name(name, army.player)
                 label = tk.Label(
                     self.army_info_units_frame,
-                    text=f"{count}x {name}",
+                    text=f"{count}x {display_name}",
                     font=("Arial", 9),
                     anchor="w",
                     justify=tk.LEFT,
@@ -999,7 +1007,9 @@ class OverworldGUI:
                 label.pack(anchor="w")
                 stats = effective_stats.get(name)
                 if stats:
-                    self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
+                    self._bind_ability_hover(
+                        label, _unit_tooltip_text(display_name, stats)
+                    )
             return
 
         self.army_info_title.set("Armies at hex")
@@ -1015,9 +1025,10 @@ class OverworldGUI:
             header.pack(anchor="w", pady=(4, 0))
             effective_stats = self._get_effective_unit_stats(army.player)
             for name, count in army.units:
+                display_name = self._get_unit_display_name(name, army.player)
                 label = tk.Label(
                     self.army_info_units_frame,
-                    text=f"{count}x {name}",
+                    text=f"{count}x {display_name}",
                     font=("Arial", 9),
                     anchor="w",
                     justify=tk.LEFT,
@@ -1025,7 +1036,9 @@ class OverworldGUI:
                 label.pack(anchor="w")
                 stats = effective_stats.get(name)
                 if stats:
-                    self._bind_ability_hover(label, _unit_tooltip_text(name, stats))
+                    self._bind_ability_hover(
+                        label, _unit_tooltip_text(display_name, stats)
+                    )
 
     def _refresh_build_panel(self):
         """Update gold display and button states in the build panel."""
@@ -1305,9 +1318,7 @@ class OverworldGUI:
         ARMY_RADIUS = 11
         my_player = self.player_id if self._multiplayer else 1
         my_faction = (
-            self.player_factions.get(my_player)
-            if self._multiplayer
-            else self.faction
+            self.player_factions.get(my_player) if self._multiplayer else self.faction
         )
         best = None
         best_dist = float("inf")
@@ -1316,7 +1327,7 @@ class OverworldGUI:
                 continue
             cx, cy = self._hex_center(army.pos[0], army.pos[1])
             dist_sq = (px - cx) ** 2 + (py - cy) ** 2
-            if dist_sq <= ARMY_RADIUS ** 2 and dist_sq < best_dist:
+            if dist_sq <= ARMY_RADIUS**2 and dist_sq < best_dist:
                 best_dist = dist_sq
                 best = army
         return best
@@ -1348,7 +1359,8 @@ class OverworldGUI:
                     tw.wm_overrideredirect(True)
                     tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
                     text = f"P{army.player} Army\n" + "\n".join(
-                        f"  {count}x {name}" for name, count in army.units
+                        f"  {count}x {self._get_unit_display_name(name, army.player)}"
+                        for name, count in army.units
                     )
                     if army.exhausted:
                         text += "\n  (Exhausted)"
@@ -1371,7 +1383,9 @@ class OverworldGUI:
                     tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
                     text = f"{quest['name']}\n{quest['objective']}"
                     if quest.get("wait_turns"):
-                        text += f"\nWaited: {qstate['wait_counter']}/{quest['wait_turns']}"
+                        text += (
+                            f"\nWaited: {qstate['wait_counter']}/{quest['wait_turns']}"
+                        )
                     tk.Label(
                         tw,
                         text=text,
@@ -1445,7 +1459,7 @@ class OverworldGUI:
                     self.selected_armies = clicked_armies
                     if clicked_army.player == my_player:
                         self.status_var.set(
-                            f"Selected: {clicked_army.label}. Waiting for your turn."
+                            f"Selected: {self._get_army_display_label(clicked_army)}. Waiting for your turn."
                         )
                     elif clicked_army.player == NEUTRAL_PLAYER:
                         self.status_var.set("Neutral army selected.")
@@ -1488,7 +1502,7 @@ class OverworldGUI:
                 self.selected_armies = clicked_armies
                 if clicked_army.player == my_player:
                     self.status_var.set(
-                        f"Selected: {clicked_army.label}. Right-click to move."
+                        f"Selected: {self._get_army_display_label(clicked_army)}. Right-click to move."
                     )
                 elif clicked_army.player == NEUTRAL_PLAYER:
                     self.status_var.set("Neutral army selected.")
@@ -1516,7 +1530,7 @@ class OverworldGUI:
             self.selected_armies = clicked_armies
             if clicked_army.player == my_player:
                 self.status_var.set(
-                    f"Selected: {clicked_army.label}. Right-click to move."
+                    f"Selected: {self._get_army_display_label(clicked_army)}. Right-click to move."
                 )
             elif clicked_army.player == NEUTRAL_PLAYER:
                 self.status_var.set("Neutral army selected.")
@@ -1754,9 +1768,7 @@ class OverworldGUI:
             if status == "active":
                 btn_row = tk.Frame(frame)
                 btn_row.pack(pady=4)
-                completable = check_quest_completable(
-                    quest, qstate, self.world, 1
-                )
+                completable = check_quest_completable(quest, qstate, self.world, 1)
                 tk.Button(
                     btn_row,
                     text="Complete Quest",
@@ -1768,7 +1780,8 @@ class OverworldGUI:
                     btn_row,
                     text="Show on Map",
                     font=("Arial", 10),
-                    command=lambda pos=qstate["pos"], d=dialog: self._highlight_quest_hex(pos, d),
+                    command=lambda pos=qstate["pos"],
+                    d=dialog: self._highlight_quest_hex(pos, d),
                 ).pack(side=tk.LEFT, padx=4)
 
         tk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=(4, 8))
@@ -1780,16 +1793,7 @@ class OverworldGUI:
         self._draw()
 
     def _complete_quest(self, quest_id, dialog):
-        """Deduct gold, close quest panel, then show decision dialog."""
-        qstate = self.player_quests[quest_id]
-        quest = qstate["quest"]
-
-        # Deduct gold cost
-        gold_cost = quest.get("gold_cost", 0)
-        if gold_cost > 0:
-            self.world.gold[1] = self.world.gold.get(1, 0) - gold_cost
-            self._update_gold_display()
-
+        """Close quest panel and show decision dialog."""
         dialog.destroy()
         self._show_quest_decision(quest_id)
 
@@ -1805,9 +1809,9 @@ class OverworldGUI:
         dialog.grab_set()
         dialog.resizable(False, False)
 
-        tk.Label(
-            dialog, text=quest["name"], font=("Arial", 14, "bold")
-        ).pack(pady=(10, 4))
+        tk.Label(dialog, text=quest["name"], font=("Arial", 14, "bold")).pack(
+            pady=(10, 4)
+        )
 
         if quest.get("completion_text"):
             tk.Label(
@@ -1864,6 +1868,17 @@ class OverworldGUI:
         qstate["status"] = "completed"
         qstate["chosen_decision"] = decision["label"]
 
+        # Deduct gold cost
+        gold_cost = quest.get("gold_cost", 0)
+        if gold_cost > 0:
+            self.world.gold[1] = self.world.gold.get(1, 0) - gold_cost
+            self._update_gold_display()
+
+        # Apply hero evolution if present
+        hero_evolution = decision.get("hero_evolution")
+        if hero_evolution:
+            self._apply_hero_evolution(hero_evolution, self.player_id)
+
         outcome = decision.get("outcome_text", "")
         if outcome:
             self.status_var.set(f"{quest['name']}: {outcome}")
@@ -1874,12 +1889,81 @@ class OverworldGUI:
         dialog.destroy()
         self._draw()
 
+    def _apply_hero_evolution(self, hero_evolution, player_id):
+        """Apply a hero evolution for the given player.
+
+        Args:
+            hero_evolution: dict with "from" (str or list) and "to" (str)
+            player_id: the player to apply evolution for
+        """
+        from_heroes = hero_evolution["from"]
+        to_hero = hero_evolution["to"]
+
+        # Normalize "from" to a list
+        if isinstance(from_heroes, str):
+            from_heroes = [from_heroes]
+
+        # Get or create the evolutions dict for this player
+        evolutions = self.player_hero_evolutions.setdefault(player_id, {})
+
+        # Find which hero from the list the player actually has
+        player_heroes = self.player_heroes.get(player_id, [])
+
+        # For tier-2 evolutions, we need to find the base hero that evolved
+        # into one of the "from" heroes
+        base_hero = None
+
+        for hero in player_heroes:
+            # Check if this hero has evolved into one of the from_heroes
+            path = evolutions.get(hero, [])
+            if path and path[-1] in from_heroes:
+                base_hero = hero
+                break
+            # Or if this hero is one of the from_heroes (tier-1 evolution)
+            if hero in from_heroes and hero not in evolutions:
+                base_hero = hero
+                break
+
+        if base_hero:
+            # Add the new evolution to the path
+            evolutions.setdefault(base_hero, []).append(to_hero)
+            # Invalidate stats cache for this player
+            self._effective_stats_cache.pop(player_id, None)
+
+    def _get_unit_display_name(self, unit_id, player_id):
+        """Get the display name for a unit, accounting for hero evolutions.
+
+        Args:
+            unit_id: the base unit identifier (e.g., "Accursed")
+            player_id: the player who owns the unit
+
+        Returns:
+            The display name (evolved form name or original unit_id)
+        """
+        from .heroes import get_hero_display_name
+
+        evolutions = self.player_hero_evolutions.get(player_id, {})
+        return get_hero_display_name(unit_id, evolutions)
+
+    def _get_army_display_label(self, army):
+        """Get the display label for an army, using evolved hero names.
+
+        Args:
+            army: OverworldArmy instance
+
+        Returns:
+            String label like "2 Page + 1 Wraith"
+        """
+        parts = []
+        for name, count in army.units:
+            display_name = self._get_unit_display_name(name, army.player)
+            parts.append(f"{count} {display_name}")
+        return " + ".join(parts)
+
     def _check_quest_unlocks(self):
         """Unlock tier-2 quests whose prerequisites are all completed."""
         completed = {
-            qid
-            for qid, qs in self.player_quests.items()
-            if qs["status"] == "completed"
+            qid for qid, qs in self.player_quests.items() if qs["status"] == "completed"
         }
         faction_quests = QUESTS_BY_FACTION.get(self.faction, {})
         unlockable = get_unlockable_quests(completed, faction_quests)
@@ -1923,7 +2007,11 @@ class OverworldGUI:
         if self.build_panel and self.build_panel.winfo_exists():
             self._close_build_panel()
             return
-        if hasattr(self, "_quest_dialog") and self._quest_dialog and self._quest_dialog.winfo_exists():
+        if (
+            hasattr(self, "_quest_dialog")
+            and self._quest_dialog
+            and self._quest_dialog.winfo_exists()
+        ):
             self._quest_dialog.destroy()
             self._quest_dialog = None
             return
@@ -1962,7 +2050,13 @@ class OverworldGUI:
 
     def _make_battle_units(self, army):
         """Convert an army's units list into Battle-compatible dicts."""
-        return make_battle_units(army, self._get_effective_unit_stats(army.player))
+
+        def get_display_name(name):
+            return self._get_unit_display_name(name, army.player)
+
+        return make_battle_units(
+            army, self._get_effective_unit_stats(army.player), get_display_name
+        )
 
     def _start_battle(self, attacker, defender):
         """Start a local single-player battle."""
@@ -2103,18 +2197,24 @@ class OverworldGUI:
 
         src_labels = {}
         mid_labels = {}
+        display_names = {
+            name: self._get_unit_display_name(name, source.player)
+            for name, _ in source.units
+        }
 
         def _update_labels():
             for name, count in source.units:
                 moved = moving_counts.get(name, 0)
-                src_labels[name].config(text=f"{count - moved}x {name}")
-                mid_labels[name].config(text=f"{moved}x {name}")
+                dname = display_names[name]
+                src_labels[name].config(text=f"{count - moved}x {dname}")
+                mid_labels[name].config(text=f"{moved}x {dname}")
 
         for name, count in source.units:
+            dname = display_names[name]
             row = tk.Frame(left)
             row.pack(anchor="w", pady=2, fill=tk.X)
             lbl = tk.Label(
-                row, text=f"{count}x {name}", font=("Arial", 9), width=14, anchor="w"
+                row, text=f"{count}x {dname}", font=("Arial", 9), width=14, anchor="w"
             )
             lbl.pack(side=tk.LEFT)
             src_labels[name] = lbl
@@ -2131,7 +2231,7 @@ class OverworldGUI:
             row_mid = tk.Frame(mid)
             row_mid.pack(anchor="w", pady=2, fill=tk.X)
             mid_lbl = tk.Label(
-                row_mid, text=f"0x {name}", font=("Arial", 9), width=14, anchor="w"
+                row_mid, text=f"0x {dname}", font=("Arial", 9), width=14, anchor="w"
             )
             mid_lbl.pack(side=tk.LEFT)
             mid_labels[name] = mid_lbl
@@ -2156,8 +2256,12 @@ class OverworldGUI:
                     anchor="w"
                 )
                 for name, count in dest_army.units:
+                    dest_dname = self._get_unit_display_name(name, dest_army.player)
                     tk.Label(
-                        right, text=f"{count}x {name}", font=("Arial", 9), anchor="w"
+                        right,
+                        text=f"{count}x {dest_dname}",
+                        font=("Arial", 9),
+                        anchor="w",
                     ).pack(anchor="w")
         else:
             tk.Label(right, text="Empty", font=("Arial", 9), anchor="w").pack(

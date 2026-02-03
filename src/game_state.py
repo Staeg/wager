@@ -1,14 +1,19 @@
 """Shared game logic used by both server and client."""
 
 from .constants import NEUTRAL_PLAYER
-from .heroes import HEROES_BY_FACTION
+from .heroes import HEROES_BY_FACTION, apply_hero_evolutions_to_stats
 from .upgrades import apply_upgrades_to_unit_stats
 
 
 def get_effective_unit_stats(
-    faction, upgrade_ids, all_unit_stats, base_unit_stats, factions
+    faction,
+    upgrade_ids,
+    all_unit_stats,
+    base_unit_stats,
+    factions,
+    hero_evolutions=None,
 ):
-    """Compute unit stats with upgrades applied.
+    """Compute unit stats with upgrades and hero evolutions applied.
 
     Args:
         faction: faction name (or None).
@@ -16,18 +21,25 @@ def get_effective_unit_stats(
         all_unit_stats: combined dict of all unit stats (units + heroes).
         base_unit_stats: dict of base (non-hero) unit stats keys.
         factions: dict mapping faction name to list of unit names.
+        hero_evolutions: optional dict mapping base_hero -> list of evolved forms.
 
     Returns:
-        A dict of unit stats with upgrades applied.
+        A dict of unit stats with upgrades and evolutions applied.
     """
     if not faction:
         return all_unit_stats
     if not isinstance(upgrade_ids, list):
         upgrade_ids = [upgrade_ids]
+
+    # Apply hero evolutions first
+    stats = all_unit_stats
+    if hero_evolutions:
+        stats = apply_hero_evolutions_to_stats(stats, hero_evolutions)
+
     faction_units = factions.get(
         faction, list(base_unit_stats.keys())
     ) + HEROES_BY_FACTION.get(faction, [])
-    return apply_upgrades_to_unit_stats(all_unit_stats, upgrade_ids, faction_units)
+    return apply_upgrades_to_unit_stats(stats, upgrade_ids, faction_units)
 
 
 def is_hidden_objective_guard(army, my_faction, get_objective_fn):

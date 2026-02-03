@@ -59,9 +59,10 @@ def describe_ability(ability):
     count = ability.get("count")
     charge = ability.get("charge")
     range_text = f"{rng} range" if rng is not None else "attack range"
+    aura_text = "attack range" if aura == "R" else f"{aura} range" if aura else "aura"
 
     if charge:
-        if trigger == "periodic":
+        if trigger in ("endturn", "turnstart"):
             prefix = f"Every {charge} turns, "
         elif trigger == "onhit":
             prefix = f"Every {charge} hits, "
@@ -76,8 +77,10 @@ def describe_ability(ability):
         else:
             prefix = f"Every {charge} triggers, "
     else:
-        if trigger == "periodic":
+        if trigger == "endturn":
             prefix = "At end of turn, "
+        elif trigger == "turnstart":
+            prefix = "At start of turn, "
         elif trigger == "onhit":
             prefix = "After attacking, "
         elif trigger == "onkill":
@@ -95,16 +98,16 @@ def describe_ability(ability):
 
     if effect == "armor":
         if aura:
-            return f"Allies within {aura} range gain {value} armor (reduces damage by {value})."
+            return f"Allies within {aura_text} gain {value} armor (reduces damage by {value})."
         return f"Reduces all damage taken by {value}."
     if effect == "amplify":
-        return f"Allied ability values within {aura} range are increased by {value}."
+        return f"Allied ability values within {aura_text} are increased by {value}."
     if effect == "boost":
         return f"All allied units gain +{value} attack damage."
     if effect == "undying":
-        return f"Allies within {aura} range that would die instead lose {value} attack damage."
+        return f"Allies within {aura_text} that would die instead lose {value} attack damage."
     if effect == "lament_aura":
-        return f"Allies within {aura} range gain {value} attack damage when an ally within {rng} of them dies."
+        return f"Allies within {aura_text} gain {value} attack damage when an ally within {rng} of them dies."
     if effect == "ramp":
         return f"{prefix}gain {value} attack damage."
     if effect == "push":
@@ -117,14 +120,13 @@ def describe_ability(ability):
         return (
             f"{prefix}deal {value} damage to enemies adjacent to the attacked target."
         )
-    if effect in ("heal", "repair"):
-        verb = "heal" if effect == "heal" else "repair"
+    if effect == "heal":
         if target == "self":
-            return f"{prefix}{verb} {value} HP."
+            return f"{prefix}heal {value} HP."
         if target == "random":
-            return f"{prefix}{verb} a random ally within {range_text} for {value} HP."
+            return f"{prefix}heal a random ally within {range_text} for {value} HP."
         if target == "area":
-            return f"{prefix}{verb} all allies within {range_text} for {value} HP."
+            return f"{prefix}heal all allies within {range_text} for {value} HP."
     if effect == "fortify":
         if target == "area":
             return f"{prefix}grant {value} max and current HP to all allies within {range_text}."
@@ -393,6 +395,8 @@ class CombatGUI:
                 aura_range = ab.get("aura")
                 if not aura_range:
                     continue
+                if aura_range == "R":
+                    aura_range = u.attack_range
                 if ab.get("effect") == "amplify":
                     aura_specs.append((aura_range, "#8844cc"))  # purple for amplify
                 elif ab.get("effect") == "undying":
@@ -555,7 +559,7 @@ class CombatGUI:
             tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
             tw.configure(bg="#222")
 
-            main_text = f"{unit.name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
+            main_text = f"{unit.display_name} (P{unit.player})  HP: {unit.hp}/{unit.max_hp}  Dmg:{unit.damage}  Rng:{unit.attack_range}"
             if unit.speed > 1.0:
                 main_text += f"  Spd:{unit.speed}"
             tk.Label(
@@ -823,27 +827,6 @@ class CombatGUI:
             lambda: self._animate_splash_hit(pos, on_done, frame + 1),
         )
 
-    def _animate_repair_tick(self, pos, on_done, frame=0):
-        """Animate a small green wrench/+ symbol at the given position."""
-        total_frames = 8
-        if frame > total_frames:
-            self.canvas.delete("repair_anim")
-            on_done()
-            return
-        t = frame / total_frames
-        cx = self._hex_x(pos[0], pos[1])
-        cy = self._hex_y(pos[0], pos[1]) - t * 8
-        fade = int(200 * (1 - t))
-        color = f"#00{max(80, fade):02x}00"
-        self.canvas.delete("repair_anim")
-        self.canvas.create_text(
-            cx, cy, text="+", fill=color, font=("Arial", 10, "bold"), tags="repair_anim"
-        )
-        self.root.after(
-            self._anim_delay(30),
-            lambda: self._animate_repair_tick(pos, on_done, frame + 1),
-        )
-
     def _animate_sunder_arrow(self, target_pos, source_pos, on_done, frame=0):
         """Animate a small black down-arrow shifted toward source."""
         total_frames = 8
@@ -996,14 +979,6 @@ class CombatGUI:
 
         return anim
 
-    def _make_repair_anim(self, event):
-        pos = event["pos"]
-
-        def anim(done):
-            self._animate_repair_tick(pos, lambda: self._apply_event(event, done))
-
-        return anim
-
     def _make_bombardment_anim(self, event):
         src = event.get("source_pos")
         dst = event["pos"]
@@ -1040,9 +1015,6 @@ class CombatGUI:
 
         for event in action.get("splash_events", []):
             anims.append(self._make_splash_anim(event))
-
-        for event in action.get("repair_events", []):
-            anims.append(self._make_repair_anim(event))
 
         for event in action.get("bombardment_events", []):
             anims.append(self._make_bombardment_anim(event))

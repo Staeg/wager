@@ -1,13 +1,21 @@
 """Shared battle resolution helpers for overworld and server."""
 
 
-def make_battle_units(army, effective_stats):
-    """Convert an OverworldArmy's unit list into Battle-compatible dicts."""
+def make_battle_units(army, effective_stats, display_name_fn=None):
+    """Convert an OverworldArmy's unit list into Battle-compatible dicts.
+
+    Args:
+        army: OverworldArmy instance
+        effective_stats: dict of unit stats with upgrades/evolutions applied
+        display_name_fn: optional callable(unit_name) -> display_name
+    """
     result = []
     for name, count in army.units:
         s = effective_stats[name]
+        display_name = display_name_fn(name) if display_name_fn else name
         spec = {
             "name": name,
+            "display_name": display_name,
             "max_hp": s["max_hp"],
             "damage": s["damage"],
             "range": s["range"],

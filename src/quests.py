@@ -26,6 +26,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Delve",
                 "description": "We must investigate.",
+                "hero_evolution": {"from": "Accursed", "to": "Wraith"},
                 "hero_outcome": (
                     "Accursed turns into Wraith, gains +8 HP and the "
                     '"Passive Block 2" ability, which reduces the first 2 '
@@ -41,6 +42,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Seal",
                 "description": "Collapse the passages. Establish a citadel.",
+                "hero_evolution": {"from": "Accursed", "to": "Abolisher"},
                 "hero_outcome": (
                     "Accursed turns into Abolisher; gains +4 DMG, +1 Range and "
                     'the "Onhit Area 2 Silence" ability, which removes all '
@@ -69,6 +71,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Embrace",
                 "description": "Read them.",
+                "hero_evolution": {"from": ["Scribe", "Judge"], "to": "Necromancer"},
                 "hero_outcome": (
                     "Scribe/Judge turns into Necromancer; gains +16 HP and the "
                     '"Harvest 3 - Area 6 Summon Servant" ability, which summons '
@@ -85,6 +88,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Spurn",
                 "description": "Torch them.",
+                "hero_evolution": {"from": ["Scribe", "Judge"], "to": "Lich"},
                 "hero_outcome": (
                     "Scribe/Judge turns into Lich; gains +8 DMG and the "
                     '"Onkill Target Splash 14" ability, which deals 14 damage '
@@ -117,6 +121,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Hypothesize",
                 "description": "Extrapolate in reasonable directions.",
+                "hero_evolution": {"from": "Neophyte", "to": "Scribe"},
                 "hero_outcome": (
                     "Neophyte turns into Scribe; gains +1 Range and the "
                     '"Global Aura - Area Amplify 1" ability, which increases '
@@ -128,6 +133,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Focus",
                 "description": "Do what you're certain you're supposed to.",
+                "hero_evolution": {"from": "Neophyte", "to": "Judge"},
                 "hero_outcome": (
                     "Neophyte turns into Judge; gains +4 DMG and the "
                     '"Passive Aura 4 - Execute 2" ability, which causes this '
@@ -158,6 +164,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Dominion",
                 "description": "We must rule.",
+                "hero_evolution": {"from": ["Revenant", "Guardian"], "to": "Emperor"},
                 "hero_outcome": (
                     "Revenant/Guardian turns into Emperor, gains +8 DMG and "
                     'the "Onkill Self Ready" ability, which allows it to '
@@ -173,6 +180,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Protectorate",
                 "description": "We must bide our time.",
+                "hero_evolution": {"from": ["Revenant", "Guardian"], "to": "Regent"},
                 "hero_outcome": (
                     "Revenant/Guardian turns into Regent, gains +16 HP and "
                     'the "Global Aura 3 - Armor 3" ability, which increases '
@@ -202,6 +210,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Hunger",
                 "description": "Spew forth.",
+                "hero_evolution": {"from": "Watcher", "to": "Revenant"},
                 "hero_outcome": (
                     "Watcher turns into Revenant; gains +4 Damage and the "
                     '"Wounded Area 1 Strike 4" ability, which lets him deal '
@@ -216,6 +225,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Entrench",
                 "description": "Stay protected.",
+                "hero_evolution": {"from": "Watcher", "to": "Guardian"},
                 "hero_outcome": (
                     "Watcher turns into Guardian; gains +8 HP and the "
                     '"Wounded Area 4 Heal 2" ability, which lets him heal '
@@ -245,6 +255,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Gunpowder",
                 "description": "",
+                "hero_evolution": {"from": ["Wraith", "Abolisher"], "to": "Nightmare"},
                 "hero_outcome": (
                     "Wraith/Abolisher turns into Nightmare, gains +8 Damage "
                     'and "Turnstart Shadowstep", which lets it move to a hex '
@@ -264,6 +275,7 @@ CUSTODIAN_QUESTS = {
             {
                 "label": "Metal",
                 "description": "",
+                "hero_evolution": {"from": ["Wraith", "Abolisher"], "to": "Reaper"},
                 "hero_outcome": (
                     "Wraith/Abolisher turns into Reaper, gains +16 HP and "
                     '"Turnend Global Strike 1", which lets it deal 1 damage '

@@ -3,7 +3,13 @@ from .constants import (
     COMBAT_P1_ZONE_END,
     COMBAT_P2_ZONE_START,
 )
-from .hex import hex_distance, hex_neighbors, bfs_next_step, bfs_path_length, bfs_speed_move
+from .hex import (
+    hex_distance,
+    hex_neighbors,
+    bfs_next_step,
+    bfs_path_length,
+    bfs_speed_move,
+)
 
 
 # --- Game classes ---
@@ -22,9 +28,11 @@ class Unit:
         speed=1.0,
         *,
         unit_id,
+        display_name=None,
     ):
         self.id = unit_id
         self.name = name
+        self.display_name = display_name or name  # Use display_name for UI, name for ID
         self.max_hp = max_hp
         self.hp = max_hp
         self.damage = damage
@@ -48,7 +56,7 @@ class Unit:
         return self.hp > 0
 
     def __repr__(self):
-        return f"{self.name}(P{self.player} HP:{self.hp}/{self.max_hp})"
+        return f"{self.display_name}(P{self.player} HP:{self.hp}/{self.max_hp})"
 
 
 class Battle:
@@ -205,6 +213,14 @@ class Battle:
             u.armor = state.get("armor", u.armor)
         self.turn_order = [id_to_unit[uid] for uid in turn_ids if uid in id_to_unit]
 
+    @staticmethod
+    def _aura_range(unit, ab):
+        """Resolve aura range, treating 'R' as the unit's attack range."""
+        val = ab.get("aura")
+        if val == "R":
+            return unit.attack_range
+        return val
+
     def _ability_value(self, unit, ability):
         base = ability.get("value", 0)
         if base == 0:
@@ -217,7 +233,7 @@ class Battle:
                 continue
             for a in ally.abilities:
                 if a.get("trigger") == "passive" and a.get("effect") == "amplify":
-                    aura_range = a.get("aura", 1)
+                    aura_range = self._aura_range(ally, a)
                     if hex_distance(unit.pos, ally.pos) <= aura_range:
                         bonus += a.get("value", 0)
         return base + bonus
@@ -240,7 +256,7 @@ class Battle:
                         and ab.get("effect") == "armor"
                         and ab.get("aura")
                     ):
-                        aura_range = ab.get("aura", 1)
+                        aura_range = self._aura_range(ally, ab)
                         if hex_distance(unit.pos, ally.pos) <= aura_range:
                             bonus += self._ability_value(ally, ab)
         return unit.armor + bonus
@@ -276,7 +292,7 @@ class Battle:
             return [tgt] if tgt and tgt.alive else []
         if target == "global":
             return [u for u in self.units if u.alive and u.player == unit.player]
-        if effect in ("heal", "fortify", "repair"):
+        if effect in ("heal", "fortify"):
             pool = [
                 u
                 for u in self.units
@@ -352,11 +368,6 @@ class Battle:
             etype = "fortify" if effect == "fortify" else "heal"
             self._queue_event(etype, unit, t, value)
 
-    def _exec_repair(self, unit, ability, context, value):
-        targets = self._targets_for_ability(unit, ability, context)
-        for t in targets:
-            self._queue_event("repair", unit, t, value)
-
     def _exec_sunder(self, unit, ability, context, value):
         targets = self._targets_for_ability(unit, ability, context)
         for t in targets:
@@ -377,7 +388,6 @@ class Battle:
         "splash": _exec_splash,
         "heal": _exec_heal_or_fortify,
         "fortify": _exec_heal_or_fortify,
-        "repair": _exec_repair,
         "sunder": _exec_sunder,
         "strike": _exec_strike,
     }
@@ -393,8 +403,6 @@ class Battle:
         for idx, ability in enumerate(unit.abilities):
             if ability.get("trigger") != trigger:
                 continue
-            if trigger == "periodic" and ability.get("effect") == "shadowstep":
-                continue
             if not self._charge_ready(unit, idx, ability):
                 continue
             self._execute_ability(unit, ability, context)
@@ -405,9 +413,11 @@ class Battle:
         """Parse a unit spec dict into Unit instances.
 
         Dict format: {"name": str, "max_hp": int, "damage": int, "range": int, "count": int, ...}
+        Optional: "display_name" for evolved heroes (defaults to name if not provided)
         """
         units = []
         name = spec["name"]
+        display_name = spec.get("display_name", name)
         max_hp = spec["max_hp"]
         damage = spec["damage"]
         atk_range = spec["range"]
@@ -427,6 +437,7 @@ class Battle:
                     armor=armor,
                     speed=speed,
                     unit_id=self._next_unit_id(),
+                    display_name=display_name,
                 )
             )
         return units
@@ -600,7 +611,7 @@ class Battle:
                             ab.get("trigger") == "passive"
                             and ab.get("effect") == "undying"
                         ):
-                            aura_range = ab.get("aura", 2)
+                            aura_range = self._aura_range(ally, ab)
                             if hex_distance(target.pos, ally.pos) <= aura_range:
                                 undying_val = self._ability_value(ally, ab)
                                 if target.damage >= undying_val:
@@ -635,7 +646,7 @@ class Battle:
                     and unit.player == dead_unit.player
                     and unit.id != dead_unit.id
                 ):
-                    rng = ab.get("range", 1)
+                    rng = ab.get("range", unit.attack_range)
                     if hex_distance(unit.pos, dead_unit.pos) <= rng:
                         if self._charge_ready(unit, idx, ab):
                             self._execute_ability(unit, ab, {"dead": dead_unit})
@@ -649,7 +660,7 @@ class Battle:
             # Lament aura: allies within aura range gain ramp when nearby ally dies
             for ab in unit.abilities:
                 if ab.get("trigger") == "passive" and ab.get("effect") == "lament_aura":
-                    aura_range = ab.get("aura", 0)
+                    aura_range = self._aura_range(unit, ab) or 0
                     inner_range = ab.get("range", 1)
                     for ally in self.units:
                         if (
@@ -818,14 +829,6 @@ class Battle:
         if source:
             self.log.append(f"  {source} fortifies {target} for +{amount} HP")
 
-    def _event_repair(self, target, source, amount):
-        healed = min(amount, target.max_hp - target.hp)
-        if healed <= 0:
-            return
-        target.hp += healed
-        if source:
-            self.log.append(f"  {source} repairs {target} for {healed} HP")
-
     def _event_sunder(self, target, source, amount):
         target.armor -= amount
         if source:
@@ -857,7 +860,6 @@ class Battle:
     _EVENT_DISPATCH = {
         "heal": _event_heal,
         "fortify": _event_fortify,
-        "repair": _event_repair,
         "sunder": _event_sunder,
         "splash": _event_splash,
         "bombardment": _event_bombardment,
@@ -884,7 +886,6 @@ class Battle:
             "fortify_events",
             "sunder_events",
             "splash_events",
-            "repair_events",
             "bombardment_events",
             "strike_events",
         )
@@ -908,7 +909,6 @@ class Battle:
             "fortify_events",
             "sunder_events",
             "splash_events",
-            "repair_events",
             "bombardment_events",
             "strike_events",
         )
@@ -971,6 +971,8 @@ class Battle:
             return self.step()
 
         unit._attacked_this_turn = False
+        # Start-of-turn abilities
+        self._trigger_abilities(unit, "turnstart", {"target": None})
         enemies = [u for u in self.units if u.alive and u.player != unit.player]
         if not enemies:
             self.winner = unit.player
@@ -1021,14 +1023,19 @@ class Battle:
             closest = [e for d, e in enemy_dists if d == closest_dist]
             target_enemy = self.rng.choice(closest)
             # Speed bonus roll (consume rng deterministically)
-            speed_triggered = unit.speed > 1.0 and self.rng.random() < (unit.speed - 1.0)
+            speed_triggered = unit.speed > 1.0 and self.rng.random() < (
+                unit.speed - 1.0
+            )
             next_pos = bfs_next_step(
                 unit.pos, target_enemy.pos, occupied, self.COLS, self.ROWS
             )
             old = unit.pos
             shadowstepped = False
             for idx, ab in enumerate(unit.abilities):
-                if ab.get("trigger") == "periodic" and ab.get("effect") == "shadowstep":
+                if (
+                    ab.get("trigger") == "turnstart"
+                    and ab.get("effect") == "shadowstep"
+                ):
                     if self._charge_ready(unit, idx, ab):
                         shadow_pos = self._shadowstep_destination(
                             unit, enemies, occupied
@@ -1043,7 +1050,12 @@ class Battle:
                     enemy_positions = {e.pos for e in enemies}
                     all_occupied = self._occupied() - {unit.pos}
                     landing, first_step = bfs_speed_move(
-                        unit.pos, target_enemy.pos, enemy_positions, all_occupied, self.COLS, self.ROWS
+                        unit.pos,
+                        target_enemy.pos,
+                        enemy_positions,
+                        all_occupied,
+                        self.COLS,
+                        self.ROWS,
                     )
                     unit.pos = first_step
                     self.log.append(f"{unit} moves {old}->{first_step}")
@@ -1094,8 +1106,8 @@ class Battle:
             else:
                 self.last_action = {"type": "move", "from": old, "to": moved_to}
 
-        # Periodic abilities (end of turn)
-        self._trigger_abilities(unit, "periodic", {"target": None})
+        # End-of-turn abilities
+        self._trigger_abilities(unit, "endturn", {"target": None})
 
         unit.has_acted = True
         self.current_index += 1
