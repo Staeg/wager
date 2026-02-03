@@ -129,7 +129,7 @@ UPGRADE_DEFS = {
                     "match": {
                         "effect": "strike",
                         "target": "random",
-                        "trigger": "periodic",
+                        "trigger": "endturn",
                     },
                     "set": {"target": "area", "charge": 2},
                 },

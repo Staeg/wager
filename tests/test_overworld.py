@@ -68,7 +68,10 @@ class TestGoldCollection:
         # Pick a position with no gold pile
         occupied = {p.pos for p in ow.gold_piles}
         empty_pos = next(
-            (c, r) for r in range(ow.ROWS) for c in range(ow.COLS) if (c, r) not in occupied
+            (c, r)
+            for r in range(ow.ROWS)
+            for c in range(ow.COLS)
+            if (c, r) not in occupied
         )
         collected = ow.collect_gold_at(empty_pos, 1)
         assert collected == 0

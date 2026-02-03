@@ -467,7 +467,7 @@ class TestLament:
 
 class TestRepair:
     def test_repair_heals_adjacent_allies(self):
-        """Repair should heal adjacent allies at end of turn."""
+        """Heal should heal adjacent allies at end of turn."""
         p1 = [{"name": "Attacker", "max_hp": 100, "damage": 1, "range": 4, "count": 1}]
         p2 = [
             {
@@ -477,7 +477,7 @@ class TestRepair:
                 "range": 2,
                 "count": 1,
                 "abilities": [
-                    ability("periodic", "repair", target="area", value=1, range=1)
+                    ability("endturn", "heal", target="area", value=1, range=1)
                 ],
             },
             {"name": "Buddy", "max_hp": 100, "damage": 0, "range": 1, "count": 1},
@@ -487,10 +487,10 @@ class TestRepair:
         for _ in range(300):
             if not b.step():
                 break
-            if any("repairs" in line for line in b.log[-5:]):
+            if any("heals" in line for line in b.log[-5:]):
                 repaired = True
                 break
-        assert repaired, "Repair should trigger before battle ends"
+        assert repaired, "Heal should trigger before battle ends"
 
 
 class TestStrike:
@@ -505,7 +505,7 @@ class TestStrike:
                 "range": 4,
                 "count": 1,
                 "abilities": [
-                    ability("periodic", "strike", target="random", value=2, range=6)
+                    ability("endturn", "strike", target="random", value=2, range=6)
                 ],
             }
         ]
@@ -533,7 +533,7 @@ class TestChargeSummon:
                 "count": 1,
                 "abilities": [
                     ability(
-                        "periodic",
+                        "endturn",
                         "summon",
                         target="self",
                         count=2,
@@ -567,7 +567,7 @@ class TestChargeSummon:
                 "count": 1,
                 "abilities": [
                     ability(
-                        "periodic",
+                        "endturn",
                         "summon",
                         target="self",
                         count=2,
@@ -692,7 +692,7 @@ class TestHeal:
                 "range": 3,
                 "count": 1,
                 "abilities": [
-                    ability("periodic", "heal", target="random", value=3, range=3)
+                    ability("endturn", "heal", target="random", value=3, range=3)
                 ],
             },
             {"name": "Buddy", "max_hp": 100, "damage": 0, "range": 1, "count": 1},
@@ -719,7 +719,7 @@ class TestFortify:
                 "damage": 1,
                 "range": 3,
                 "count": 1,
-                "abilities": [ability("periodic", "fortify", target="self", value=2)],
+                "abilities": [ability("endturn", "fortify", target="self", value=2)],
             }
         ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
@@ -756,7 +756,7 @@ class TestSunder:
                 "count": 1,
                 "abilities": [
                     ability(
-                        "periodic",
+                        "endturn",
                         "sunder",
                         target="random",
                         value=1,

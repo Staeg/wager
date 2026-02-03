@@ -27,16 +27,21 @@ from .heroes import HERO_STATS
 # Canonical unit stats
 UNIT_STATS = {
     # Custodians (yellow/orange)
-    "Page": {"max_hp": 3, "damage": 1, "range": 1, "value": 2, "speed": 1.2, "abilities": []},
+    "Page": {
+        "max_hp": 3,
+        "damage": 1,
+        "range": 1,
+        "value": 2,
+        "speed": 1.2,
+        "abilities": [],
+    },
     "Librarian": {
         "max_hp": 2,
         "damage": 0,
         "range": 3,
         "value": 12,
         "abilities": [
-            ability(
-                "periodic", "sunder", target="random", value=1, range=3, amplify=False
-            )
+            ability("endturn", "sunder", target="random", value=1, amplify=False)
         ],
     },
     "Steward": {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
@@ -45,7 +50,7 @@ UNIT_STATS = {
         "damage": 4,
         "range": 2,
         "value": 25,
-        "abilities": [ability("passive", "undying", value=2, aura=2, amplify=False)],
+        "abilities": [ability("passive", "undying", value=2, aura="R", amplify=False)],
     },
     # Weavers (purple/blue)
     "Apprentice": {
@@ -92,14 +97,14 @@ UNIT_STATS = {
         "damage": 2,
         "range": 2,
         "value": 10,
-        "abilities": [ability("periodic", "repair", target="area", value=1, range=1)],
+        "abilities": [ability("endturn", "heal", target="area", value=1, range=1)],
     },
     "Artillery": {
         "max_hp": 8,
         "damage": 4,
         "range": 4,
         "value": 25,
-        "abilities": [ability("periodic", "strike", target="random", value=2, range=6)],
+        "abilities": [ability("endturn", "strike", target="random", value=2, range=6)],
     },
     # Purifiers (red/white)
     "Penitent": {
@@ -114,7 +119,7 @@ UNIT_STATS = {
         "damage": 1,
         "range": 3,
         "value": 10,
-        "abilities": [ability("periodic", "heal", target="random", value=3, range=3)],
+        "abilities": [ability("endturn", "heal", target="random", value=3)],
     },
     "Avenger": {
         "max_hp": 20,
@@ -130,7 +135,7 @@ UNIT_STATS = {
         "value": 25,
         "abilities": [
             ability(
-                "periodic", "summon", target="self", count=2, charge=3, amplify=False
+                "endturn", "summon", target="self", count=2, charge=3, amplify=False
             )
         ],
     },
