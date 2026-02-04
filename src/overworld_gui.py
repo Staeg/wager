@@ -360,6 +360,13 @@ class OverworldGUI:
         self._gold_sprite = ImageTk.PhotoImage(img)
         small = img.resize((16, 16), Image.LANCZOS)
         self._gold_sprite_small = ImageTk.PhotoImage(small)
+        # Load structure sprites
+        tower_path = os.path.join(asset_dir, "tower.png")
+        house_path = os.path.join(asset_dir, "house.png")
+        tower_img = Image.open(tower_path).convert("RGBA")
+        house_img = Image.open(house_path).convert("RGBA")
+        self._tower_sprite = ImageTk.PhotoImage(tower_img)
+        self._house_sprite = ImageTk.PhotoImage(house_img)
 
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
@@ -1163,7 +1170,7 @@ class OverworldGUI:
                 width=3,
             )
 
-        # Draw bases (behind armies, larger square)
+        # Draw structures (behind armies)
         for base in getattr(w, "bases", []):
             if not base.alive:
                 continue
@@ -1175,18 +1182,24 @@ class OverworldGUI:
             if self.build_panel and self.build_base_pos == base.pos:
                 outline = "#ffdd55"
                 outline_width = 3
-            self.canvas.create_rectangle(
-                cx - s,
-                cy - s,
-                cx + s,
-                cy + s,
+            # Draw colored background circle to indicate player ownership
+            self.canvas.create_oval(
+                cx - s - 2,
+                cy - s - 2,
+                cx + s + 2,
+                cy + s + 2,
                 fill=color,
                 outline=outline,
                 width=outline_width,
             )
-            self.canvas.create_text(
-                cx, cy - s + 6, text="B", fill="white", font=("Arial", 7, "bold")
-            )
+            # Draw appropriate sprite based on structure type
+            allows_recruitment = getattr(base, "allows_recruitment", True)
+            if allows_recruitment:
+                if hasattr(self, "_tower_sprite") and self._tower_sprite:
+                    self.canvas.create_image(cx, cy, image=self._tower_sprite)
+            else:
+                if hasattr(self, "_house_sprite") and self._house_sprite:
+                    self.canvas.create_image(cx, cy, image=self._house_sprite)
 
         # Draw gold piles
         army_positions = {a.pos for a in w.armies}

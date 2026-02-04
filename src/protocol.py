@@ -27,16 +27,18 @@ OBJECTIVE_REWARD_PROMPT = "objective_reward_prompt"
 
 
 def serialize_base(base):
-    """Convert a Base to a JSON-serializable dict."""
+    """Convert a Structure (Base) to a JSON-serializable dict."""
     return {
         "player": base.player,
         "pos": list(base.pos),
         "alive": base.alive,
+        "income": base.income,
+        "allows_recruitment": base.allows_recruitment,
     }
 
 
 def serialize_bases(bases):
-    """Convert a list of Base objects to serializable list."""
+    """Convert a list of Structure objects to serializable list."""
     return [serialize_base(b) for b in bases]
 
 
@@ -97,11 +99,18 @@ def deserialize_armies(data):
 
 
 def deserialize_bases(data):
-    """Convert serialized base dicts back to Base objects."""
-    from .overworld import Base
+    """Convert serialized structure dicts back to Structure objects."""
+    from .overworld import Structure
 
     return [
-        Base(player=d["player"], pos=tuple(d["pos"]), alive=d["alive"]) for d in data
+        Structure(
+            player=d["player"],
+            pos=tuple(d["pos"]),
+            alive=d["alive"],
+            income=d.get("income", 5),
+            allows_recruitment=d.get("allows_recruitment", True),
+        )
+        for d in data
     ]
 
 

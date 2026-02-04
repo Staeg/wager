@@ -18,7 +18,6 @@ from .constants import (
     GOLD_PILE_COUNT,
     GOLD_PILE_MIN,
     GOLD_PILE_MAX,
-    BASE_INCOME,
     OBJECTIVE_GUARD_VALUE,
     OBJECTIVE_NEAR_DISTANCE,
 )
@@ -168,10 +167,16 @@ class OverworldArmy:
 
 
 @dataclass
-class Base:
+class Structure:
     player: int
     pos: tuple  # (col, row)
     alive: bool = True
+    income: int = 5  # gold per turn
+    allows_recruitment: bool = True  # whether units can be built here
+
+
+# Alias for backward compatibility
+Base = Structure
 
 
 @dataclass
@@ -336,9 +341,7 @@ class Overworld:
         return value
 
     def grant_income(self, player):
-        income = (
-            sum(1 for b in self.bases if b.alive and b.player == player) * BASE_INCOME
-        )
+        income = sum(b.income for b in self.bases if b.alive and b.player == player)
         if income:
             self.gold[player] = self.gold.get(player, 0) + income
         return income
@@ -378,9 +381,14 @@ class Overworld:
 
     def build_unit(self, player, unit_name):
         """Build a unit at the player's base. Returns error string or None on success."""
-        base = self.get_player_base(player)
+        # Find a base that allows recruitment
+        base = None
+        for b in self.bases:
+            if b.player == player and b.alive and b.allows_recruitment:
+                base = b
+                break
         if not base:
-            return "No base"
+            return "No base that allows recruitment"
         return self.build_unit_at_pos(player, unit_name, base.pos)
 
     def build_unit_at_pos(self, player, unit_name, pos):
@@ -390,6 +398,8 @@ class Overworld:
         base = self.get_base_at(pos)
         if not base or base.player != player:
             return "Invalid base"
+        if not base.allows_recruitment:
+            return "This structure does not allow recruitment"
         cost = UNIT_STATS[unit_name]["value"]
         if self.gold.get(player, 0) < cost:
             return "Not enough gold"

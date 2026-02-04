@@ -1,6 +1,6 @@
 """Quest decision effect handlers."""
 
-from .overworld import Base
+from .overworld import Structure
 
 
 def _handle_grant_upgrade(effect, context):
@@ -33,17 +33,29 @@ def _handle_combat_rule(effect, context):
 
 
 def _handle_create_base(effect, context):
-    """Create a base at the quest location."""
+    """Create a structure at the quest location."""
     world = context["world"]
     player_id = context["player_id"]
     quest_pos = context["quest_pos"]
+    income = effect.get("income", 5)
+    allows_recruitment = effect.get("allows_recruitment", True)
     # Check if there's already a base at this position
     existing = world.get_base_at(quest_pos)
     if existing:
         # Convert ownership if different player
         existing.player = player_id
+        existing.income = income
+        existing.allows_recruitment = allows_recruitment
     else:
-        world.bases.append(Base(player=player_id, pos=quest_pos, alive=True))
+        world.bases.append(
+            Structure(
+                player=player_id,
+                pos=quest_pos,
+                alive=True,
+                income=income,
+                allows_recruitment=allows_recruitment,
+            )
+        )
 
 
 def _handle_destroy_base(effect, context):
