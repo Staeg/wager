@@ -1,6 +1,82 @@
 """Quest definitions and helpers for the Custodian faction."""
 
+from .ability_defs import ability
 from .hex import hex_distance
+
+
+# Quest-triggered upgrades that can't be obtained via objectives
+QUEST_UPGRADE_DEFS = {
+    "what_remains_of_the_mighty": {
+        "id": "what_remains_of_the_mighty",
+        "name": "What remains of the mighty",
+        "description": "Librarian Sunder becomes 3. Gatekeeper Undying aura becomes 3.",
+        "effects": [
+            {
+                "type": "modify_abilities",
+                "unit": "Librarian",
+                "match": {"effect": "sunder"},
+                "set": {"value": 3},
+            },
+            {
+                "type": "modify_abilities",
+                "unit": "Gatekeeper",
+                "match": {"effect": "undying"},
+                "set": {"aura": 3},
+            },
+        ],
+    },
+    "tide_of_bones": {
+        "id": "tide_of_bones",
+        "name": "Tide of bones",
+        "description": "All units gain +0.4 speed.",
+        "effects": [
+            {"type": "add_stat", "unit": "__all__", "stat": "speed", "delta": 0.4},
+        ],
+    },
+    "soul_eaters": {
+        "id": "soul_eaters",
+        "name": "Soul eaters",
+        "description": "All units gain Harvest 3 - Self Heal 2.",
+        "effects": [
+            {
+                "type": "append_ability",
+                "unit": "__all__",
+                "ability": ability(
+                    "harvest", "heal", target="self", value=2, range=3
+                ),
+            },
+        ],
+    },
+    "lightbringers": {
+        "id": "lightbringers",
+        "name": "Lightbringers",
+        "description": "All units gain Periodic Area Strike 1.",
+        "effects": [
+            {
+                "type": "append_ability",
+                "unit": "__all__",
+                "ability": ability(
+                    "endturn", "strike", target="area", value=1, range="R"
+                ),
+            },
+        ],
+    },
+    "pages_freeze": {
+        "id": "pages_freeze",
+        "name": "Gunpowder tactics",
+        "description": "Pages gain Onhit Freeze 1/1 and +0.4 speed.",
+        "effects": [
+            {
+                "type": "append_ability",
+                "unit": "Page",
+                "ability": ability(
+                    "onhit", "freeze", target="random", value=1, range=1
+                ),
+            },
+            {"type": "add_stat", "unit": "Page", "stat": "speed", "delta": 0.4},
+        ],
+    },
+}
 
 CUSTODIAN_QUESTS = {
     "curiosity_1": {
@@ -38,6 +114,9 @@ CUSTODIAN_QUESTS = {
                     "Gatekeeper Aura 2 - Undying 2 into Aura 3 - Undying 2."
                 ),
                 "outcome_text": "Bodies found.",
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "what_remains_of_the_mighty"},
+                ],
             },
             {
                 "label": "Seal",
@@ -52,6 +131,9 @@ CUSTODIAN_QUESTS = {
                     "Turns the hex of the quest into a Base that gives 20 income."
                 ),
                 "outcome_text": "We'll never know.",
+                "effects": [
+                    {"type": "create_base", "income": 20},
+                ],
             },
         ],
     },
@@ -84,6 +166,13 @@ CUSTODIAN_QUESTS = {
                 "outcome_text": (
                     "Forbidden knowledge found. No global consequences\u2026 yet."
                 ),
+                "effects": [
+                    {"type": "destroy_largest_army", "faction": "Weavers"},
+                    {
+                        "type": "add_units",
+                        "units": [("Servant", 12), ("Gatekeeper", 4)],
+                    },
+                ],
             },
             {
                 "label": "Spurn",
@@ -99,6 +188,10 @@ CUSTODIAN_QUESTS = {
                     'gives all your units "Periodic Area [Range] Strike 1".'
                 ),
                 "outcome_text": "Gone for good.",
+                "effects": [
+                    {"type": "destroy_base"},
+                    {"type": "grant_upgrade", "upgrade_id": "lightbringers"},
+                ],
             },
         ],
     },
@@ -129,6 +222,7 @@ CUSTODIAN_QUESTS = {
                 ),
                 "other_outcome": "",
                 "outcome_text": "Can't go wrong with more knowledge.",
+                "effects": [],
             },
             {
                 "label": "Focus",
@@ -142,6 +236,7 @@ CUSTODIAN_QUESTS = {
                 ),
                 "other_outcome": "",
                 "outcome_text": "Can't go wrong with more power.",
+                "effects": [],
             },
         ],
     },
@@ -176,6 +271,9 @@ CUSTODIAN_QUESTS = {
                     "heal 1 health whenever an enemy within 3 hexes dies."
                 ),
                 "outcome_text": "They are gone.",
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "soul_eaters"},
+                ],
             },
             {
                 "label": "Protectorate",
@@ -191,6 +289,9 @@ CUSTODIAN_QUESTS = {
                     "income by 3 every turn."
                 ),
                 "outcome_text": "They will return.",
+                "effects": [
+                    {"type": "income_bonus", "delta": 3},
+                ],
             },
         ],
     },
@@ -221,6 +322,9 @@ CUSTODIAN_QUESTS = {
                     "Speed of all friendly units by 0.4."
                 ),
                 "outcome_text": "Wash over them.",
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "tide_of_bones"},
+                ],
             },
             {
                 "label": "Entrench",
@@ -236,6 +340,9 @@ CUSTODIAN_QUESTS = {
                     "the Armor of all friendly units by 1 when defending."
                 ),
                 "outcome_text": "Defense, though not amazing as offense, is still good.",
+                "effects": [
+                    {"type": "combat_rule", "rule": "defending_armor_bonus", "value": 1},
+                ],
             },
         ],
     },
@@ -271,6 +378,9 @@ CUSTODIAN_QUESTS = {
                     "Take after their designs of gunpowder. Do not give our "
                     "foes a chance to respond."
                 ),
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "pages_freeze"},
+                ],
             },
             {
                 "label": "Metal",
@@ -287,6 +397,9 @@ CUSTODIAN_QUESTS = {
                     "the combat back to life on the overworld."
                 ),
                 "outcome_text": "Take after their designs of metal. Outlast our foes.",
+                "effects": [
+                    {"type": "combat_rule", "rule": "revive_on_win", "value": True},
+                ],
             },
         ],
     },

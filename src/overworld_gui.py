@@ -186,6 +186,8 @@ class OverworldGUI:
         self.player_upgrades = {}
         self.player_heroes = {}
         self.player_hero_evolutions = {}  # {player_id: {base_hero: [evolution_path]}}
+        self.player_economy = {}  # {player_id: {"income_bonus": int}}
+        self.player_combat_rules = {}  # {player_id: {"revive_on_win": bool, ...}}
         self._effective_stats_cache = {}
         self.ai_factions = {}
         self.ai_upgrades = {}
@@ -1862,6 +1864,8 @@ class OverworldGUI:
 
     def _choose_quest_decision(self, quest_id, decision, dialog):
         """Finalize quest completion with the chosen decision."""
+        from .quest_effects import apply_decision_effects
+
         qstate = self.player_quests[quest_id]
         quest = qstate["quest"]
 
@@ -1878,6 +1882,20 @@ class OverworldGUI:
         hero_evolution = decision.get("hero_evolution")
         if hero_evolution:
             self._apply_hero_evolution(hero_evolution, self.player_id)
+
+        # Apply decision effects (upgrades, combat rules, map changes, etc.)
+        context = {
+            "world": self.world,
+            "player_id": self.player_id,
+            "quest_pos": qstate["pos"],
+            "player_economy": self.player_economy,
+            "player_combat_rules": self.player_combat_rules,
+            "player_upgrades": self.player_upgrades,
+        }
+        apply_decision_effects(decision, context)
+
+        # Invalidate stats cache since upgrades may have been granted
+        self._effective_stats_cache.pop(self.player_id, None)
 
         outcome = decision.get("outcome_text", "")
         if outcome:
@@ -2037,6 +2055,11 @@ class OverworldGUI:
             if army.player == 1:
                 army.exhausted = False
         income = self.world.grant_income(1)
+        # Apply income bonus from player_economy
+        bonus = self.player_economy.get(1, {}).get("income_bonus", 0)
+        if bonus:
+            self.world.gold[1] = self.world.gold.get(1, 0) + bonus
+            income += bonus
         self.selected_army = None
         self.selected_armies = []
         if income:
@@ -2048,14 +2071,17 @@ class OverworldGUI:
         self._update_gold_display()
         self._draw()
 
-    def _make_battle_units(self, army):
+    def _make_battle_units(self, army, armor_bonus=0):
         """Convert an army's units list into Battle-compatible dicts."""
 
         def get_display_name(name):
             return self._get_unit_display_name(name, army.player)
 
         return make_battle_units(
-            army, self._get_effective_unit_stats(army.player), get_display_name
+            army,
+            self._get_effective_unit_stats(army.player),
+            get_display_name,
+            armor_bonus=armor_bonus,
         )
 
     def _start_battle(self, attacker, defender):
@@ -2063,8 +2089,19 @@ class OverworldGUI:
         # Attacker is always battle P1 (left side of screen)
         ow_p1, ow_p2 = attacker, defender
 
+        # Get combat rules for both players
+        attacker_rules = self.player_combat_rules.get(attacker.player, {})
+        defender_rules = self.player_combat_rules.get(defender.player, {})
+
+        # Defender gets armor bonus if they have the rule
+        defender_armor_bonus = defender_rules.get("defending_armor_bonus", 0)
+
+        # Store original unit counts for revive_on_win
+        original_attacker_units = list(attacker.units)
+        original_defender_units = list(defender.units)
+
         p1_units = self._make_battle_units(ow_p1)
-        p2_units = self._make_battle_units(ow_p2)
+        p2_units = self._make_battle_units(ow_p2, armor_bonus=defender_armor_bonus)
         rng_seed = random.randint(0, 2**31 - 1)
 
         battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed)
@@ -2100,6 +2137,10 @@ class OverworldGUI:
                 winner,
                 p1_survivors,
                 p2_survivors,
+                attacker_combat_rules=attacker_rules,
+                defender_combat_rules=defender_rules,
+                original_attacker_units=original_attacker_units,
+                original_defender_units=original_defender_units,
             )
             ow_winner = result["winner"]
             summary = result["summary"]
@@ -2422,6 +2463,12 @@ class OverworldGUI:
             self.player_heroes = self._coerce_int_keys(msg.get("player_heroes", {}))
         if "player_upgrades" in msg:
             self.player_upgrades = self._coerce_int_keys(msg.get("player_upgrades", {}))
+        if "player_economy" in msg:
+            self.player_economy = self._coerce_int_keys(msg.get("player_economy", {}))
+        if "player_combat_rules" in msg:
+            self.player_combat_rules = self._coerce_int_keys(
+                msg.get("player_combat_rules", {})
+            )
 
     def _msg_game_start(self, msg):
         self.player_id = msg["player_id"]

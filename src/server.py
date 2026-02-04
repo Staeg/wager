@@ -106,6 +106,8 @@ class GameServer:
         self.ai_players = set()
         self._pending_objective_rewards = {}
         self._effective_stats_cache = {}
+        self.player_economy = {}  # player_id -> {"income_bonus": int}
+        self.player_combat_rules = {}  # player_id -> {"revive_on_win": bool, ...}
 
     def _build_world(self):
         """Create an Overworld with bases and gold, no starting armies."""
@@ -153,6 +155,8 @@ class GameServer:
             "player_factions": self.player_factions,
             "player_heroes": self.player_heroes,
             "player_upgrades": self.player_upgrades,
+            "player_economy": self.player_economy,
+            "player_combat_rules": self.player_combat_rules,
         }
 
     @staticmethod
@@ -270,8 +274,23 @@ class GameServer:
         # Attacker is always battle P1 (left side of screen)
         ow_p1, ow_p2 = attacker, defender
 
+        # Get combat rules for both players
+        attacker_rules = self.player_combat_rules.get(attacker.player, {})
+        defender_rules = self.player_combat_rules.get(defender.player, {})
+
+        # Defender gets armor bonus if they have the rule
+        defender_armor_bonus = defender_rules.get("defending_armor_bonus", 0)
+
+        # Store original unit counts for revive_on_win
+        original_attacker_units = list(attacker.units)
+        original_defender_units = list(defender.units)
+
         p1_units = make_battle_units(ow_p1, self._get_effective_stats(ow_p1.player))
-        p2_units = make_battle_units(ow_p2, self._get_effective_stats(ow_p2.player))
+        p2_units = make_battle_units(
+            ow_p2,
+            self._get_effective_stats(ow_p2.player),
+            armor_bonus=defender_armor_bonus,
+        )
         rng_seed = random.randint(0, 2**31)
 
         # Run battle to completion
@@ -296,6 +315,10 @@ class GameServer:
             battle_winner,
             p1_survivors,
             p2_survivors,
+            attacker_combat_rules=attacker_rules,
+            defender_combat_rules=defender_rules,
+            original_attacker_units=original_attacker_units,
+            original_defender_units=original_defender_units,
         )
         ow_winner = result["winner"]
         summary = result["summary"]
@@ -723,6 +746,13 @@ class GameServer:
                 army.exhausted = False
         self.current_player = self._next_player()
         income = self.world.grant_income(self.current_player)
+        # Apply income bonus from player_economy
+        bonus = self.player_economy.get(self.current_player, {}).get("income_bonus", 0)
+        if bonus:
+            self.world.gold[self.current_player] = (
+                self.world.gold.get(self.current_player, 0) + bonus
+            )
+            income += bonus
         status = f"P{player_id} ended turn. P{self.current_player}'s turn."
         if income:
             status = f"{status} P{self.current_player} gained {income} gold from bases."
@@ -1009,6 +1039,8 @@ class GameServer:
                     "player_factions": self.player_factions,
                     "player_heroes": self.player_heroes,
                     "player_upgrades": self.player_upgrades,
+                    "player_economy": self.player_economy,
+                    "player_combat_rules": self.player_combat_rules,
                 },
             )
 

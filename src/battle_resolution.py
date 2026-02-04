@@ -1,13 +1,14 @@
 """Shared battle resolution helpers for overworld and server."""
 
 
-def make_battle_units(army, effective_stats, display_name_fn=None):
+def make_battle_units(army, effective_stats, display_name_fn=None, armor_bonus=0):
     """Convert an OverworldArmy's unit list into Battle-compatible dicts.
 
     Args:
         army: OverworldArmy instance
         effective_stats: dict of unit stats with upgrades/evolutions applied
         display_name_fn: optional callable(unit_name) -> display_name
+        armor_bonus: additional armor to add to all units (e.g., for defending)
     """
     result = []
     for name, count in army.units:
@@ -21,7 +22,7 @@ def make_battle_units(army, effective_stats, display_name_fn=None):
             "range": s["range"],
             "count": count,
             "abilities": s.get("abilities", []),
-            "armor": s.get("armor", 0),
+            "armor": s.get("armor", 0) + armor_bonus,
             "speed": s.get("speed", 1.0),
         }
         result.append(spec)
@@ -41,6 +42,11 @@ def update_survivors(army, battle, battle_player):
     ]
 
 
+def _revive_army(army, original_units):
+    """Restore army units to their original counts."""
+    army.units = list(original_units)
+
+
 def resolve_battle(
     world,
     attacker,
@@ -49,8 +55,25 @@ def resolve_battle(
     battle_winner,
     p1_survivors,
     p2_survivors,
+    attacker_combat_rules=None,
+    defender_combat_rules=None,
+    original_attacker_units=None,
+    original_defender_units=None,
 ):
     """Resolve a battle and apply overworld state changes.
+
+    Args:
+        world: Overworld instance
+        attacker: attacking army (battle P1)
+        defender: defending army (battle P2)
+        battle: Battle instance
+        battle_winner: 1 for attacker, 2 for defender, 0 for draw
+        p1_survivors: count of surviving attacker units
+        p2_survivors: count of surviving defender units
+        attacker_combat_rules: optional dict with combat rules for attacker
+        defender_combat_rules: optional dict with combat rules for defender
+        original_attacker_units: list of (name, count) tuples before battle
+        original_defender_units: list of (name, count) tuples before battle
 
     Returns a dict with winner, summary, gained_gold, and moved_to.
     """
@@ -71,6 +94,13 @@ def resolve_battle(
         attacker.exhausted = True
     elif ow_winner == attacker.player:
         update_survivors(attacker, battle, 1)
+        # Apply revive_on_win if attacker has the rule
+        if (
+            attacker_combat_rules
+            and attacker_combat_rules.get("revive_on_win")
+            and original_attacker_units
+        ):
+            _revive_army(attacker, original_attacker_units)
         if defender in world.armies:
             world.armies.remove(defender)
         world.move_army(attacker, defender.pos)
@@ -79,6 +109,13 @@ def resolve_battle(
         gained_gold = world.collect_gold_at(defender.pos, attacker.player)
     else:
         update_survivors(defender, battle, 2)
+        # Apply revive_on_win if defender has the rule
+        if (
+            defender_combat_rules
+            and defender_combat_rules.get("revive_on_win")
+            and original_defender_units
+        ):
+            _revive_army(defender, original_defender_units)
         if attacker in world.armies:
             world.armies.remove(attacker)
 

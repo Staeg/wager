@@ -3,6 +3,7 @@
 from copy import deepcopy
 from .ability_defs import ability
 from .combat_gui import format_ability
+from .quests import QUEST_UPGRADE_DEFS
 
 
 UPGRADE_DEFS = {
@@ -184,6 +185,8 @@ UPGRADE_DEFS = {
 UPGRADE_BY_ID = {
     upgrade["id"]: upgrade for upgrades in UPGRADE_DEFS.values() for upgrade in upgrades
 }
+# Merge in quest-triggered upgrades
+UPGRADE_BY_ID.update(QUEST_UPGRADE_DEFS)
 
 
 def get_upgrades_for_faction(faction_name):
