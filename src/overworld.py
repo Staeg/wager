@@ -62,7 +62,7 @@ UNIT_STATS = {
         ],
     },
     "Conduit": {
-        "max_hp": 1,
+        "max_hp": 11,
         "damage": 2,
         "range": 2,
         "value": 10,

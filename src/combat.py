@@ -406,7 +406,11 @@ class Battle:
 
                 # Check aura range if ability has aura
                 aura_range = self._aura_range(unit, ab)
-                if aura_range is not None:
+                if aura_range is None:
+                    # Non-aura passives only apply to self
+                    if not is_self:
+                        continue
+                else:
                     if hex_distance(unit.pos, target_pos) > aura_range:
                         continue
 
