@@ -165,7 +165,13 @@ def _add_upgrade_hover_rows(
 
 
 class OverworldGUI:
-    HEX_SIZE = 28
+    BASE_HEX_SIZE = 28
+    MIN_ZOOM = 1.0
+    MAX_ZOOM = 2.5
+
+    @property
+    def HEX_SIZE(self):
+        return self.BASE_HEX_SIZE * getattr(self, "zoom_level", 1.0)
 
     def __init__(self, root, client=None, upgrade_mode="none"):
         """Initialize overworld GUI.
@@ -243,6 +249,7 @@ class OverworldGUI:
         self.build_base_pos = None
         self.view_offset = [0, 0]
         self._pan_anchor = None
+        self.zoom_level = self.MIN_ZOOM  # 1.0 = furthest out, higher = zoomed in
 
         # Main frame for overworld content
         self.main_frame = tk.Frame(root)
@@ -264,6 +271,10 @@ class OverworldGUI:
         self.canvas.bind("<B2-Motion>", self._on_pan_move)
         self.canvas.bind("<ButtonRelease-2>", self._on_pan_end)
         self.canvas.bind("<Motion>", self._on_hover)
+        # Scroll wheel zoom (Windows uses MouseWheel, Linux uses Button-4/5)
+        self.canvas.bind("<MouseWheel>", self._on_scroll_zoom)
+        self.canvas.bind("<Button-4>", self._on_scroll_zoom)
+        self.canvas.bind("<Button-5>", self._on_scroll_zoom)
         root.bind("<Escape>", self._on_escape)
         root.bind("<space>", lambda e: self._on_end_turn())
         root.bind("<KeyPress-w>", lambda e: self._pan_by(0, 30))
@@ -377,29 +388,58 @@ class OverworldGUI:
     def _load_overworld_assets(self):
         asset_dir = get_asset_dir()
         gold_path = os.path.join(asset_dir, "gold_pile.png")
-        img = Image.open(gold_path).convert("RGBA")
-        self._gold_sprite = ImageTk.PhotoImage(img)
-        small = img.resize((16, 16), Image.LANCZOS)
-        self._gold_sprite_small = ImageTk.PhotoImage(small)
+        self._gold_img = Image.open(gold_path).convert("RGBA")
         # Load structure sprites and create colored versions for each player
         tower_path = os.path.join(asset_dir, "tower.png")
         house_path = os.path.join(asset_dir, "house.png")
         tower_img = Image.open(tower_path).convert("RGBA")
         house_img = Image.open(house_path).convert("RGBA")
-        self._tower_sprites = {}
-        self._house_sprites = {}
-        self._tower_sprites_small = {}
-        self._house_sprites_small = {}
+        self._tower_imgs = {}
+        self._house_imgs = {}
         for player, color in PLAYER_COLORS.items():
-            colored_tower = self._colorize_sprite(tower_img, color)
-            colored_house = self._colorize_sprite(house_img, color)
-            self._tower_sprites[player] = ImageTk.PhotoImage(colored_tower)
-            self._house_sprites[player] = ImageTk.PhotoImage(colored_house)
-            # Small versions for when army is standing over structure
-            small_tower = colored_tower.resize((16, 16), Image.LANCZOS)
-            small_house = colored_house.resize((16, 16), Image.LANCZOS)
-            self._tower_sprites_small[player] = ImageTk.PhotoImage(small_tower)
-            self._house_sprites_small[player] = ImageTk.PhotoImage(small_house)
+            self._tower_imgs[player] = self._colorize_sprite(tower_img, color)
+            self._house_imgs[player] = self._colorize_sprite(house_img, color)
+        # Cache for scaled PhotoImage sprites (invalidated on zoom change)
+        self._sprite_cache = {}
+        self._sprite_cache_zoom = None
+
+    def _get_scaled_sprites(self):
+        """Get sprites scaled to current zoom level, using cache."""
+        if self._sprite_cache_zoom == self.zoom_level:
+            return self._sprite_cache
+        # Rebuild cache for new zoom level
+        scale = self.zoom_level
+        full_size = int(32 * scale)
+        small_size = int(16 * scale)
+        cache = {}
+        # Gold sprites
+        cache["gold"] = ImageTk.PhotoImage(
+            self._gold_img.resize((full_size, full_size), Image.LANCZOS)
+        )
+        cache["gold_small"] = ImageTk.PhotoImage(
+            self._gold_img.resize((small_size, small_size), Image.LANCZOS)
+        )
+        # Tower and house sprites per player
+        cache["tower"] = {}
+        cache["house"] = {}
+        cache["tower_small"] = {}
+        cache["house_small"] = {}
+        for player in self._tower_imgs:
+            cache["tower"][player] = ImageTk.PhotoImage(
+                self._tower_imgs[player].resize((full_size, full_size), Image.LANCZOS)
+            )
+            cache["house"][player] = ImageTk.PhotoImage(
+                self._house_imgs[player].resize((full_size, full_size), Image.LANCZOS)
+            )
+            cache["tower_small"][player] = ImageTk.PhotoImage(
+                self._tower_imgs[player].resize((small_size, small_size), Image.LANCZOS)
+            )
+            cache["house_small"][player] = ImageTk.PhotoImage(
+                self._house_imgs[player].resize((small_size, small_size), Image.LANCZOS)
+            )
+        self._sprite_cache = cache
+        self._sprite_cache_zoom = self.zoom_level
+        return cache
 
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
@@ -1259,6 +1299,7 @@ class OverworldGUI:
 
         # Draw structures (behind armies)
         army_positions = {a.pos for a in w.armies}
+        sprites = self._get_scaled_sprites()
         for base in getattr(w, "bases", []):
             if not base.alive:
                 continue
@@ -1270,13 +1311,13 @@ class OverworldGUI:
                 # Show small structure icon at top-left of hex when army is on top
                 s = self.HEX_SIZE
                 if allows_recruitment:
-                    sprite = self._tower_sprites_small.get(player)
+                    sprite = sprites["tower_small"].get(player)
                     if sprite:
                         self.canvas.create_image(
                             cx - s * 0.45, cy - s * 0.45, image=sprite
                         )
                 else:
-                    sprite = self._house_sprites_small.get(player)
+                    sprite = sprites["house_small"].get(player)
                     if sprite:
                         self.canvas.create_image(
                             cx - s * 0.45, cy - s * 0.45, image=sprite
@@ -1289,16 +1330,18 @@ class OverworldGUI:
                     outline = "#ffdd55"
                     outline_width = 3
                     # Draw selection highlight behind structure
+                    highlight_r = 17 * self.zoom_level
                     self.canvas.create_oval(
-                        cx - 17, cy - 17, cx + 17, cy + 17,
+                        cx - highlight_r, cy - highlight_r,
+                        cx + highlight_r, cy + highlight_r,
                         fill="", outline=outline, width=outline_width
                     )
                 if allows_recruitment:
-                    sprite = self._tower_sprites.get(player)
+                    sprite = sprites["tower"].get(player)
                     if sprite:
                         self.canvas.create_image(cx, cy, image=sprite)
                 else:
-                    sprite = self._house_sprites.get(player)
+                    sprite = sprites["house"].get(player)
                     if sprite:
                         self.canvas.create_image(cx, cy, image=sprite)
 
@@ -1307,13 +1350,12 @@ class OverworldGUI:
             cx, cy = self._hex_center(pile.pos[0], pile.pos[1])
             if pile.pos in army_positions:
                 # Show small gold icon at top-right of hex when army is on top
-                if hasattr(self, "_gold_sprite_small") and self._gold_sprite_small:
-                    s = self.HEX_SIZE
-                    self.canvas.create_image(
-                        cx + s * 0.45, cy - s * 0.45, image=self._gold_sprite_small
-                    )
-            elif hasattr(self, "_gold_sprite") and self._gold_sprite:
-                self.canvas.create_image(cx, cy, image=self._gold_sprite)
+                s = self.HEX_SIZE
+                self.canvas.create_image(
+                    cx + s * 0.45, cy - s * 0.45, image=sprites["gold_small"]
+                )
+            else:
+                self.canvas.create_image(cx, cy, image=sprites["gold"])
 
         # Draw objectives (only visible to owning faction)
         for obj in getattr(w, "objectives", []):
@@ -1321,32 +1363,35 @@ class OverworldGUI:
                 continue
             cx, cy = self._hex_center(obj.pos[0], obj.pos[1])
             color = PLAYER_COLORS.get(my_player, "#ffffff")
+            obj_r = 5 * self.zoom_level
             self.canvas.create_oval(
-                cx - 5,
-                cy - 5,
-                cx + 5,
-                cy + 5,
+                cx - obj_r,
+                cy - obj_r,
+                cx + obj_r,
+                cy + obj_r,
                 outline=color,
                 width=2,
             )
+            obj_font_size = max(6, int(6 * self.zoom_level))
             self.canvas.create_text(
                 cx,
                 cy,
                 text="O",
                 fill=color,
-                font=("Arial", 6, "bold"),
+                font=("Arial", obj_font_size, "bold"),
             )
             # Reward indicator (upward arrow) at top-right of hex
             s = self.HEX_SIZE
             ax = cx + s * 0.45
             ay = cy - s * 0.45
+            arrow_scale = self.zoom_level
             self.canvas.create_polygon(
                 ax,
-                ay - 4,
-                ax - 3,
-                ay + 3,
-                ax + 3,
-                ay + 3,
+                ay - 4 * arrow_scale,
+                ax - 3 * arrow_scale,
+                ay + 3 * arrow_scale,
+                ax + 3 * arrow_scale,
+                ay + 3 * arrow_scale,
                 fill=color,
                 outline="",
             )
@@ -1357,15 +1402,18 @@ class OverworldGUI:
                 continue
             qx, qy = self._hex_center(qstate["pos"][0], qstate["pos"][1])
             color = PLAYER_COLORS.get(my_player, "#ffffff")
+            quest_font_size = max(10, int(10 * self.zoom_level))
             self.canvas.create_text(
                 qx,
                 qy - self.HEX_SIZE * 0.55,
                 text="!",
                 fill=color,
-                font=("Arial", 10, "bold"),
+                font=("Arial", quest_font_size, "bold"),
             )
 
         # Draw armies
+        army_r = 11 * self.zoom_level
+        army_font_size = max(8, int(8 * self.zoom_level))
         for army in w.armies:
             if self._is_hidden_objective_guard(army, my_faction):
                 continue
@@ -1375,14 +1423,15 @@ class OverworldGUI:
             else:
                 color = PLAYER_COLORS.get(army.player, "#888888")
             self.canvas.create_oval(
-                cx - 11, cy - 11, cx + 11, cy + 11, fill=color, outline="white", width=2
+                cx - army_r, cy - army_r, cx + army_r, cy + army_r,
+                fill=color, outline="white", width=2
             )
             self.canvas.create_text(
                 cx,
                 cy,
                 text=str(army.total_count),
                 fill="white",
-                font=("Arial", 8, "bold"),
+                font=("Arial", army_font_size, "bold"),
             )
 
         self._refresh_army_info_panel()
@@ -1419,6 +1468,47 @@ class OverworldGUI:
     def _pan_by(self, dx, dy):
         self.view_offset[0] += dx
         self.view_offset[1] += dy
+        self._draw()
+
+    def _on_scroll_zoom(self, event):
+        # Determine scroll direction
+        if event.num == 4:  # Linux scroll up
+            delta = 1
+        elif event.num == 5:  # Linux scroll down
+            delta = -1
+        else:  # Windows: event.delta is positive for up, negative for down
+            delta = 1 if event.delta > 0 else -1
+
+        # Get mouse position on canvas for zoom centering
+        mouse_x, mouse_y = event.x, event.y
+
+        # Calculate hex position under mouse before zoom
+        old_hex_size = self.HEX_SIZE
+
+        # Apply zoom change
+        zoom_step = 0.15
+        new_zoom = self.zoom_level + (delta * zoom_step)
+        new_zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, new_zoom))
+
+        if new_zoom == self.zoom_level:
+            return
+
+        # Adjust view offset to keep the point under the mouse stationary
+        # Calculate the world point under the mouse
+        world_x = (mouse_x - self.view_offset[0] - 50) / old_hex_size
+        world_y = (mouse_y - self.view_offset[1] - 50) / old_hex_size
+
+        self.zoom_level = new_zoom
+        new_hex_size = self.HEX_SIZE
+
+        # Calculate new screen position of the same world point
+        new_screen_x = world_x * new_hex_size + 50
+        new_screen_y = world_y * new_hex_size + 50
+
+        # Adjust offset so mouse stays over the same point
+        self.view_offset[0] += mouse_x - new_screen_x - self.view_offset[0]
+        self.view_offset[1] += mouse_y - new_screen_y - self.view_offset[1]
+
         self._draw()
 
     def _get_quest_at(self, pos):

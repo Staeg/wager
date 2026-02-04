@@ -204,6 +204,7 @@ class Overworld:
         self.gold = {p: STARTING_GOLD for p in range(1, num_players + 1)}
         self.bases = []
         self._spawn_bases(num_players)
+        self._spawn_neutral_structures()
         self.gold_piles = []
         self._spawn_gold_piles()
         self.objectives = []
@@ -228,6 +229,45 @@ class Overworld:
             for pos in picks:
                 occupied.add(pos)
                 self.bases.append(Base(player=p, pos=pos))
+
+    def _spawn_neutral_structures(self):
+        """Spawn 3 neutral income-only structures per quadrant, each guarded."""
+        excluded = {b.pos for b in self.bases if b.alive}
+        mid_c = self.COLS // 2
+        mid_r = self.ROWS // 2
+        quadrants = [
+            (range(0, mid_c), range(0, mid_r)),
+            (range(mid_c, self.COLS), range(0, mid_r)),
+            (range(0, mid_c), range(mid_r, self.ROWS)),
+            (range(mid_c, self.COLS), range(mid_r, self.ROWS)),
+        ]
+        for cols, rows in quadrants:
+            available = [(c, r) for r in rows for c in cols if (c, r) not in excluded]
+            for _ in range(3):
+                if not available:
+                    break
+                pos = self.rng.choice(available)
+                available.remove(pos)
+                excluded.add(pos)
+                income = self.rng.randint(5, 10)
+                self.bases.append(
+                    Structure(
+                        player=NEUTRAL_PLAYER,
+                        pos=pos,
+                        income=income,
+                        allows_recruitment=False,
+                    )
+                )
+                # Spawn guards worth 6x the income value
+                guard_value = 6 * income
+                name = self.rng.choice(list(UNIT_STATS.keys()))
+                value = UNIT_STATS[name]["value"]
+                guard_count = max(1, round(guard_value / value))
+                self.armies.append(
+                    OverworldArmy(
+                        player=NEUTRAL_PLAYER, units=[(name, guard_count)], pos=pos
+                    )
+                )
 
     def _spawn_gold_piles(self, count=GOLD_PILE_COUNT):
         excluded = {b.pos for b in self.bases if b.alive}

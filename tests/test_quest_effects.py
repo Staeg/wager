@@ -115,6 +115,8 @@ class TestDestroyBase:
     def test_destroy_base_at_location(self):
         world = Overworld(num_players=4)
         quest_pos = (7, 7)
+        # Remove any existing base at the quest position (e.g., neutral structures)
+        world.bases = [b for b in world.bases if b.pos != quest_pos]
         world.bases.append(Base(player=1, pos=quest_pos, alive=True))
         context = _make_context(world=world, quest_pos=quest_pos)
 
@@ -127,6 +129,8 @@ class TestDestroyBase:
     def test_destroy_base_no_base_is_noop(self):
         world = Overworld(num_players=4)
         quest_pos = (7, 7)
+        # Remove any existing base at the quest position
+        world.bases = [b for b in world.bases if b.pos != quest_pos]
         context = _make_context(world=world, quest_pos=quest_pos)
 
         # Should not raise
