@@ -19,7 +19,6 @@ EVENT_HEAL = "heal"
 EVENT_FORTIFY = "fortify"
 EVENT_SUNDER = "sunder"
 EVENT_SPLASH = "splash"
-EVENT_BOMBARDMENT = "bombardment"
 EVENT_STRIKE = "strike"
 
 # Event queue keys for ability effects
@@ -28,7 +27,6 @@ _EVENT_KEYS = (
     f"{EVENT_FORTIFY}_events",
     f"{EVENT_SUNDER}_events",
     f"{EVENT_SPLASH}_events",
-    f"{EVENT_BOMBARDMENT}_events",
     f"{EVENT_STRIKE}_events",
 )
 
@@ -1028,15 +1026,6 @@ class Battle:
             if not target.alive:
                 self.log.append(f"  {target.name}(P{target.player}) dies from splash!")
 
-    def _event_bombardment(self, target, source, amount):
-        actual = self._apply_damage(target, amount, source_unit=source)
-        if actual > 0 and source:
-            self.log.append(f"  {source} bombards {target} for {actual} dmg")
-            if not target.alive:
-                self.log.append(
-                    f"  {target.name}(P{target.player}) dies from bombardment!"
-                )
-
     def _event_strike(self, target, source, amount):
         actual = self._apply_damage(target, amount, source_unit=source)
         if actual > 0 and source:
@@ -1047,7 +1036,6 @@ class Battle:
         EVENT_FORTIFY: _event_fortify,
         EVENT_SUNDER: _event_sunder,
         EVENT_SPLASH: _event_splash,
-        EVENT_BOMBARDMENT: _event_bombardment,
         EVENT_STRIKE: _event_strike,
     }
 

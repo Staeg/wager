@@ -872,11 +872,11 @@ class CombatGUI:
             ),
         )
 
-    def _animate_bombardment_arrow(self, src, dst, on_done, frame=0):
+    def _animate_strike_arrow(self, src, dst, on_done, frame=0):
         """Animate a differently-colored arrow (orange) from src to dst."""
         total_frames = 8
         if frame > total_frames:
-            self.canvas.delete("bomb_anim")
+            self.canvas.delete("strike_anim")
             on_done()
             return
         t = frame / total_frames
@@ -884,12 +884,12 @@ class CombatGUI:
         dx, dy = self._hex_x(dst[0], dst[1]), self._hex_y(dst[0], dst[1])
         cx = sx + (dx - sx) * t
         cy = sy + (dy - sy) * t
-        self.canvas.delete("bomb_anim")
+        self.canvas.delete("strike_anim")
         angle = math.atan2(dy - sy, dx - sx)
         tail_x = cx - 10 * math.cos(angle)
         tail_y = cy - 10 * math.sin(angle)
         self.canvas.create_line(
-            tail_x, tail_y, cx, cy, fill="#ff8800", width=2, tags="bomb_anim"
+            tail_x, tail_y, cx, cy, fill="#ff8800", width=2, tags="strike_anim"
         )
         ha1 = angle + math.radians(150)
         ha2 = angle - math.radians(150)
@@ -901,11 +901,11 @@ class CombatGUI:
             cx + 6 * math.cos(ha2),
             cy + 6 * math.sin(ha2),
             fill="#ff8800",
-            tags="bomb_anim",
+            tags="strike_anim",
         )
         self.root.after(
             self._anim_delay(30),
-            lambda: self._animate_bombardment_arrow(src, dst, on_done, frame + 1),
+            lambda: self._animate_strike_arrow(src, dst, on_done, frame + 1),
         )
 
     def _animate_stat_arrow(
@@ -992,14 +992,12 @@ class CombatGUI:
 
         return anim
 
-    def _make_bombardment_anim(self, event):
+    def _make_strike_anim(self, event):
         src = event.get("source_pos")
         dst = event["pos"]
 
         def anim(done):
-            self._animate_bombardment_arrow(
-                src, dst, lambda: self._apply_event(event, done)
-            )
+            self._animate_strike_arrow(src, dst, lambda: self._apply_event(event, done))
 
         return anim
 
@@ -1029,11 +1027,8 @@ class CombatGUI:
         for event in action.get("splash_events", []):
             anims.append(self._make_splash_anim(event))
 
-        for event in action.get("bombardment_events", []):
-            anims.append(self._make_bombardment_anim(event))
-
         for event in action.get("strike_events", []):
-            anims.append(self._make_bombardment_anim(event))
+            anims.append(self._make_strike_anim(event))
 
         self._chain_anims(anims, on_done)
 

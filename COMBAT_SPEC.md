@@ -236,7 +236,7 @@ Ability values can be boosted by allies with `passive amplify` auras:
 
 Some effects are queued and applied after the triggering action:
 
-**Queued events**: heal, fortify, sunder, splash, bombardment, strike
+**Queued events**: heal, fortify, sunder, splash, strike
 
 **Immediate effects**: ramp, push, retreat, freeze, summon, silence, ready
 
@@ -389,7 +389,6 @@ After each `step()`, `self.last_action` contains details about what happened. Th
 | `sunder_events` | sunder ability | List of sunder event dicts |
 | `splash_events` | splash ability | List of splash damage event dicts |
 | `strike_events` | strike ability | List of strike damage event dicts |
-| `bombardment_events` | bombardment | List of bombardment event dicts |
 | `ramp_pos` | ramp ability | Position of unit that ramped |
 | `push_from` | push ability | Original position before push |
 | `push_to` | push ability | Position after push |
