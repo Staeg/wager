@@ -356,21 +356,15 @@ class Battle:
         val = ab.get("aura")
         if val == "R":
             return unit.attack_range
+        if val == "area":
+            return None
         return val
 
     def _ability_value(self, unit, ability):
         base = ability.get("value", 0)
         if base == 0:
             return 0
-        if ability.get("amplify", True) is False:
-            return base
-        bonus = sum(
-            val
-            for _, _, val in self._iter_passive_effects(
-                "amplify", unit.pos, unit.player, source="allies"
-            )
-        )
-        return base + bonus
+        return base
 
     def _iter_passive_effects(
         self, effect_type, target_pos, target_player, source="allies"
@@ -380,7 +374,7 @@ class Battle:
         Yields (source_unit, ability, value) tuples for matching passive abilities.
 
         Args:
-            effect_type: Effect type to find (e.g., "armor", "boost", "amplify")
+            effect_type: Effect type to find (e.g., "armor", "boost")
             target_pos: Position being affected (used for aura range checks)
             target_player: Player of the unit at target position
             source: Which units to check:
@@ -427,17 +421,7 @@ class Battle:
         for unit, ab, base_value in self._iter_passive_effects(
             effect_type, target_pos, target_player, source
         ):
-            # Apply amplify bonus to the value
-            if ab.get("amplify", True) is not False and base_value > 0:
-                amplify_bonus = sum(
-                    val
-                    for _, _, val in self._iter_passive_effects(
-                        "amplify", unit.pos, unit.player, source="allies"
-                    )
-                )
-                total += base_value + amplify_bonus
-            else:
-                total += base_value
+            total += base_value
         return total
 
     def _effective_armor(self, unit):
@@ -663,20 +647,19 @@ class Battle:
         armor = spec.get("armor", 0)
         speed = spec.get("speed", 1.0)
         for _ in range(count):
-            units.append(
-                Unit(
-                    name,
-                    max_hp,
-                    damage,
-                    atk_range,
-                    player,
-                    abilities=abilities,
-                    armor=armor,
-                    speed=speed,
-                    unit_id=self._next_unit_id(),
-                    display_name=display_name,
-                )
+            unit = Unit(
+                name,
+                max_hp,
+                damage,
+                atk_range,
+                player,
+                abilities=abilities,
+                armor=armor,
+                speed=speed,
+                unit_id=self._next_unit_id(),
+                display_name=display_name,
             )
+            units.append(unit)
         return units
 
     def _setup_armies(self, p1_units=None, p2_units=None):
@@ -948,6 +931,11 @@ class Battle:
         for enemy in chosen:
             enemy._frozen_turns = 1
             self.log.append(f"  {enemy} is frozen")
+            if self.last_action is None:
+                self.last_action = {}
+            self.last_action.setdefault("freeze_events", []).append(
+                {"pos": enemy.pos, "source_pos": unit.pos}
+            )
 
     def _apply_summon(self, unit, count, ability):
         """Summon units adjacent to the summoner or another target."""

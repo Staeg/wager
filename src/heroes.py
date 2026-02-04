@@ -12,7 +12,7 @@ HERO_STATS = {
         "range": 1,
         "value": 20,
         "abilities": [
-            ability("passive", "armor", value=3, amplify=False),
+            ability("passive", "armor", value=3),
         ],
     },
     "Neophyte": {
@@ -40,7 +40,7 @@ HERO_STATS = {
         "range": 5,
         "value": 20,
         "abilities": [
-            ability("onhit", "freeze", target="random", value=3, amplify=False),
+            ability("onhit", "freeze", target="random", value=3),
         ],
     },
     "Prodigy": {
@@ -68,7 +68,7 @@ HERO_STATS = {
         "range": 2,
         "value": 20,
         "abilities": [
-            ability("turnstart", "shadowstep", charge=4, amplify=False),
+            ability("turnstart", "shadowstep", charge=4),
         ],
     },
     "Mercenary": {
@@ -87,7 +87,7 @@ HERO_STATS = {
         "range": 4,
         "value": 20,
         "abilities": [
-            ability("passive", "boost", target="global", value=1, amplify=False),
+            ability("passive", "boost", target="global", value=1),
         ],
     },
     # Purifiers
@@ -107,7 +107,7 @@ HERO_STATS = {
         "value": 20,
         "abilities": [
             ability("onhit", "splash", target="target", value=4),
-            ability("passive", "armor", value=1, amplify=False),
+            ability("passive", "armor", value=1),
         ],
     },
     "Apostle": {
@@ -144,14 +144,14 @@ HERO_EVOLUTIONS = {
             "display_name": "Wraith",
             "stat_changes": {"max_hp": 8},
             "abilities": [
-                ability("passive", "block", value=2, amplify=False),
+                ability("passive", "block", value=2),
             ],
         },
         "Abolisher": {
             "display_name": "Abolisher",
             "stat_changes": {"damage": 4, "range": 1},
             "abilities": [
-                ability("onhit", "silence", target="area", range=2, amplify=False),
+                ability("onhit", "silence", target="area", range=2),
             ],
         },
     },
@@ -160,14 +160,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Scribe",
             "stat_changes": {"range": 1},
             "abilities": [
-                ability(
-                    "passive",
-                    "amplify",
-                    target="global",
-                    value=1,
-                    aura="area",
-                    amplify=False,
-                ),
+                ability("endturn", "heal", target="global", value=1),
             ],
         },
         "Judge": {
@@ -175,7 +168,7 @@ HERO_EVOLUTIONS = {
             "stat_changes": {"damage": 4},
             "abilities": [
                 ability(
-                    "passive", "execute", target="area", value=2, aura=4, amplify=False
+                    "passive", "execute", target="area", value=2, aura=4
                 ),
             ],
         },
@@ -202,7 +195,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Nightmare",
             "stat_changes": {"damage": 8},
             "abilities": [
-                ability("turnstart", "shadowstep", amplify=False),
+                ability("turnstart", "shadowstep"),
             ],
         },
         "Reaper": {
@@ -218,7 +211,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Nightmare",
             "stat_changes": {"damage": 8},
             "abilities": [
-                ability("turnstart", "shadowstep", amplify=False),
+                ability("turnstart", "shadowstep"),
             ],
         },
         "Reaper": {
@@ -266,7 +259,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Emperor",
             "stat_changes": {"damage": 8},
             "abilities": [
-                ability("onkill", "ready", target="self", amplify=False),
+                ability("onkill", "ready", target="self"),
             ],
         },
         "Regent": {
@@ -274,7 +267,7 @@ HERO_EVOLUTIONS = {
             "stat_changes": {"max_hp": 16},
             "abilities": [
                 ability(
-                    "passive", "armor", target="global", value=3, aura=3, amplify=False
+                    "passive", "armor", target="global", value=3, aura=3
                 ),
             ],
         },
@@ -284,7 +277,7 @@ HERO_EVOLUTIONS = {
             "display_name": "Emperor",
             "stat_changes": {"damage": 8},
             "abilities": [
-                ability("onkill", "ready", target="self", amplify=False),
+                ability("onkill", "ready", target="self"),
             ],
         },
         "Regent": {
@@ -292,7 +285,7 @@ HERO_EVOLUTIONS = {
             "stat_changes": {"max_hp": 16},
             "abilities": [
                 ability(
-                    "passive", "armor", target="global", value=3, aura=3, amplify=False
+                    "passive", "armor", target="global", value=3, aura=3
                 ),
             ],
         },

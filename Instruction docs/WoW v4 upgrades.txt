@@ -10,7 +10,7 @@ Weaver
 * T1:
    * Skirmish tactics: Apprentices gain the “Onhit Retreat 1” ability, which lets them move backwards after successfully attacking
 * T2:
-   * Arcane reach: Conduit “Passive Aura 1 Amplify 1” ability is replaced by “Passive Aura 2 Amplify 1”, which passively increases the values of ally abilities by 1 for all allies within 2 hexes
+   * Deep freeze: Whenever an enemy is successfully affected by a Freeze effect, deal 5 damage to them.
 * T3:
    * Farcasting: All units gain +1 range
 Artificer

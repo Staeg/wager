@@ -59,22 +59,8 @@ UPGRADE_DEFS = {
                     "type": "append_ability",
                     "unit": "Apprentice",
                     "ability": ability(
-                        "onhit", "retreat", target="self", value=1, amplify=False
+                        "onhit", "retreat", target="self", value=1
                     ),
-                },
-            ],
-        },
-        {
-            "id": "weaver_arcane_reach",
-            "name": "Arcane Reach",
-            "tier": 2,
-            "description": "Conduit Amplify aura range becomes 2.",
-            "effects": [
-                {
-                    "type": "modify_abilities",
-                    "unit": "Conduit",
-                    "match": {"effect": "amplify"},
-                    "set": {"aura": 2},
                 },
             ],
         },
@@ -99,7 +85,7 @@ UPGRADE_DEFS = {
                     "type": "append_ability",
                     "unit": "Tincan",
                     "ability": ability(
-                        "onhit", "sunder", target="target", value=1, amplify=False
+                        "onhit", "sunder", target="target", value=1
                     ),
                 },
             ],
@@ -114,7 +100,7 @@ UPGRADE_DEFS = {
                     "type": "append_ability",
                     "unit": "Kitboy",
                     "ability": ability(
-                        "passive", "armor", value=1, aura=1, amplify=False
+                        "passive", "armor", value=1, aura=1
                     ),
                 },
             ],

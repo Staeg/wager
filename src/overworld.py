@@ -40,7 +40,7 @@ UNIT_STATS = {
         "range": 3,
         "value": 12,
         "abilities": [
-            ability("endturn", "sunder", target="random", value=1, amplify=False)
+            ability("endturn", "sunder", target="random", value=1)
         ],
     },
     "Steward": {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
@@ -49,7 +49,7 @@ UNIT_STATS = {
         "damage": 4,
         "range": 2,
         "value": 25,
-        "abilities": [ability("passive", "undying", value=2, aura="R", amplify=False)],
+        "abilities": [ability("passive", "undying", value=2, aura="R")],
     },
     # Weavers (purple/blue)
     "Apprentice": {
@@ -58,15 +58,15 @@ UNIT_STATS = {
         "range": 2,
         "value": 5,
         "abilities": [
-            ability("onhit", "push", target="target", value=1, amplify=False)
+            ability("onhit", "push", target="target", value=1)
         ],
     },
     "Conduit": {
-        "max_hp": 5,
+        "max_hp": 1,
         "damage": 2,
-        "range": 3,
+        "range": 2,
         "value": 10,
-        "abilities": [ability("passive", "amplify", value=1, aura=1, amplify=False)],
+        "abilities": [ability("onhit", "freeze", target="random", value=1)],
     },
     "Seeker": {
         "max_hp": 3,
@@ -89,7 +89,7 @@ UNIT_STATS = {
         "damage": 2,
         "range": 1,
         "value": 14,
-        "abilities": [ability("passive", "armor", value=2, amplify=False)],
+        "abilities": [ability("passive", "armor", value=2)],
     },
     "Kitboy": {
         "max_hp": 6,
@@ -134,7 +134,7 @@ UNIT_STATS = {
         "value": 25,
         "abilities": [
             ability(
-                "endturn", "summon", target="self", count=2, charge=3, amplify=False
+                "endturn", "summon", target="self", count=2, charge=3
             )
         ],
     },

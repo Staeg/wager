@@ -163,7 +163,6 @@ When a unit dies:
     "value": 8,               # Effect magnitude
     "range": 2,               # Range for area effects
     "charge": 3,              # Activates every N triggers
-    "amplify": True,          # Affected by Amplify auras
     "aura": 3,                # Aura range (for passive auras)
 }
 ```
@@ -215,7 +214,6 @@ For damage effects: targets are enemies within range
 | `execute` | Kill enemies that fall below HP threshold |
 | `armor` | Add to effective armor (self or aura) |
 | `boost` | Add to all allies' attack damage |
-| `amplify` | Increase ability values for allies in aura |
 | `undying` | Prevent ally death by sacrificing their damage |
 | `lament_aura` | Grant damage to allies when nearby ally dies (tracked in `_ramp_accumulated`) |
 
@@ -225,12 +223,6 @@ Abilities with `charge: N` only activate every Nth trigger:
 - Counter increments each time trigger condition is met
 - When counter reaches N, ability fires and counter resets to 0
 
-### Amplify System
-
-Ability values can be boosted by allies with `passive amplify` auras:
-- Check if `amplify: False` on ability (if so, skip)
-- Sum amplify values from allies within aura range
-- Final value = base_value + total_amplify_bonus
 
 ## Event Queue
 
@@ -423,7 +415,7 @@ _trigger_abilities(unit, trigger, context)
         │
         └─ _execute_ability(unit, ability, context)
             │
-            ├─ Get value via _ability_value() (applies amplify)
+            ├─ Get value via _ability_value()
             │
             └─ Call handler from _ABILITY_DISPATCH[effect]
                 │

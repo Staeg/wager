@@ -95,7 +95,7 @@ _trigger_abilities(unit, trigger, context)
 
 | Trigger | When it fires |
 |---------|---------------|
-| `passive` | Checked continuously (armor, block, execute, boost, amplify) |
+| `passive` | Checked continuously (armor, block, execute, boost) |
 | `onhit` | After attacking (even if target survives) |
 | `onkill` | After killing an enemy |
 | `wounded` | When this unit takes damage |
@@ -152,7 +152,6 @@ self.player_hero_evolutions = {
     "value": 8,               # Effect magnitude
     "range": 2,               # Optional: range for area effects
     "charge": 3,              # Optional: activates every N triggers
-    "amplify": True,          # Optional: affected by amplify auras
 }
 ```
 

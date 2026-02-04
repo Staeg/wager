@@ -63,7 +63,7 @@ Custodian
    * Objective: Bring the Neophyte and do not move him for 2 turns.
    * Completion text: 
    * Decision 1: Hypothesize - Extrapolate in reasonable directions.
-      * Hero outcome: Neophyte turns into Scribe; gains +1 Range and the “Global Aura - Area Amplify 1” ability, which increases the Area values of all allied units’ abilities by 1
+      * Hero outcome: Neophyte turns into Scribe; gains +1 Range and the Endturn Global Heal 1” ability, which heals all allied units by 1 at the end of its turn
       * Other outcome: 
       * Outcome text: Can’t go wrong with more knowledge.
    * Decision 2: Focus - Do what you’re certain you’re supposed to.
@@ -114,3 +114,35 @@ Custodian
       * Hero outcome: Wraith/Abolisher turns into Reaper, gains +16 HP and “Turnend Global Strike 1”, which lets it deal 1 damage to all enemies at the end of every turn.
       * Other outcome: Gain the “Eternal servitude” upgrade, which makes it so that winning a combat brings all your units that died in the combat back to life on the overworld.
       * Outcome text: Take after their designs of metal. Outlast our foes.
+
+Artificer
+* [Questline] [number]
+   * (Optional) Requires:
+   * Name: 
+   * Location:
+   * Intro text: 
+   * Objective:
+   * Completion text: 
+   * Decision 1: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:
+   * Decision 2: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:
+* [Questline] [number]
+   * (Optional) Requires:
+   * Name: 
+   * Location:
+   * Intro text: 
+   * Objective:
+   * Completion text: 
+   * Decision 1: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:
+   * Decision 2: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:

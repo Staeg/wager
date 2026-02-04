@@ -103,8 +103,6 @@ def describe_ability(ability):
         if aura:
             return f"Allies within {aura_text} gain {value} armor (reduces damage by {value})."
         return f"Reduces all damage taken by {value}."
-    if effect == "amplify":
-        return f"Allied ability values within {aura_text} are increased by {value}."
     if effect == "boost":
         return f"All allied units gain +{value} attack damage."
     if effect == "undying":
@@ -405,14 +403,10 @@ class CombatGUI:
             for ab in u.abilities:
                 if ab.get("trigger") != "passive":
                     continue
-                aura_range = ab.get("aura")
+                aura_range = b._aura_range(u, ab)
                 if not aura_range:
                     continue
-                if aura_range == "R":
-                    aura_range = u.attack_range
-                if ab.get("effect") == "amplify":
-                    aura_specs.append((aura_range, "#8844cc"))  # purple for amplify
-                elif ab.get("effect") == "undying":
+                if ab.get("effect") == "undying":
                     aura_specs.append((aura_range, "#ccaa22"))  # gold for undying
                 elif ab.get("effect") == "armor":
                     aura_specs.append((aura_range, "#5aa7ff"))  # blue for armor aura
@@ -442,7 +436,7 @@ class CombatGUI:
             cx = self._hex_x(u.pos[0], u.pos[1])
             cy = self._hex_y(u.pos[0], u.pos[1])
             sprite_name = u.name.lower()
-            sprite = self._get_sprite(sprite_name, u.has_acted)
+            sprite = self._get_sprite(sprite_name, u.has_acted or u._frozen_turns > 0)
             self._sprite_refs.append(sprite)
             self.canvas.create_image(cx, cy, image=sprite)
             if u.name in HERO_STATS:
@@ -872,6 +866,32 @@ class CombatGUI:
             ),
         )
 
+    def _animate_freeze_star(self, target_pos, source_pos, on_done, frame=0):
+        """Animate a blue star shifted toward the source."""
+        total_frames = 8
+        if frame > total_frames:
+            self.canvas.delete("freeze_anim")
+            on_done()
+            return
+        t = frame / total_frames
+        tx = self._hex_x(target_pos[0], target_pos[1])
+        ty = self._hex_y(target_pos[0], target_pos[1])
+        # Match heal positioning: centered on target, floats upward over time
+        self.canvas.delete("freeze_anim")
+        ty = ty - t * 12
+        size = int(20 + t * 8)
+        fade = int(255 * (1 - t))
+        color = f"#{fade // 4:02x}{fade // 2:02x}{fade:02x}"
+        self.canvas.create_text(
+            tx, ty, text="*", fill=color, font=("Arial", size, "bold"), tags="freeze_anim"
+        )
+        self.root.after(
+            self._anim_delay(30),
+            lambda: self._animate_freeze_star(
+                target_pos, source_pos, on_done, frame + 1
+            ),
+        )
+
     def _animate_strike_arrow(self, src, dst, on_done, frame=0):
         """Animate a differently-colored arrow (orange) from src to dst."""
         total_frames = 8
@@ -978,6 +998,15 @@ class CombatGUI:
 
         return anim
 
+    def _make_freeze_anim(self, event):
+        pos = event["pos"]
+        src = event.get("source_pos")
+
+        def anim(done):
+            self._animate_freeze_star(pos, src, lambda: self._apply_event(event, done))
+
+        return anim
+
     def _make_stat_arrow_anim(self, pos, color, direction, tag):
         def anim(done):
             self._animate_stat_arrow(pos, color, direction, tag, done)
@@ -1026,6 +1055,9 @@ class CombatGUI:
 
         for event in action.get("splash_events", []):
             anims.append(self._make_splash_anim(event))
+
+        for event in action.get("freeze_events", []):
+            anims.append(self._make_freeze_anim(event))
 
         for event in action.get("strike_events", []):
             anims.append(self._make_strike_anim(event))

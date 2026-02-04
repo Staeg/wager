@@ -218,7 +218,7 @@ class TestPush:
                 "range": 2,
                 "count": 1,
                 "abilities": [
-                    ability("onhit", "push", target="target", value=1, amplify=False)
+                    ability("onhit", "push", target="target", value=1)
                 ],
             }
         ]
@@ -248,7 +248,7 @@ class TestPush:
                 "range": 2,
                 "count": 1,
                 "abilities": [
-                    ability("onhit", "push", target="target", value=1, amplify=False)
+                    ability("onhit", "push", target="target", value=1)
                 ],
             }
         ]
@@ -314,68 +314,6 @@ class TestRamp:
                 b.undo()
                 assert seeker.damage < dmg_after, "Undo should restore pre-ramp damage"
                 break
-
-
-class TestAmplify:
-    def test_amplify_boosts_adjacent_ability(self):
-        """Amplify should increase adjacent allies' ability values."""
-        # Conduit (amplify=1) next to Seeker (ramp=1) -> effective ramp=2
-        p1 = [{"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
-        p2 = [
-            {
-                "name": "Conduit",
-                "max_hp": 100,
-                "damage": 2,
-                "range": 3,
-                "count": 1,
-                "abilities": [
-                    ability("passive", "amplify", value=1, aura=1, amplify=False)
-                ],
-            },
-            {
-                "name": "Seeker",
-                "max_hp": 100,
-                "damage": 1,
-                "range": 4,
-                "count": 1,
-                "abilities": [ability("onhit", "ramp", target="self", value=1)],
-            },
-        ]
-        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
-        seeker = [u for u in b.units if u.name == "Seeker"][0]
-        conduit = [u for u in b.units if u.name == "Conduit"][0]
-        # Check effective ability when adjacent
-        from src.hex import hex_distance
-
-        if hex_distance(seeker.pos, conduit.pos) <= 1:
-            ramp_ability = next(
-                ab for ab in seeker.abilities if ab.get("effect") == "ramp"
-            )
-            eff = b._ability_value(seeker, ramp_ability)
-            assert eff == 2, (
-                f"Expected effective ramp=2 (1 base + 1 amplify), got {eff}"
-            )
-
-    def test_amplify_not_self(self):
-        """Amplify should not boost the unit's own abilities."""
-        p1 = [{"name": "Page", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
-        p2 = [
-            {
-                "name": "Test",
-                "max_hp": 100,
-                "damage": 2,
-                "range": 3,
-                "count": 1,
-                "abilities": [
-                    ability("passive", "amplify", value=1, aura=1, amplify=False),
-                    ability("onhit", "ramp", target="self", value=1),
-                ],
-            }
-        ]
-        b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
-        unit = [u for u in b.units if u.name == "Test"][0]
-        ramp_ability = next(ab for ab in unit.abilities if ab.get("effect") == "ramp")
-        assert b._ability_value(unit, ramp_ability) == 1
 
 
 class TestSplash:
@@ -538,7 +476,6 @@ class TestChargeSummon:
                         target="self",
                         count=2,
                         charge=3,
-                        amplify=False,
                     )
                 ],
             }
@@ -572,7 +509,6 @@ class TestChargeSummon:
                         target="self",
                         count=2,
                         charge=3,
-                        amplify=False,
                     )
                 ],
             }
@@ -601,7 +537,7 @@ class TestUndying:
                 "range": 1,
                 "count": 1,
                 "abilities": [
-                    ability("passive", "undying", value=2, aura=3, amplify=False)
+                    ability("passive", "undying", value=2, aura=3)
                 ],
             },
             {"name": "Warrior", "max_hp": 3, "damage": 5, "range": 1, "count": 3},
@@ -641,7 +577,7 @@ class TestDictUnitSpec:
                 "range": 2,
                 "count": 2,
                 "abilities": [
-                    ability("onhit", "push", target="target", value=1, amplify=False)
+                    ability("onhit", "push", target="target", value=1)
                 ],
             }
         ]
@@ -761,7 +697,6 @@ class TestSunder:
                         target="random",
                         value=1,
                         range=3,
-                        amplify=False,
                     )
                 ],
             }
@@ -820,7 +755,7 @@ class TestBlock:
                 "damage": 1,
                 "range": 1,
                 "count": 1,
-                "abilities": [ability("passive", "block", value=2, amplify=False)],
+                "abilities": [ability("passive", "block", value=2)],
             }
         ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)
@@ -860,7 +795,7 @@ class TestSilence:
                 "range": 2,
                 "count": 1,
                 "abilities": [
-                    ability("onhit", "silence", target="area", range=3, amplify=False)
+                    ability("onhit", "silence", target="area", range=3)
                 ],
             }
         ]
@@ -903,7 +838,6 @@ class TestExecute:
                         target="area",
                         value=5,
                         aura=4,
-                        amplify=False,
                     )
                 ],
             }
@@ -938,7 +872,7 @@ class TestReady:
                 "damage": 10,
                 "range": 1,
                 "count": 1,
-                "abilities": [ability("onkill", "ready", target="self", amplify=False)],
+                "abilities": [ability("onkill", "ready", target="self")],
             }
         ]
         b = Battle(p1_units=p1, p2_units=p2, rng_seed=1)

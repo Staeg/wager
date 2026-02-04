@@ -24,9 +24,8 @@ Custodian
 Weaver
 * Apprentice: 8/1/2/5
    * Onhit Push 1: moves the attack target back 1 hex horizontally if possible after attacking
-* Conduit: 5/2/3/10
-   * Passive Aura 1 Amplify 1: passively increases the values of ally abilities by 1 for all allies within 1 range
-      * Does not Amplify other Amplify effects or negative effects (such as Armor -X) and drawbacks (such as Charge Y)
+* Conduit: 1/2/2/10
+   * Onhit Freeze 1/R: exhausts 1 random ready enemy within attack range after attacking
 * Seeker: 3/1/4/10
    * Onhit Self Ramp 1: increases attack damage by 1 after successful attacks
 * Savant: 6/4/4/25

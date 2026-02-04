@@ -10,7 +10,6 @@ def ability(
     aura=None,
     count=None,
     charge=None,
-    amplify=True,
 ):
     data = {
         "trigger": trigger,
@@ -28,6 +27,4 @@ def ability(
         data["count"] = count
     if charge is not None:
         data["charge"] = charge
-    if amplify is False:
-        data["amplify"] = False
     return data

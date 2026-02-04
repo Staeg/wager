@@ -217,8 +217,8 @@ CUSTODIAN_QUESTS = {
                 "hero_evolution": {"from": "Neophyte", "to": "Scribe"},
                 "hero_outcome": (
                     "Neophyte turns into Scribe; gains +1 Range and the "
-                    '"Global Aura - Area Amplify 1" ability, which increases '
-                    "the Area values of all allied units' abilities by 1."
+                    '"Endturn Global Heal 1" ability, which heals all allied '
+                    "units by 1 at the end of its turn."
                 ),
                 "other_outcome": "",
                 "outcome_text": "Can't go wrong with more knowledge.",
