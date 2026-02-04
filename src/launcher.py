@@ -16,6 +16,7 @@ class LauncherGUI:
         self.root.resizable(False, False)
         self._server_proc = None
         self.upgrade_mode_var = tk.StringVar(value="none")
+        self.ai_mode_var = tk.StringVar(value="inactive")
 
         frame = tk.Frame(self.root, padx=20, pady=20)
         frame.pack()
@@ -93,6 +94,33 @@ class LauncherGUI:
             text="Choose upgrade",
             variable=self.upgrade_mode_var,
             value="choose",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+
+        # AI Mode selection (for single-player)
+        ai_frame = tk.LabelFrame(
+            frame, text="AI Mode (Single Player)", font=("Arial", 11), padx=10, pady=8
+        )
+        ai_frame.pack(fill=tk.X, pady=8)
+        tk.Radiobutton(
+            ai_frame,
+            text="Inactive (build once, no actions)",
+            variable=self.ai_mode_var,
+            value="inactive",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        tk.Radiobutton(
+            ai_frame,
+            text="Passive (rebuild every 3-7 turns)",
+            variable=self.ai_mode_var,
+            value="passive",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        tk.Radiobutton(
+            ai_frame,
+            text="Aggressive (hunt and attack)",
+            variable=self.ai_mode_var,
+            value="aggressive",
             font=("Arial", 10),
         ).pack(anchor="w")
 
@@ -245,7 +273,11 @@ class LauncherGUI:
         for w in self.root.winfo_children():
             w.destroy()
 
-        OverworldGUI(self.root, upgrade_mode=self.upgrade_mode_var.get())
+        OverworldGUI(
+            self.root,
+            upgrade_mode=self.upgrade_mode_var.get(),
+            ai_mode=self.ai_mode_var.get(),
+        )
 
     def run(self):
         self.root.mainloop()

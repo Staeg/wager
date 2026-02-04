@@ -66,6 +66,7 @@ from .quests import (
     check_quest_completable,
     get_unlockable_quests,
 )
+from .ai import AIController
 
 
 def unit_count(name):
@@ -174,17 +175,19 @@ class OverworldGUI:
     def HEX_SIZE(self):
         return self.BASE_HEX_SIZE * getattr(self, "zoom_level", 1.0)
 
-    def __init__(self, root, client=None, upgrade_mode="none"):
+    def __init__(self, root, client=None, upgrade_mode="none", ai_mode="inactive"):
         """Initialize overworld GUI.
 
         Args:
             root: tkinter root or frame
             client: optional GameClient for multiplayer mode.
                     If None, runs in local single-player mode.
+            ai_mode: AI behavior mode ("inactive", "passive", "aggressive")
         """
         self.root = root
         self.client = client
         self.upgrade_mode = upgrade_mode
+        self.ai_mode = ai_mode
         self.player_id = 1  # default for single-player
         self.current_player = 1
         self._multiplayer = client is not None
@@ -199,6 +202,7 @@ class OverworldGUI:
         self.ai_factions = {}
         self.ai_upgrades = {}
         self.ai_heroes = {}
+        self.ai_controller = None
 
         root.title("Wager of War - Overworld")
 
@@ -234,9 +238,6 @@ class OverworldGUI:
                 self.ai_upgrades[pid] = upgrade
                 if upgrade:
                     self.player_upgrades[pid] = [upgrade]
-            # Auto-build AI armies since there's no AI turns
-            for pid, faction_name in self.ai_factions.items():
-                self._auto_build_ai(pid, faction_name)
             self.world.grant_income(1)
 
         self.player_quests = {}
@@ -245,6 +246,7 @@ class OverworldGUI:
 
         self.selected_army = None
         self.selected_armies = []
+        self.selected_hex = None  # (col, row) of clicked hex for coordinate display
         self._highlighted_hex = None
         self.build_panel = None  # track build popup
         self.build_base_pos = None
@@ -323,6 +325,7 @@ class OverworldGUI:
             root.bind("<KeyPress-q>", lambda e: self._show_quest_panel())
 
         self.army_info_title = tk.StringVar(value="No army selected.")
+        self.hex_coords_var = tk.StringVar(value="")
         self._army_info_key = None
 
         # Battle log panel (right side)
@@ -334,7 +337,13 @@ class OverworldGUI:
         )
         self.army_info_frame.pack(fill=tk.X, pady=(0, 8))
         tk.Label(
-            self.army_info_frame, text="Army Info", font=("Arial", 11, "bold")
+            self.army_info_frame, text="Hex Info", font=("Arial", 11, "bold")
+        ).pack(anchor="w")
+        tk.Label(
+            self.army_info_frame,
+            textvariable=self.hex_coords_var,
+            font=("Arial", 9),
+            fg="gray",
         ).pack(anchor="w")
         tk.Label(
             self.army_info_frame,
@@ -364,6 +373,8 @@ class OverworldGUI:
         if self._multiplayer:
             self.client.on_message = self._on_server_message
         else:
+            # Initialize AI controller now that UI is ready (battle_log exists)
+            self._init_ai_controller()
             self._draw()
 
     def _colorize_sprite(self, img, hex_color):
@@ -525,6 +536,27 @@ class OverworldGUI:
         for pid, faction_name in zip(range(2, 5), remaining):
             self.ai_factions[pid] = faction_name
             self.player_factions[pid] = faction_name
+
+    def _init_ai_controller(self):
+        """Initialize the AI controller and set up AI players."""
+        if self._multiplayer:
+            return
+
+        self.ai_controller = AIController(mode=self.ai_mode)
+
+        def build_callback(player_id, unit_name, pos):
+            return self.world.build_unit_at_pos(player_id, unit_name, pos)
+
+        def log_callback(message):
+            battle_log = getattr(self, "battle_log", None)
+            if battle_log is not None:
+                battle_log.insert(tk.END, message)
+                battle_log.see(tk.END)
+
+        for pid, faction_name in self.ai_factions.items():
+            self.ai_controller.init_player(
+                pid, self.world, faction_name, build_callback, log_callback
+            )
 
     def _choose_random_heroes(self, faction_name, count=3):
         heroes = list(get_heroes_for_faction(faction_name))
@@ -1097,6 +1129,7 @@ class OverworldGUI:
         if not self.selected_armies and not self.selected_structure:
             self.army_info_title.set("No army selected.")
             return
+
         def _render_structure_info():
             structure = self.selected_structure
             if not structure:
@@ -1135,7 +1168,8 @@ class OverworldGUI:
         if len(self.selected_armies) == 1:
             army = self.selected_armies[0]
             owner = "Neutral" if army.player == NEUTRAL_PLAYER else f"P{army.player}"
-            self.army_info_title.set(f"{owner} Army - {army.total_count} units")
+            moniker_str = f' "{army.moniker}"' if army.moniker else ""
+            self.army_info_title.set(f"{owner}{moniker_str} - {army.total_count} units")
             effective_stats = self._get_effective_unit_stats(army.player)
             for name, count in army.units:
                 display_name = self._get_unit_display_name(name, army.player)
@@ -1160,9 +1194,10 @@ class OverworldGUI:
         self.army_info_title.set("Armies at hex")
         for army in self.selected_armies:
             owner = "Neutral" if army.player == NEUTRAL_PLAYER else f"P{army.player}"
+            moniker_str = f' "{army.moniker}"' if army.moniker else ""
             header = tk.Label(
                 self.army_info_units_frame,
-                text=f"{owner} Army - {army.total_count} units",
+                text=f"{owner}{moniker_str} - {army.total_count} units",
                 font=("Arial", 9, "bold"),
                 anchor="w",
                 justify=tk.LEFT,
@@ -1344,9 +1379,13 @@ class OverworldGUI:
                     # Draw selection highlight behind structure
                     highlight_r = 17 * self.zoom_level
                     self.canvas.create_oval(
-                        cx - highlight_r, cy - highlight_r,
-                        cx + highlight_r, cy + highlight_r,
-                        fill="", outline=outline, width=outline_width
+                        cx - highlight_r,
+                        cy - highlight_r,
+                        cx + highlight_r,
+                        cy + highlight_r,
+                        fill="",
+                        outline=outline,
+                        width=outline_width,
                     )
                 if allows_recruitment:
                     sprite = sprites["tower"].get(player)
@@ -1435,8 +1474,13 @@ class OverworldGUI:
             else:
                 color = PLAYER_COLORS.get(army.player, "#888888")
             self.canvas.create_oval(
-                cx - army_r, cy - army_r, cx + army_r, cy + army_r,
-                fill=color, outline="white", width=2
+                cx - army_r,
+                cy - army_r,
+                cx + army_r,
+                cy + army_r,
+                fill=color,
+                outline="white",
+                width=2,
             )
             self.canvas.create_text(
                 cx,
@@ -1575,9 +1619,18 @@ class OverworldGUI:
                     self.tooltip = tw = tk.Toplevel(self.root)
                     tw.wm_overrideredirect(True)
                     tw.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
-                    text = f"P{army.player} Army\n" + "\n".join(
-                        f"  {count}x {self._get_unit_display_name(name, army.player)}"
-                        for name, count in army.units
+                    header = (
+                        f'P{army.player} "{army.moniker}"'
+                        if army.moniker
+                        else f"P{army.player} Army"
+                    )
+                    text = (
+                        header
+                        + "\n"
+                        + "\n".join(
+                            f"  {count}x {self._get_unit_display_name(name, army.player)}"
+                            for name, count in army.units
+                        )
                     )
                     if army.exhausted:
                         text += "\n  (Exhausted)"
@@ -1656,6 +1709,10 @@ class OverworldGUI:
         clicked = self._pixel_to_hex(event.x, event.y)
         if not clicked:
             return
+
+        # Always update selected hex for coordinate display
+        self.selected_hex = clicked
+        self.hex_coords_var.set(f"Hex: {clicked}")
 
         my_player = self.player_id if self._multiplayer else 1
         my_faction = (
@@ -2300,6 +2357,10 @@ class OverworldGUI:
         if bonus:
             self.world.gold[1] = self.world.gold.get(1, 0) + bonus
             income += bonus
+
+        # Process AI turns
+        self._process_ai_turns()
+
         self.selected_army = None
         self.selected_armies = []
         if income:
@@ -2310,6 +2371,151 @@ class OverworldGUI:
             self.status_var.set("New turn. Click a P1 army to select it.")
         self._update_gold_display()
         self._draw()
+
+    def _process_ai_turns(self):
+        """Process turns for all AI players."""
+        if not self.ai_controller:
+            return
+
+        # Grant income to AI players and reset their armies
+        for pid in self.ai_factions:
+            for army in self.world.armies:
+                if army.player == pid:
+                    army.exhausted = False
+            self.world.grant_income(pid)
+            bonus = self.player_economy.get(pid, {}).get("income_bonus", 0)
+            if bonus:
+                self.world.gold[pid] = self.world.gold.get(pid, 0) + bonus
+
+        def build_callback(player_id, unit_name, pos):
+            return self.world.build_unit_at_pos(player_id, unit_name, pos)
+
+        def battle_callback(attacker, defender):
+            self._auto_resolve_battle(attacker, defender)
+
+        def log_callback(message):
+            if self.battle_log is not None:
+                self.battle_log.insert(tk.END, message)
+                self.battle_log.see(tk.END)
+
+        # Run AI logic
+        pending_battles = self.ai_controller.on_turn_end(
+            self.world,
+            self.ai_factions,
+            build_callback,
+            battle_callback,
+            log_callback,
+        )
+
+        # Process pending battles
+        for attacker, defender in pending_battles:
+            if attacker not in self.world.armies or defender not in self.world.armies:
+                continue
+            self._auto_resolve_battle(attacker, defender)
+
+        # Merge any same-player armies at the same position (defensive cleanup)
+        self._merge_collocated_armies()
+
+    def _merge_collocated_armies(self):
+        """Merge armies of the same player that are at the same position."""
+        # Group armies by (player, position)
+        by_pos = {}
+        for army in self.world.armies:
+            key = (army.player, army.pos)
+            if key not in by_pos:
+                by_pos[key] = []
+            by_pos[key].append(army)
+
+        # Merge groups with more than one army
+        for (player, pos), armies in by_pos.items():
+            if len(armies) > 1:
+                # Keep the first, merge the rest into it
+                target = armies[0]
+                for source in armies[1:]:
+                    self.world.merge_armies(target, source)
+
+    def _auto_resolve_battle(self, attacker, defender):
+        """Automatically resolve a battle without GUI (for AI vs AI/neutral)."""
+        attacker_rules = self.player_combat_rules.get(attacker.player, {})
+        defender_rules = self.player_combat_rules.get(defender.player, {})
+        defender_armor_bonus = defender_rules.get("defending_armor_bonus", 0)
+
+        original_attacker_units = list(attacker.units)
+        original_defender_units = list(defender.units)
+
+        p1_units = self._make_battle_units(attacker)
+        p2_units = self._make_battle_units(defender, armor_bonus=defender_armor_bonus)
+        rng_seed = random.randint(0, 2**31 - 1)
+
+        battle = Battle(
+            p1_units=p1_units,
+            p2_units=p2_units,
+            rng_seed=rng_seed,
+            p1_combat_rules=attacker_rules,
+            p2_combat_rules=defender_rules,
+        )
+
+        # Run battle to completion (step() returns False when battle is over)
+        while battle.step():
+            pass
+
+        # Get results from battle
+        p1_survivors = sum(1 for u in battle.units if u.alive and u.player == 1)
+        p2_survivors = sum(1 for u in battle.units if u.alive and u.player == 2)
+        winner = battle.winner if battle.winner is not None else 0
+
+        # Save monikers before battle resolution (loser gets removed)
+        attacker_moniker = attacker.moniker
+        defender_moniker = defender.moniker
+        attacker_player = attacker.player
+        defender_player = defender.player
+
+        # Check if this was a hunt (attacker had defender as target)
+        was_hunt = False
+        if self.ai_controller and attacker_player in self.ai_controller.states:
+            state = self.ai_controller.states[attacker_player]
+            target_moniker = state.targets.get(id(attacker))
+            if target_moniker and target_moniker == defender_moniker:
+                was_hunt = True
+
+        result = resolve_battle(
+            self.world,
+            attacker,
+            defender,
+            battle,
+            winner,
+            p1_survivors,
+            p2_survivors,
+            attacker_combat_rules=attacker_rules,
+            defender_combat_rules=defender_rules,
+            original_attacker_units=original_attacker_units,
+            original_defender_units=original_defender_units,
+        )
+
+        # Log the battle
+        if self.battle_log is not None:
+            summary = result["summary"]
+            self.battle_log.insert(tk.END, summary)
+            self.battle_log.see(tk.END)
+
+            # Log hunt result if applicable
+            if was_hunt:
+                attacker_name = (
+                    f'"{attacker_moniker}"'
+                    if attacker_moniker
+                    else f"at {attacker.pos}"
+                )
+                defender_name = (
+                    f'"{defender_moniker}"'
+                    if defender_moniker
+                    else f"at {defender.pos}"
+                )
+                if winner == 1:  # Attacker won
+                    hunt_msg = f"Hunt successful: P{attacker_player} {attacker_name} eliminated P{defender_player} {defender_name}"
+                else:  # Defender won or draw
+                    hunt_msg = f"Hunt failed: P{attacker_player} {attacker_name} lost to P{defender_player} {defender_name}"
+                self.battle_log.insert(tk.END, hunt_msg)
+                self.battle_log.see(tk.END)
 
     def _make_battle_units(self, army, armor_bonus=0):
         """Convert an army's units list into Battle-compatible dicts."""

@@ -1,0 +1,35 @@
+﻿Scripts used by the AI in various combinations:
+* spend_distributed()
+   * Distributes gold between unit types approximately evenly
+   * Builds units in available bases such that the total value in each base is roughly equal
+* designate_target(friendly_army, mode=random)
+   * If mode == random (the default):
+      * Chooses a random army not controlled by this AI player and designates it as the friendly army’s Target
+   * If mode == fair (used at start)
+      * Chooses another player (human or AI) who currently has (one of) the fewest armies Targeted by the current AI
+      * Chooses a random army controlled by that player and designates it as the friendly army’s Target
+* hunt_target(friendly_army)
+   * If the army has a Target, move as close as possible to the Target army on the overworld map, starting a combat if possible
+   * If the army has no Target, move as close as possible to this AI’s Staging Ground
+* spend_focused(friendly_base)
+   * Builds units in the base such that the total value spent on each unit type is roughly equal
+* set_StagingGround()
+   * Chooses a random friendly base as the Staging Ground
+
+
+AI variants, chosen at the start of the game and applying to all player slots not played by a human:
+
+
+* Inactive (default setting on the multiple choice list)
+   * Runs spend_distributed() at the start and then does nothing for the rest of the game
+* Passive
+   * Runs spend_distributed() at the start and every 3-7 turns after that
+      * Chooses a new random number whenever spending gold
+* Aggressive
+   * Runs spend_distributed() and set_StagingGround() at the start
+   * For army in friendly_armies:
+      * designate_target(army, fair)
+   * Then, runs spend_focused followed by designate_target(army) (on the army just created) and set_StagingGround() every 2-5 turns
+      * Chooses a new random number whenever spending gold
+   * Every turn runs for each army in friendly_armies:
+      * hunt_target(army)

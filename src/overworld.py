@@ -1,3 +1,4 @@
+import os
 import random
 from dataclasses import dataclass
 from .hex import hex_distance
@@ -23,6 +24,48 @@ from .constants import (
 )
 from .heroes import HERO_STATS
 
+
+def _load_default_monikers():
+    """Load army monikers from file or return default list."""
+    # Try to find the codenames file
+    possible_paths = [
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "Instruction docs",
+            "fantasy_army_codenames.txt",
+        ),
+        os.path.join(os.path.dirname(__file__), "..", "fantasy_army_codenames.txt"),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                monikers = [line.strip() for line in f if line.strip()]
+                if monikers:
+                    return monikers
+    # Fallback default list
+    return [
+        "Ironfall",
+        "Ironbound",
+        "Ashfall",
+        "Ashbound",
+        "Nightfall",
+        "Nightbound",
+        "Stormfall",
+        "Stormbound",
+        "Frostfall",
+        "Frostbound",
+        "Shadowfall",
+        "Voidfall",
+        "Bloodfall",
+        "Starfall",
+        "Moonfall",
+        "Sunfall",
+    ]
+
+
+DEFAULT_MONIKERS = _load_default_monikers()
+
 # Canonical unit stats
 UNIT_STATS = {
     # Custodians (yellow/orange)
@@ -39,9 +82,7 @@ UNIT_STATS = {
         "damage": 0,
         "range": 3,
         "value": 12,
-        "abilities": [
-            ability("endturn", "sunder", target="random", value=1)
-        ],
+        "abilities": [ability("endturn", "sunder", target="random", value=1)],
     },
     "Steward": {"max_hp": 20, "damage": 3, "range": 1, "value": 10, "abilities": []},
     "Gatekeeper": {
@@ -57,9 +98,7 @@ UNIT_STATS = {
         "damage": 1,
         "range": 2,
         "value": 5,
-        "abilities": [
-            ability("onhit", "push", target="target", value=1)
-        ],
+        "abilities": [ability("onhit", "push", target="target", value=1)],
     },
     "Conduit": {
         "max_hp": 11,
@@ -132,11 +171,7 @@ UNIT_STATS = {
         "damage": 1,
         "range": 4,
         "value": 25,
-        "abilities": [
-            ability(
-                "endturn", "summon", target="self", count=2, charge=3
-            )
-        ],
+        "abilities": [ability("endturn", "summon", target="self", count=2, charge=3)],
     },
 }
 
@@ -156,6 +191,7 @@ class OverworldArmy:
     units: list  # list of (unit_type, count) tuples
     pos: tuple  # (col, row)
     exhausted: bool = False
+    moniker: str | None = None  # Army codename (e.g., "Ironfall")
 
     @property
     def label(self):
@@ -209,6 +245,20 @@ class Overworld:
         self._spawn_gold_piles()
         self.objectives = []
         self._spawn_objectives()
+        # Moniker pool for naming armies
+        self._moniker_pool = list(DEFAULT_MONIKERS)
+        self.rng.shuffle(self._moniker_pool)
+
+    def _refill_moniker_pool(self):
+        """Refill the moniker pool if empty."""
+        self._moniker_pool = list(DEFAULT_MONIKERS)
+        self.rng.shuffle(self._moniker_pool)
+
+    def get_moniker(self):
+        """Get a moniker for a new army, refilling pool if needed."""
+        if not self._moniker_pool:
+            self._refill_moniker_pool()
+        return self._moniker_pool.pop()
 
     def _spawn_bases(self, num_players):
         mid_c = self.COLS // 2
@@ -403,19 +453,27 @@ class Overworld:
 
     def _add_units_to_army(self, pos, player, unit_name, count):
         """Add units to an existing army at pos, or create a new one."""
-        army = self.get_army_at(pos)
-        if army and army.player == player:
+        # Find the player's army at the position (not just any army)
+        army = None
+        for a in self.armies:
+            if a.pos == pos and a.player == player:
+                army = a
+                break
+        if army:
             for i, (name, existing) in enumerate(army.units):
                 if name == unit_name:
                     army.units[i] = (name, existing + count)
                     return
             army.units.append((unit_name, count))
         else:
+            # Assign moniker to non-neutral armies
+            moniker = self.get_moniker() if player != NEUTRAL_PLAYER else None
             self.armies.append(
                 OverworldArmy(
                     player=player,
                     units=[(unit_name, count)],
                     pos=pos,
+                    moniker=moniker,
                 )
             )
 
@@ -495,6 +553,15 @@ class Overworld:
 
     def get_armies_at(self, pos):
         return [a for a in self.armies if a.pos == pos]
+
+    def get_army_by_moniker(self, moniker):
+        """Find an army by its moniker."""
+        if not moniker:
+            return None
+        for a in self.armies:
+            if a.moniker == moniker:
+                return a
+        return None
 
     def move_army(self, army, new_pos):
         army.pos = new_pos
