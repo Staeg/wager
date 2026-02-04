@@ -204,7 +204,7 @@ class OverworldGUI:
             self.world.objectives = []
         else:
             self.world = Overworld(num_players=4)
-            # Show faction selection before building
+            # Show faction selection before structure selection
             self._pick_faction()
             self.player_factions[1] = self.faction
             self._assign_ai_factions_singleplayer()
@@ -347,11 +347,32 @@ class OverworldGUI:
         self._hovered_army = None
         self._reward_tooltip = None
         self.combat_frame = None
+        self.selected_structure = None
 
         if self._multiplayer:
             self.client.on_message = self._on_server_message
         else:
             self._draw()
+
+    def _colorize_sprite(self, img, hex_color):
+        """Colorize a sprite with a given hex color while preserving alpha."""
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        pixels = img.load()
+        width, height = img.size
+        result = Image.new("RGBA", (width, height))
+        result_pixels = result.load()
+        for y in range(height):
+            for x in range(width):
+                orig_r, orig_g, orig_b, orig_a = pixels[x, y]
+                # Use luminance to blend with player color
+                lum = (orig_r + orig_g + orig_b) / (3 * 255)
+                new_r = int(r * lum)
+                new_g = int(g * lum)
+                new_b = int(b * lum)
+                result_pixels[x, y] = (new_r, new_g, new_b, orig_a)
+        return result
 
     def _load_overworld_assets(self):
         asset_dir = get_asset_dir()
@@ -360,13 +381,25 @@ class OverworldGUI:
         self._gold_sprite = ImageTk.PhotoImage(img)
         small = img.resize((16, 16), Image.LANCZOS)
         self._gold_sprite_small = ImageTk.PhotoImage(small)
-        # Load structure sprites
+        # Load structure sprites and create colored versions for each player
         tower_path = os.path.join(asset_dir, "tower.png")
         house_path = os.path.join(asset_dir, "house.png")
         tower_img = Image.open(tower_path).convert("RGBA")
         house_img = Image.open(house_path).convert("RGBA")
-        self._tower_sprite = ImageTk.PhotoImage(tower_img)
-        self._house_sprite = ImageTk.PhotoImage(house_img)
+        self._tower_sprites = {}
+        self._house_sprites = {}
+        self._tower_sprites_small = {}
+        self._house_sprites_small = {}
+        for player, color in PLAYER_COLORS.items():
+            colored_tower = self._colorize_sprite(tower_img, color)
+            colored_house = self._colorize_sprite(house_img, color)
+            self._tower_sprites[player] = ImageTk.PhotoImage(colored_tower)
+            self._house_sprites[player] = ImageTk.PhotoImage(colored_house)
+            # Small versions for when army is standing over structure
+            small_tower = colored_tower.resize((16, 16), Image.LANCZOS)
+            small_house = colored_house.resize((16, 16), Image.LANCZOS)
+            self._tower_sprites_small[player] = ImageTk.PhotoImage(small_tower)
+            self._house_sprites_small[player] = ImageTk.PhotoImage(small_house)
 
     def _pick_faction(self):
         """Show a modal dialog for the player to pick a faction."""
@@ -804,7 +837,7 @@ class OverworldGUI:
         self.gold_var.set(f"Gold: {gold}")
 
     def _show_build_panel(self, base_pos=None):
-        """Show a popup panel for building units at the player's base."""
+        """Show a popup panel for recruiting units at the player's structure."""
         if self.build_panel:
             self._close_build_panel()
 
@@ -819,9 +852,11 @@ class OverworldGUI:
         )
         self._build_gold_label.pack(pady=5)
         if self.build_base_pos:
+            base = self.world.get_base_at(self.build_base_pos)
+            income = base.income if base else 0
             tk.Label(
                 tw,
-                text=f"Building at {self.build_base_pos}",
+                text=f"Structure at {self.build_base_pos} (Income: {income})",
                 font=("Arial", 9),
                 fg="#cccccc",
             ).pack()
@@ -978,16 +1013,28 @@ class OverworldGUI:
             self.selected_army = None
         if self.selected_army is None:
             self.selected_armies = []
+        if self.selected_structure and self.selected_structure not in self.world.bases:
+            self.selected_structure = None
         if self.selected_armies:
             self.selected_armies = [
                 a for a in self.selected_armies if a in self.world.armies
             ]
         if not self.selected_armies and self.selected_army:
             self.selected_armies = [self.selected_army]
-        if not self.selected_armies:
+        if not self.selected_armies and not self.selected_structure:
             key = None
         else:
-            key = tuple((a.player, a.pos, tuple(a.units)) for a in self.selected_armies)
+            key = (
+                tuple((a.player, a.pos, tuple(a.units)) for a in self.selected_armies),
+                (
+                    self.selected_structure.player,
+                    self.selected_structure.pos,
+                    self.selected_structure.income,
+                    self.selected_structure.allows_recruitment,
+                )
+                if self.selected_structure
+                else None,
+            )
         if not force and key == self._army_info_key:
             return
         self._army_info_key = key
@@ -995,8 +1042,42 @@ class OverworldGUI:
         for child in self.army_info_units_frame.winfo_children():
             child.destroy()
 
-        if not self.selected_armies:
+        if not self.selected_armies and not self.selected_structure:
             self.army_info_title.set("No army selected.")
+            return
+        def _render_structure_info():
+            structure = self.selected_structure
+            if not structure:
+                return
+            tk.Label(
+                self.army_info_units_frame,
+                text="Structure info",
+                font=("Arial", 11, "bold"),
+                anchor="w",
+                justify=tk.LEFT,
+            ).pack(anchor="w")
+            tk.Label(
+                self.army_info_units_frame,
+                text=f"Income: {structure.income}",
+                font=("Arial", 9),
+                anchor="w",
+                justify=tk.LEFT,
+            ).pack(anchor="w")
+            tk.Label(
+                self.army_info_units_frame,
+                text=(
+                    "Recruitment: Yes"
+                    if structure.allows_recruitment
+                    else "Recruitment: No"
+                ),
+                font=("Arial", 9),
+                anchor="w",
+                justify=tk.LEFT,
+            ).pack(anchor="w")
+
+        if self.selected_structure and not self.selected_armies:
+            self.army_info_title.set("Structure selected.")
+            _render_structure_info()
             return
 
         if len(self.selected_armies) == 1:
@@ -1019,6 +1100,9 @@ class OverworldGUI:
                     self._bind_ability_hover(
                         label, _unit_tooltip_text(display_name, stats)
                     )
+            if self.selected_structure:
+                tk.Label(self.army_info_units_frame, text="", font=("Arial", 4)).pack()
+                _render_structure_info()
             return
 
         self.army_info_title.set("Armies at hex")
@@ -1048,6 +1132,9 @@ class OverworldGUI:
                     self._bind_ability_hover(
                         label, _unit_tooltip_text(display_name, stats)
                     )
+        if self.selected_structure:
+            tk.Label(self.army_info_units_frame, text="", font=("Arial", 4)).pack()
+            _render_structure_info()
 
     def _refresh_build_panel(self):
         """Update gold display and button states in the build panel."""
@@ -1171,38 +1258,51 @@ class OverworldGUI:
             )
 
         # Draw structures (behind armies)
+        army_positions = {a.pos for a in w.armies}
         for base in getattr(w, "bases", []):
             if not base.alive:
                 continue
             cx, cy = self._hex_center(base.pos[0], base.pos[1])
-            color = PLAYER_COLORS.get(base.player, "#888888")
-            s = 15
-            outline = "white"
-            outline_width = 2
-            if self.build_panel and self.build_base_pos == base.pos:
-                outline = "#ffdd55"
-                outline_width = 3
-            # Draw colored background circle to indicate player ownership
-            self.canvas.create_oval(
-                cx - s - 2,
-                cy - s - 2,
-                cx + s + 2,
-                cy + s + 2,
-                fill=color,
-                outline=outline,
-                width=outline_width,
-            )
-            # Draw appropriate sprite based on structure type
+            player = base.player
             allows_recruitment = getattr(base, "allows_recruitment", True)
-            if allows_recruitment:
-                if hasattr(self, "_tower_sprite") and self._tower_sprite:
-                    self.canvas.create_image(cx, cy, image=self._tower_sprite)
+            # Check if army is standing over this structure
+            if base.pos in army_positions:
+                # Show small structure icon at top-left of hex when army is on top
+                s = self.HEX_SIZE
+                if allows_recruitment:
+                    sprite = self._tower_sprites_small.get(player)
+                    if sprite:
+                        self.canvas.create_image(
+                            cx - s * 0.45, cy - s * 0.45, image=sprite
+                        )
+                else:
+                    sprite = self._house_sprites_small.get(player)
+                    if sprite:
+                        self.canvas.create_image(
+                            cx - s * 0.45, cy - s * 0.45, image=sprite
+                        )
             else:
-                if hasattr(self, "_house_sprite") and self._house_sprite:
-                    self.canvas.create_image(cx, cy, image=self._house_sprite)
+                # Draw full-size colored sprite
+                outline = "white"
+                outline_width = 2
+                if self.build_panel and self.build_base_pos == base.pos:
+                    outline = "#ffdd55"
+                    outline_width = 3
+                    # Draw selection highlight behind structure
+                    self.canvas.create_oval(
+                        cx - 17, cy - 17, cx + 17, cy + 17,
+                        fill="", outline=outline, width=outline_width
+                    )
+                if allows_recruitment:
+                    sprite = self._tower_sprites.get(player)
+                    if sprite:
+                        self.canvas.create_image(cx, cy, image=sprite)
+                else:
+                    sprite = self._house_sprites.get(player)
+                    if sprite:
+                        self.canvas.create_image(cx, cy, image=sprite)
 
         # Draw gold piles
-        army_positions = {a.pos for a in w.armies}
         for pile in getattr(w, "gold_piles", []):
             cx, cy = self._hex_center(pile.pos[0], pile.pos[1])
             if pile.pos in army_positions:
@@ -1468,10 +1568,12 @@ class OverworldGUI:
                 if self.selected_army and clicked == self.selected_army.pos:
                     self.selected_army = None
                     self.selected_armies = []
+                    self.selected_structure = None
                     self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
                 else:
                     self.selected_army = clicked_army
                     self.selected_armies = clicked_armies
+                    self.selected_structure = None
                     if clicked_army.player == my_player:
                         self.status_var.set(
                             f"Selected: {self._get_army_display_label(clicked_army)}. Waiting for your turn."
@@ -1485,6 +1587,7 @@ class OverworldGUI:
                 if self.selected_army:
                     self.selected_army = None
                     self.selected_armies = []
+                    self.selected_structure = None
                     self._draw()
                 self.status_var.set(f"Waiting for P{self.current_player}'s turn.")
             return
@@ -1494,6 +1597,7 @@ class OverworldGUI:
             self.world.get_base_at(clicked) if hasattr(self.world, "bases") else None
         )
         if clicked_base and clicked_base.player == my_player:
+            self.selected_structure = None
             if clicked_army and clicked_army.player == my_player:
                 if self.selected_army == clicked_army:
                     # Already selected this army, so open build panel
@@ -1507,9 +1611,25 @@ class OverworldGUI:
                 self._draw()
                 return
 
+        if clicked_base and clicked_base.player != my_player:
+            self.selected_structure = clicked_base
+            if not clicked_army:
+                self.selected_army = None
+                self.selected_armies = []
+                owner = (
+                    "Neutral"
+                    if clicked_base.player == NEUTRAL_PLAYER
+                    else f"P{clicked_base.player}"
+                )
+                self.status_var.set(f"{owner} structure selected.")
+                self._draw()
+                return
+
         # No army selected yet
         if self.selected_army is None:
             if clicked_army:
+                if not (clicked_base and clicked_base.player != my_player):
+                    self.selected_structure = None
                 if clicked_army.player == my_player and clicked_army.exhausted:
                     self.status_var.set("That army is exhausted. End Turn to ready it.")
                     return
@@ -1525,6 +1645,7 @@ class OverworldGUI:
                     self.status_var.set("Enemy army selected.")
                 self._draw()
             else:
+                self.selected_structure = None
                 self.status_var.set("Click an army to select it.")
             return
 
@@ -1532,6 +1653,7 @@ class OverworldGUI:
         if clicked == self.selected_army.pos:
             self.selected_army = None
             self.selected_armies = []
+            self.selected_structure = None
             self.status_var.set("Selection cancelled.")
             self._draw()
             return
@@ -1541,6 +1663,8 @@ class OverworldGUI:
             if clicked_army.player == my_player and clicked_army.exhausted:
                 self.status_var.set("That army is exhausted. End Turn to ready it.")
                 return
+            if not (clicked_base and clicked_base.player != my_player):
+                self.selected_structure = None
             self.selected_army = clicked_army
             self.selected_armies = clicked_armies
             if clicked_army.player == my_player:
@@ -1557,6 +1681,7 @@ class OverworldGUI:
         # Left-click on non-own hex with selection: just deselect
         self.selected_army = None
         self.selected_armies = []
+        self.selected_structure = None
         self.status_var.set("Selection cancelled.")
         self._draw()
 
