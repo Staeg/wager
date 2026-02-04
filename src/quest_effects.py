@@ -36,7 +36,7 @@ def _handle_create_base(effect, context):
     """Create a structure at the quest location."""
     world = context["world"]
     player_id = context["player_id"]
-    quest_pos = context["quest_pos"]
+    quest_pos = tuple(context["quest_pos"])  # Ensure tuple for position comparisons
     income = effect.get("income", 5)
     allows_recruitment = effect.get("allows_recruitment", True)
     # Check if there's already a base at this position
@@ -61,7 +61,7 @@ def _handle_create_base(effect, context):
 def _handle_destroy_base(effect, context):
     """Destroy the base at the quest location."""
     world = context["world"]
-    quest_pos = context["quest_pos"]
+    quest_pos = tuple(context["quest_pos"])  # Ensure tuple for position comparisons
     base = world.get_base_at(quest_pos)
     if base:
         base.alive = False
@@ -93,7 +93,7 @@ def _handle_add_units(effect, context):
     """Add units to the hero's army at the quest position."""
     world = context["world"]
     player_id = context["player_id"]
-    quest_pos = context["quest_pos"]
+    quest_pos = tuple(context["quest_pos"])  # Ensure tuple for position comparisons
     units_to_add = effect.get("units", [])
 
     # Find player's army at quest position
