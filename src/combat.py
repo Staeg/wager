@@ -45,6 +45,7 @@ class BattleSnapshot:
     rng_state: tuple
     stalemate_count: int
     prev_round_state: Optional[frozenset]
+    pending_effects: list
 
 
 # --- Setup helpers ---
@@ -279,6 +280,7 @@ class Battle:
         self.history = []
         self._prev_round_state = None
         self._stalemate_count = 0
+        self._pending_effects = []  # Queue for deferred effect application
         self._setup_armies(p1_units, p2_units)
         self._new_round()
 
@@ -313,6 +315,7 @@ class Battle:
             rng_state=self.rng.getstate(),
             stalemate_count=self._stalemate_count,
             prev_round_state=self._prev_round_state,
+            pending_effects=list(self._pending_effects),
         )
         self.history.append(snapshot)
 
@@ -345,6 +348,7 @@ class Battle:
         self.turn_order = [
             id_to_unit[uid] for uid in snapshot.turn_ids if uid in id_to_unit
         ]
+        self._pending_effects = list(snapshot.pending_effects)
 
     @staticmethod
     def _aura_range(unit, ab):
@@ -511,7 +515,20 @@ class Battle:
             return pool
         return []
 
-    def _queue_event(self, event_type, unit, target, amount, extra=None):
+    def _queue_effect(self, event_type, unit, target, amount, extra=None):
+        """Queue an effect for deferred application."""
+        effect = {
+            "type": event_type,
+            "target_id": target.id,
+            "source_id": unit.id,
+            "amount": amount,
+        }
+        if extra:
+            effect.update(extra)
+        self._pending_effects.append(effect)
+
+    def _record_for_gui(self, event_type, unit, target, amount, extra=None):
+        """Record an event for GUI animation (separate from effect queue)."""
         if self.last_action is None:
             self.last_action = {}
         event = {
@@ -525,6 +542,11 @@ class Battle:
             event.update(extra)
         key = f"{event_type}_events"
         self.last_action.setdefault(key, []).append(event)
+
+    def _queue_event(self, event_type, unit, target, amount, extra=None):
+        """Queue effect AND record for GUI."""
+        self._queue_effect(event_type, unit, target, amount, extra)
+        self._record_for_gui(event_type, unit, target, amount, extra)
 
     def _exec_ramp(self, unit, ability, context, value):
         unit.damage += value
@@ -1051,38 +1073,27 @@ class Battle:
         if handler:
             handler(self, target, source, event.get("amount", 0))
 
+    def _apply_pending_effects(self):
+        """Apply all pending effects from the queue.
+
+        Effects may queue additional effects (e.g., splash causing death triggers),
+        so we loop until the queue is empty.
+        """
+        while self._pending_effects:
+            effect = self._pending_effects.pop(0)
+            self.apply_effect_event(effect)
+
     def _apply_queued_events(self):
-        if not self.last_action:
-            return
-        while True:
-            for key in _EVENT_KEYS:
-                events = self.last_action.get(key, [])
-                idx = 0
-                while idx < len(events):
-                    self.apply_effect_event(events[idx])
-                    idx += 1
-                if events:
-                    self.last_action[key] = []
-            if not any(self.last_action.get(key) for key in _EVENT_KEYS):
-                break
+        """Apply pending effects (called when apply_events_immediately=True)."""
+        self._apply_pending_effects()
 
     def apply_all_events(self, action):
-        if not action:
-            return
-        while True:
-            applied_any = False
-            for key in _EVENT_KEYS:
-                events = action.get(key, [])
-                idx = 0
-                while idx < len(events):
-                    event = events[idx]
-                    if not event.get("_applied"):
-                        self.apply_effect_event(event)
-                        event["_applied"] = True
-                        applied_any = True
-                    idx += 1
-            if not applied_any:
-                break
+        """Apply all pending effects. Used by GUI when it controls timing.
+
+        The 'action' parameter is kept for API compatibility but effects
+        are now read from the internal queue, not from the action dict.
+        """
+        self._apply_pending_effects()
 
     def _perform_attack(self, unit, enemies_in_range, log_indent=""):
         """Execute an attack against a random enemy in range.
