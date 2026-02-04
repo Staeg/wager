@@ -1,0 +1,116 @@
+﻿Quests
+Each faction starts with 3 quests. Whenever a quest is issued it gets a location on the map which only the faction can see. The location is somewhat random, but always follows some rule defined by the specific quest. To be completed, a quest always requires a specific hero to be brought to the location.
+
+
+After doing so, the player gets a choice between 2 options. Each option has a benefit for the hero that was required for the quest and some other benefit - either a permanent upgrade for the entire faction, a permanent upgrade for some unit of the faction or some instant one-off benefit.
+
+
+Template
+* [Questline] [number]
+   * (Optional) Requires:
+   * Name: 
+   * Location:
+   * Intro text: 
+   * Objective:
+   * Completion text: 
+   * Decision 1: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:
+   * Decision 2: 
+      * Hero outcome:
+      * Other outcome:
+      * Outcome text:
+
+
+
+
+Custodian
+* Curiosity Quest 1
+   * Name: The First Archive
+   * Location: Between the starting bases.
+   * Intro text: Records found in a dusty corner reveal that these fortifications we awoke in are the second, third and fourth greatest citadels our creators entombed us in. What of the mightiest of our kind? We must find out what happened.
+   * Objective: Bring the Accursed and 100 gold.
+   * Completion text: They did not fail to awaken as we thought, though they never stepped outside the boundaries of the Archive. Inside we found signs of recent movement and tunnels leading ever deeper underground and some tomes written in an unknown language.
+   * Decision 1: Delve - We must investigate.
+      * Hero outcome: Accursed turns into Wraith, gains +8 HP and the “Passive Block 2” ability, which reduces the first 2 instances of damage taken on any turn to 0.
+      * Other outcome: gain the “What remains of the mighty” upgrade, which turns the Librarian Sunder 1 ability into Sunder 3 and the Gatekeeper Aura 2 - Undying 2 into Aura 3 - Undying 2 
+      * Outcome text: Bodies found. 
+   * Decision 2: Seal - Collapse the passages. Establish a citadel.
+      * Hero outcome: Accursed turns into Abolisher; gains +4 DMG, +1 Range and the “Onhit Area 2 Silence” ability, which removes all abilities from enemies within 2 hexes after attacking.
+      * Other outcome: Turns the hex of the quest into a Base that gives 20 income.
+      * Outcome text: We’ll never know.
+* Curiosity Quest 2
+   * Requires: Curiosity 1 and Intent 1
+   * Name: Tracing the trail
+   * Location: Random base in the Weaver quadrant
+   * Intro text: Same magic found in the First Archive emanating.
+   * Objective: Bring Scribe/Judge and take control of the base.
+   * Completion text: Ton of tomes here.
+   * Decision 1: Embrace - Read them.
+      * Hero outcome: Scribe/Judge turns into Necromancer; gains +16 HP and the “Harvest 3 - Area 6 Summon Servant” ability, which summons a Servant for every 3 enemies that die within 6 range
+         * The Servant is summoned exhausted at the location of the last enemy that died
+      * Other outcome: Destroy the biggest Weaver army if one exists, then add 12 Servants and 4 Gatekeepers to the Necromancer’s army. 
+      * Outcome text: Forbidden knowledge found. No global consequences… yet.
+   * Decision 2: Spurn - Torch them.
+      * Hero outcome: Scribe/Judge turns into Lich; gains +8 DMG and the “Onkill Target Splash 14” ability, which deals 14 damage to all enemies adjacent to whoever this unit kills
+      * Other outcome: Destroy the base. Gain the “Lightbringers” upgrade, which gives all your units “Periodic Area [Range] Strike 1”, which causes them to deal 1 damage to all enemies within their attack range at the end of their turn.
+      * Outcome text: Gone for good.
+* Intent Quest 1
+   * Name: Seeking scope
+   * Location: close to the center of the map
+   * Intro text: What is our purpose, given that we do not even remember all our creators wanted of us?
+   * Objective: Bring the Neophyte and do not move him for 2 turns.
+   * Completion text: 
+   * Decision 1: Hypothesize - Extrapolate in reasonable directions.
+      * Hero outcome: Neophyte turns into Scribe; gains +1 Range and the “Global Aura - Area Amplify 1” ability, which increases the Area values of all allied units’ abilities by 1
+      * Other outcome: 
+      * Outcome text: Can’t go wrong with more knowledge.
+   * Decision 2: Focus - Do what you’re certain you’re supposed to.
+      * Hero outcome: Neophyte turns into Judge; gains +4 DMG and the “Passive Aura 4 - Execute 2“ ability, which causes this unit to kill any enemy within 4 range who falls to 2 health or lower but doesn’t die
+      * Other outcome: 
+      * Outcome text: Can’t go wrong with more power.
+* Intent Quest 2
+   * Requires: Intent 1 and Doctrine 1
+   * Name: Our role
+   * Location: Random base in the Purifier quadrant
+   * Intro text: We must make a decision. What ought we be? The Purifiers are strong of conviction.
+   * Objective: Bring Revenant/Guardian and take control of the base.
+   * Completion text: Their ways, unfortunately, will not work for us. Instead…
+   * Decision 1: Dominion - we must rule.
+      * Hero outcome: Revenant/Guardian turns into Emperor, gains +8 DMG and the “Onkill Self Ready” ability, which allows it to become readied again after killing a unit.
+      * Other outcome: Gain the “Soul eaters” upgrade, which grants all units the “Harvest 3 - Self Heal 2” ability, which lets them heal 1 health whenever an enemy within 3 hexes dies.
+      * Outcome text: They are gone.
+   * Decision 2: Protectorate - we must bide our time.
+      * Hero outcome: Revenant/Guardian turns into Regent, gains +16 HP and the “Global Aura 3 - Armor 3” ability, which allows it to increase the Armor of all allies in combat by 3
+      * Other outcome: Gain the “Until the end” upgrade, which increases your income by 3 every turn.
+      * Outcome text: They will return.
+* Doctrine Quest 1
+   * Name: Border control
+   * Location: random Custodian base
+   * Intro text: Clear the surroundings.
+   * Objective: Bring Watcher after clearing all gold piles within 5 hexes of that base.
+   * Completion text: Now that the local area is safe, what ought we do next?
+   * Decision 1: Hunger - spew forth.
+      * Hero outcome: Watcher turns into Revenant; gains +4 Damage and the “Wounded Area 1 Strike 4” ability, which lets him deal 4 damage to all enemies within 1 range whenever he takes damage
+      * Other outcome: Gain the “Tide of bones” upgrade, which increases the Speed of all friendly units by 0.4
+      * Outcome text: Wash over them.
+   * Decision 2: Entrench - stay protected.
+      * Hero outcome: Watcher turns into Guardian; gains +8 HP and the “Wounded Area 4 Heal 2” ability, which lets him heal 2 health to all allies within 4 range whenever he takes damage
+      * Other outcome: Gain the “Mobile fortifications" upgrade, which increases the Armor of all friendly units by 1 when defending.
+      * Outcome text: Defense, though not amazing as offense, is still good.
+* Doctrine Quest 2
+   * Requires: Doctrine 1, Curiosity 1
+   * Name: Stratagems
+   * Location: Random Artificer base
+   * Intro text: How ought we approach battles?
+   * Objective: Bring Wraith/Abolisher and take control of the base.
+   * Completion text: These metal contraptions seem specialized.
+   * Decision 1: 
+      * Hero outcome: Wraith/Abolisher turns into Nightmare, gains +8 Damage and “Turnstart Shadowstep”, which lets it move to a hex adjacent to the furthest enemy unit instead of moving normally every turn.
+      * Other outcome: Your Pages gain the “Onhit Freeze 1/1” ability, which exhausts a random ready enemy within attack range after attacking and their Speed increases by 0.4
+      * Outcome text: Take after their designs of gunpowder. Do not give our foes a chance to respond.
+   * Decision 2: 
+      * Hero outcome: Wraith/Abolisher turns into Reaper, gains +16 HP and “Turnend Global Strike 1”, which lets it deal 1 damage to all enemies at the end of every turn.
+      * Other outcome: Gain the “Eternal servitude” upgrade, which makes it so that winning a combat brings all your units that died in the combat back to life on the overworld.
+      * Outcome text: Take after their designs of metal. Outlast our foes.

@@ -10,14 +10,14 @@ Weaver
 * T1:
    * Skirmish tactics: Apprentices gain the “Onhit Retreat 1” ability, which lets them move backwards after successfully attacking
 * T2:
-   * Arcane reach: Conduit “Passive Aura 1 - Amplify 1” ability is replaced by “Passive Aura 2 - Amplify 1”, which passively increases the values of ally abilities by 1 for all allies within 2 hexes
+   * Arcane reach: Conduit “Passive Aura 1 Amplify 1” ability is replaced by “Passive Aura 2 Amplify 1”, which passively increases the values of ally abilities by 1 for all allies within 2 hexes
 * T3:
    * Farcasting: All units gain +1 range
 Artificer
 * T1:
    * Corrosion: Tincans gain the “Onhit Target Sunder 1” ability, which lets them reduce the Armor of a random enemy in range by 1 at the end of turn
 * T2:
-   * Armor kits: Kitboys gain the ability “Passive Aura 1 - Armor 1”, which passively increases the armor for all allies within 1 hex by 1
+   * Armor kits: Kitboys gain the ability “Passive Aura 1 Armor 1”, which passively increases the armor for all allies within 1 hex by 1
 * T3:
    * Carpet bombing: Random Strike abilities become Charge 2 Area Strike abilities, which hit all enemies within range instead of randomly, but occur half as often
 Purifier
@@ -26,4 +26,4 @@ Purifier
 * T2:
    * Salvation: Random Heal abilities become Area Heal abilities, which target all allies within range instead of randomly
 * T3:
-   * Bladestorm: “Charge 3 - Summon 2 Blades” abilities become “Summon 2 Blades” abilities, which causes them to trigger every turn instead of every 3 turns
+   * Bladestorm: “Charge 3 Turnstart Summon 2 Blades” abilities become “Turnstart Summon 2 Blades” abilities, which causes them to trigger every turn instead of every 3 turns
