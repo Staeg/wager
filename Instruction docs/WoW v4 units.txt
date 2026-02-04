@@ -24,7 +24,7 @@ Custodian
 Weaver
 * Apprentice: 8/1/2/5
    * Onhit Push 1: moves the attack target back 1 hex horizontally if possible after attacking
-* Conduit: 1/2/2/10
+* Conduit: 11/2/2/10
    * Onhit Freeze 1/R: exhausts 1 random ready enemy within attack range after attacking
 * Seeker: 3/1/4/10
    * Onhit Self Ramp 1: increases attack damage by 1 after successful attacks

@@ -736,6 +736,80 @@ class TestFreeze:
         assert frozen, "Freeze should trigger"
 
 
+class TestDeepFreeze:
+    def test_deep_freeze_deals_damage_on_freeze(self):
+        """Deep Freeze combat rule should deal damage when freeze is applied."""
+        p1 = [{"name": "Target", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Freezer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 2,
+                "count": 1,
+                "abilities": [ability("onhit", "freeze", target="random", value=1)],
+            }
+        ]
+        # P2 has deep_freeze combat rule that deals 5 damage
+        b = Battle(
+            p1_units=p1,
+            p2_units=p2,
+            rng_seed=42,
+            p2_combat_rules={"deep_freeze": 5},
+        )
+        target = [u for u in b.units if u.player == 1][0]
+        initial_hp = target.hp
+
+        # Run until freeze triggers
+        freeze_triggered = False
+        for _ in range(50):
+            if not b.step():
+                break
+            b.apply_all_events(b.last_action)
+            if any("frozen" in line for line in b.log[-5:]):
+                freeze_triggered = True
+                break
+
+        assert freeze_triggered, "Freeze should trigger"
+        # Target should have taken attack damage (1) + deep freeze damage (5) = 6
+        # But freeze happens after attack, so check for at least 5 extra damage
+        damage_taken = initial_hp - target.hp
+        assert damage_taken >= 6, f"Expected at least 6 damage (1 attack + 5 deep freeze), got {damage_taken}"
+
+    def test_no_deep_freeze_without_combat_rule(self):
+        """Without deep_freeze rule, freeze should not deal extra damage."""
+        p1 = [{"name": "Target", "max_hp": 100, "damage": 0, "range": 1, "count": 1}]
+        p2 = [
+            {
+                "name": "Freezer",
+                "max_hp": 100,
+                "damage": 1,
+                "range": 2,
+                "count": 1,
+                "abilities": [ability("onhit", "freeze", target="random", value=1)],
+            }
+        ]
+        # No combat rules
+        b = Battle(p1_units=p1, p2_units=p2, rng_seed=42)
+        target = [u for u in b.units if u.player == 1][0]
+        initial_hp = target.hp
+
+        # Run until freeze triggers
+        freeze_triggered = False
+        for _ in range(50):
+            if not b.step():
+                break
+            b.apply_all_events(b.last_action)
+            if any("frozen" in line for line in b.log[-5:]):
+                freeze_triggered = True
+                break
+
+        assert freeze_triggered, "Freeze should trigger"
+        # Target should only have taken attack damage (1), no deep freeze
+        damage_taken = initial_hp - target.hp
+        assert damage_taken == 1, f"Expected exactly 1 damage (attack only), got {damage_taken}"
+
+
 class TestBlock:
     def test_block_prevents_damage(self):
         """Block should prevent the first N damage instances per round."""

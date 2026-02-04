@@ -56,6 +56,7 @@ from .protocol import (
 from .upgrades import (
     get_upgrades_for_faction,
     get_upgrade_by_id,
+    get_combat_rules_from_upgrades,
     upgrade_effect_keywords,
     upgrade_effect_summaries,
 )
@@ -669,10 +670,21 @@ class OverworldGUI:
             upgrade_id = self._auto_pick_upgrade(faction)
             if upgrade_id:
                 self.player_upgrades[1] = [upgrade_id]
+                # Apply any combat rules from the upgrade
+                combat_rules = get_combat_rules_from_upgrades([upgrade_id])
+                if combat_rules:
+                    rules = self.player_combat_rules.setdefault(1, {})
+                    rules.update(combat_rules)
             return
 
         def on_select(upgrade_id, dialog):
             self.player_upgrades[1] = [upgrade_id]
+            # Apply any combat rules from the upgrade
+            if upgrade_id:
+                combat_rules = get_combat_rules_from_upgrades([upgrade_id])
+                if combat_rules:
+                    rules = self.player_combat_rules.setdefault(1, {})
+                    rules.update(combat_rules)
             if dialog:
                 dialog.destroy()
             if upgrade_id:
@@ -2332,7 +2344,13 @@ class OverworldGUI:
         p2_units = self._make_battle_units(ow_p2, armor_bonus=defender_armor_bonus)
         rng_seed = random.randint(0, 2**31 - 1)
 
-        battle = Battle(p1_units=p1_units, p2_units=p2_units, rng_seed=rng_seed)
+        battle = Battle(
+            p1_units=p1_units,
+            p2_units=p2_units,
+            rng_seed=rng_seed,
+            p1_combat_rules=attacker_rules,
+            p2_combat_rules=defender_rules,
+        )
 
         # Hide overworld UI
         if self.tooltip:
@@ -2816,6 +2834,8 @@ class OverworldGUI:
             p1_units=msg["p1_units"],
             p2_units=msg["p2_units"],
             rng_seed=msg["rng_seed"],
+            p1_combat_rules=msg.get("p1_combat_rules", {}),
+            p2_combat_rules=msg.get("p2_combat_rules", {}),
         )
 
         CombatGUI(

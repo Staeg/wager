@@ -25,6 +25,7 @@ from .heroes import get_heroes_for_faction
 from .upgrades import (
     get_upgrades_for_faction,
     get_upgrade_by_id,
+    get_combat_rules_from_upgrades,
 )
 from .protocol import (
     serialize_armies,
@@ -300,6 +301,8 @@ class GameServer:
             rng_seed=rng_seed,
             apply_events_immediately=False,
             record_history=False,
+            p1_combat_rules=attacker_rules,
+            p2_combat_rules=defender_rules,
         )
         while battle.step():
             battle.apply_all_events(battle.last_action)
@@ -697,6 +700,11 @@ class GameServer:
             )
             return
         self.player_upgrades[player_id] = [upgrade_id]
+        # Apply any combat rules from the upgrade
+        combat_rules = get_combat_rules_from_upgrades([upgrade_id])
+        if combat_rules:
+            rules = self.player_combat_rules.setdefault(player_id, {})
+            rules.update(combat_rules)
         self._upgrade_selection_idx += 1
         if self._upgrade_selection_idx >= len(self._upgrade_selection_order):
             self._upgrade_selection_order = []
@@ -886,7 +894,13 @@ class GameServer:
                 continue
             upgrades = get_upgrades_for_faction(faction)
             if upgrades:
-                self.player_upgrades[pid] = [random.choice(upgrades)["id"]]
+                upgrade_id = random.choice(upgrades)["id"]
+                self.player_upgrades[pid] = [upgrade_id]
+                # Apply any combat rules from the upgrade
+                combat_rules = get_combat_rules_from_upgrades([upgrade_id])
+                if combat_rules:
+                    rules = self.player_combat_rules.setdefault(pid, {})
+                    rules.update(combat_rules)
 
     def _auto_build_ai(self, player_id):
         faction = self.player_factions.get(player_id)

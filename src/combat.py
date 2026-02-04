@@ -253,12 +253,15 @@ class Battle:
         rng_seed=None,
         apply_events_immediately=True,
         record_history=True,
+        p1_combat_rules=None,
+        p2_combat_rules=None,
     ):
         """Initialize battle.
 
         p1_units/p2_units: optional list of unit specs (tuples or dicts).
         If None, uses default hardcoded armies.
         rng_seed: optional int seed for deterministic battles.
+        p1_combat_rules/p2_combat_rules: optional dicts of combat rules for each player.
         """
         if rng_seed is None:
             rng_seed = random.SystemRandom().randint(0, 2**31 - 1)
@@ -270,6 +273,8 @@ class Battle:
         self._unit_id_counter = 0
         self.apply_events_immediately = apply_events_immediately
         self._record_history = record_history
+        self.p1_combat_rules = p1_combat_rules or {}
+        self.p2_combat_rules = p2_combat_rules or {}
         self.ROWS = BattleSetup.compute_rows(p1_units, p2_units)
         self.units = []
         self.turn_order = []
@@ -932,6 +937,13 @@ class Battle:
             return
         count = min(freeze_count, len(candidates))
         chosen = self.rng.sample(candidates, count)
+
+        # Check for deep freeze upgrade
+        combat_rules = (
+            self.p1_combat_rules if unit.player == 1 else self.p2_combat_rules
+        )
+        deep_freeze_damage = combat_rules.get("deep_freeze", 0)
+
         for enemy in chosen:
             enemy._frozen_turns = 1
             self.log.append(f"  {enemy} is frozen")
@@ -940,6 +952,12 @@ class Battle:
             self.last_action.setdefault("freeze_events", []).append(
                 {"pos": enemy.pos, "source_pos": unit.pos}
             )
+            # Apply deep freeze damage if upgrade is active
+            if deep_freeze_damage > 0:
+                self._queue_event(
+                    EVENT_STRIKE, unit, enemy, deep_freeze_damage,
+                    {"source_pos": unit.pos}
+                )
 
     def _apply_summon(self, unit, count, ability):
         """Summon units adjacent to the summoner or another target."""

@@ -65,6 +65,15 @@ UPGRADE_DEFS = {
             ],
         },
         {
+            "id": "weaver_deep_freeze",
+            "name": "Deep Freeze",
+            "tier": 2,
+            "description": "Whenever an enemy is frozen, deal 5 damage to them.",
+            "effects": [
+                {"type": "combat_rule", "rule": "deep_freeze", "value": 5},
+            ],
+        },
+        {
             "id": "weaver_farcasting",
             "name": "Farcasting",
             "tier": 3,
@@ -236,6 +245,22 @@ def apply_upgrades_to_unit_stats(base_stats, upgrade_ids, faction_units):
     for upgrade_id in upgrade_ids or []:
         _apply_upgrade_effects(stats, get_upgrade_by_id(upgrade_id), faction_units)
     return stats
+
+
+def get_combat_rules_from_upgrades(upgrade_ids):
+    """Extract combat rules from upgrade effects.
+
+    Returns a dict of rule_name -> value for any combat_rule effects.
+    """
+    rules = {}
+    for upgrade_id in upgrade_ids or []:
+        upgrade_def = get_upgrade_by_id(upgrade_id)
+        if not upgrade_def:
+            continue
+        for effect in upgrade_def.get("effects", []):
+            if effect.get("type") == "combat_rule":
+                rules[effect["rule"]] = effect["value"]
+    return rules
 
 
 def _find_matching_ability(base_stats, faction_units, match):
