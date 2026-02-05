@@ -230,6 +230,24 @@ def _apply_upgrade_effects(stats, upgrade_def, faction_units):
             else:
                 stat = effect["stat"]
                 stats[unit][stat] = stats[unit].get(stat, 0) + effect.get("delta", 0)
+        elif etype == "multiply_stat":
+            unit = effect["unit"]
+            stat = effect["stat"]
+            factor = effect.get("factor", 1)
+            if unit == "__all__":
+                for uname in faction_units:
+                    stats[uname][stat] = int(stats[uname].get(stat, 0) * factor)
+            else:
+                stats[unit][stat] = int(stats[unit].get(stat, 0) * factor)
+        elif etype == "set_stat":
+            unit = effect["unit"]
+            stat = effect["stat"]
+            value = effect["value"]
+            if unit == "__all__":
+                for uname in faction_units:
+                    stats[uname][stat] = value
+            else:
+                stats[unit][stat] = value
 
 
 def apply_upgrade_to_unit_stats(base_stats, upgrade_def, faction_units):
@@ -322,6 +340,16 @@ def upgrade_effect_summaries(upgrade_def, base_stats=None, faction_units=None):
             sign = "+" if delta >= 0 else ""
             if stat:
                 summaries.append(f"{unit_prefix}gain {sign}{delta} {stat}.")
+        elif etype == "multiply_stat":
+            stat = effect.get("stat")
+            factor = effect.get("factor", 1)
+            if stat:
+                summaries.append(f"{unit_prefix}{stat} x{factor}.")
+        elif etype == "set_stat":
+            stat = effect.get("stat")
+            value = effect.get("value")
+            if stat:
+                summaries.append(f"{unit_prefix}{stat} set to {value}.")
         elif etype == "modify_abilities":
             match = dict(effect.get("match", {}))
             sample = _find_matching_ability(base_stats, faction_units, match)

@@ -76,6 +76,23 @@ QUEST_UPGRADE_DEFS = {
             {"type": "add_stat", "unit": "Page", "stat": "speed", "delta": 0.4},
         ],
     },
+    "flesh_shields": {
+        "id": "flesh_shields",
+        "name": "Flesh shields",
+        "description": "Pages' HP is doubled.",
+        "effects": [
+            {"type": "multiply_stat", "unit": "Page", "stat": "max_hp", "factor": 2},
+        ],
+    },
+    "without_number": {
+        "id": "without_number",
+        "name": "Without number",
+        "description": "Pages' cost and HP are reduced to 1.",
+        "effects": [
+            {"type": "set_stat", "unit": "Page", "stat": "max_hp", "value": 1},
+            {"type": "set_stat", "unit": "Page", "stat": "value", "value": 1},
+        ],
+    },
 }
 
 CUSTODIAN_QUESTS = {
@@ -220,9 +237,14 @@ CUSTODIAN_QUESTS = {
                     '"Endturn Global Heal 1" ability, which heals all allied '
                     "units by 1 at the end of its turn."
                 ),
-                "other_outcome": "",
+                "other_outcome": (
+                    'Gain the "Flesh shields" upgrade, which doubles the HP '
+                    "of Pages."
+                ),
                 "outcome_text": "Can't go wrong with more knowledge.",
-                "effects": [],
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "flesh_shields"},
+                ],
             },
             {
                 "label": "Focus",
@@ -234,9 +256,14 @@ CUSTODIAN_QUESTS = {
                     "unit to kill any enemy within 4 range who falls to 2 "
                     "health or lower but doesn't die."
                 ),
-                "other_outcome": "",
+                "other_outcome": (
+                    'Gain the "Without number" upgrade, which reduces the '
+                    "cost and HP of Pages to 1."
+                ),
                 "outcome_text": "Can't go wrong with more power.",
-                "effects": [],
+                "effects": [
+                    {"type": "grant_upgrade", "upgrade_id": "without_number"},
+                ],
             },
         ],
     },

@@ -64,11 +64,11 @@ Custodian
    * Completion text: 
    * Decision 1: Hypothesize - Extrapolate in reasonable directions.
       * Hero outcome: Neophyte turns into Scribe; gains +1 Range and the Endturn Global Heal 1” ability, which heals all allied units by 1 at the end of its turn
-      * Other outcome: 
+      * Other outcome: Gain the "Flesh shields" upgrade, which doubles the HP of Pages
       * Outcome text: Can’t go wrong with more knowledge.
    * Decision 2: Focus - Do what you’re certain you’re supposed to.
       * Hero outcome: Neophyte turns into Judge; gains +4 DMG and the “Passive Aura 4 - Execute 2“ ability, which causes this unit to kill any enemy within 4 range who falls to 2 health or lower but doesn’t die
-      * Other outcome: 
+      * Other outcome: Gain the "Without number" upgrade, which reduces the cost and HP of Pages to 1
       * Outcome text: Can’t go wrong with more power.
 * Intent Quest 2
    * Requires: Intent 1 and Doctrine 1

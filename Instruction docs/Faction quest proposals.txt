@@ -1,0 +1,532 @@
+Faction Quest Proposals - Weavers, Artificers, Purifiers
+=========================================================
+
+Each faction has 3 questlines (A, B, C) with 1 tier-1 and 1 tier-2 quest each (6 quests total).
+Tier-2 quests require two tier-1 quests and use an evolved hero from a different questline.
+Cross-references: A2 uses B's evolved hero, B2 uses C's evolved hero, C2 uses A's evolved hero.
+Tier-2 quests target an enemy faction's base.
+
+Each decision has:
+  - Hero outcome: evolution with stat changes + new ability
+  - Other outcome: faction upgrade, unit buff, income bonus, or one-time effect
+
+Reference format: UnitName (HP/DMG/Range, abilities)
+
+
+=======================================================================
+WEAVERS - Magic and artistry (fragile, long-ranged)
+=======================================================================
+
+Units:
+  Apprentice (8/1/2, Onhit Push 1)
+  Conduit (11/2/2, Onhit Freeze 1)
+  Seeker (3/1/4, Onhit Self Ramp 1)
+  Savant (6/4/4, Onhit Target Splash 1)
+
+Heroes:
+  Enchantress (12/3/5, Onhit Random Freeze 3)
+  Prodigy (8/8/4, Onhit Target Splash 3)
+  Scholar (16/3/5, Endturn Area Strike 1)
+
+
+-----------------------------------------------------------------------
+Questline A: "Weave" (Enchantress)
+-----------------------------------------------------------------------
+
+* Weave 1 (Tier 1) - Enchantress
+  Decision 1:
+    Hero outcome: Enchantress -> Frostweaver; gains +8 HP and "Endturn
+      Random Freeze 1", which freezes an additional random enemy within
+      attack range at end of turn. (Two freeze sources: 3 on hit + 1 on
+      end of turn.)
+    Other outcome: Gain the "Permafrost" upgrade, which gives Conduits
+      +4 HP (11 -> 15).
+
+  Decision 2:
+    Hero outcome: Enchantress -> Tempest; gains +4 DMG, +1 Range, and
+      "Onhit Target Splash 4", which deals 4 damage to all enemies
+      adjacent to the target after attacking. (Now 7 damage at range 6
+      with splash and freeze on hit.)
+    Other outcome: Gain the "Gale Force" upgrade, which increases the
+      Speed of all units by 0.4.
+
+* Weave 2 (Tier 2) - Requires Weave 1 + Inspiration 1
+  Location: Enemy Artificer base
+  Required hero: Archmage or Elementalist (evolved Prodigy)
+
+  Decision 1:
+    Hero outcome: Archmage/Elementalist -> Sage; gains +16 HP and
+      "Endturn Global Fortify 1", which increases the max HP of all
+      allied units by 1 at the end of every turn. (Army becomes
+      progressively harder to kill.)
+    Other outcome: Gain the "Mana Conduits" upgrade, which increases
+      Conduit Freeze from 1 to 2 (freezes 2 enemies on hit instead
+      of 1).
+
+  Decision 2:
+    Hero outcome: Archmage/Elementalist -> Grand Magus; gains +8 DMG
+      and "Onkill Area 4 Strike 8", which deals 8 damage to all enemies
+      within 4 hexes whenever this unit kills. (Chain reaction potential
+      with high splash.)
+    Other outcome: Destroy the base. Gain the "Arcane Supremacy"
+      upgrade, which gives all units +1 damage.
+
+
+-----------------------------------------------------------------------
+Questline B: "Inspiration" (Prodigy)
+-----------------------------------------------------------------------
+
+* Inspiration 1 (Tier 1) - Prodigy
+  Decision 1:
+    Hero outcome: Prodigy -> Archmage; gains +8 HP and "Harvest 3 -
+      Area 4 Fortify 1", which increases the max HP of all allies
+      within 4 by 1 for every 3 enemies that die within 3 hexes.
+      (Weaver army grows tankier as enemies fall.)
+    Other outcome: Gain the "Arcane Shields" upgrade, which increases
+      the HP of all units by 2.
+
+  Decision 2:
+    Hero outcome: Prodigy -> Elementalist; gains +4 DMG and "Onhit
+      Area 3 Sunder 1", which reduces the armor of all enemies within 3
+      hexes of the target after attacking. (Strips enemy armor for the
+      entire army to exploit.)
+    Other outcome: Gain the "Volatile Runes" upgrade, which increases
+      Seeker damage by 1 (1 -> 2). (Seekers with Ramp start from a
+      higher damage baseline.)
+
+* Inspiration 2 (Tier 2) - Requires Inspiration 1 + Revelation 1
+  Location: Enemy Purifier base
+  Required hero: Oracle or Warlock (evolved Scholar)
+
+  Decision 1:
+    Hero outcome: Oracle/Warlock -> Prophet; gains +16 HP and "Passive
+      Global Boost 2", which increases the damage of all allied units
+      in combat by 2. (Ultimate force multiplier for the whole army.)
+    Other outcome: Gain the "Weave of Fate" upgrade, which increases
+      income by 3 per turn.
+
+  Decision 2:
+    Hero outcome: Oracle/Warlock -> Archon; gains +8 DMG and "Turnstart
+      Shadowstep", which teleports this unit adjacent to the furthest
+      enemy at the start of each turn. (Backline assassin that bypasses
+      frontlines.)
+    Other outcome: Destroy the largest Purifier army, then add 8 Savants
+      and 4 Conduits to the Archon's army.
+
+
+-----------------------------------------------------------------------
+Questline C: "Revelation" (Scholar)
+-----------------------------------------------------------------------
+
+* Revelation 1 (Tier 1) - Scholar
+  Decision 1:
+    Hero outcome: Scholar -> Oracle; gains +8 HP and "Passive Aura 4
+      Undying 1", which prevents allied units within 4 hexes from dying
+      once per combat. (Keystone protector for the fragile Weaver army.)
+    Other outcome: Gain the "Foresight" upgrade, which increases
+      Apprentice Push from 1 to 2. (Better kiting and displacement
+      control.)
+
+  Decision 2:
+    Hero outcome: Scholar -> Warlock; gains +4 DMG and "Endturn Area
+      [Range] Sunder 1", which reduces the armor of all enemies within
+      attack range by 1 at end of turn. (Progressive armor shred every
+      turn on top of existing area strike.)
+    Other outcome: Gain the "Dark Pact" upgrade, which increases Seeker
+      Ramp from 1 to 2. (Seekers scale damage twice as fast per hit.)
+
+* Revelation 2 (Tier 2) - Requires Revelation 1 + Weave 1
+  Location: Enemy Custodian base
+  Required hero: Frostweaver or Tempest (evolved Enchantress)
+
+  Decision 1:
+    Hero outcome: Frostweaver/Tempest -> Illusionist; gains +16 HP and
+      "Wounded Area 4 Freeze 2", which freezes 2 random enemies within
+      4 hexes whenever this unit takes damage. (Punishes attackers with
+      crowd control.)
+    Other outcome: Gain the "Crystalline Armor" upgrade, which gives
+      all defending units +2 armor.
+
+  Decision 2:
+    Hero outcome: Frostweaver/Tempest -> Soulreaper; gains +8 DMG and
+      "Harvest 2 - Self Ramp 2", which increases this unit's damage by
+      2 for every 2 enemies that die within 2 hexes. (Snowballing
+      assassin that grows with each kill nearby.)
+    Other outcome: Destroy the base. Gain the "Soul Harvest" upgrade,
+      which gives all units "Harvest 3 - Self Heal 1" (heal 1 when an
+      enemy within 3 dies).
+
+
+=======================================================================
+ARTIFICERS - Gunpowder and steel (durable frontline, slow backline)
+=======================================================================
+
+Units:
+  Tincan (11/2/1, none)
+  Golem (16/2/1, Passive Armor 2)
+  Kitboy (6/2/2, Endturn Area 1 Heal 1)
+  Artillery (8/4/4, Endturn Random Strike 2 Range 6)
+
+Heroes:
+  Outcast (16/6/2, Turnstart Shadowstep Charge 4)
+  Mercenary (32/3/2, 2x Endturn Random Strike 3)
+  Tactician (10/4/4, Passive Global Boost 1)
+
+
+-----------------------------------------------------------------------
+Questline A: "Venture" (Outcast)
+-----------------------------------------------------------------------
+
+* Venture 1 (Tier 1) - Outcast
+  Decision 1:
+    Hero outcome: Outcast -> Siegebreaker; gains +8 HP and "Wounded Self
+      Ramp 2", which increases this unit's damage by 2 whenever it takes
+      damage. (Shadowsteps in, gets hit, hits back harder each time.
+      With 24 HP, can absorb several hits while growing.)
+    Other outcome: Gain the "Reinforced Plating" upgrade, which gives
+      Tincans "Passive Armor 1". (Tincans become real tanks with an
+      armor stat.)
+
+  Decision 2:
+    Hero outcome: Outcast -> Saboteur; gains +4 DMG and "Onhit Area 2
+      Silence", which removes all abilities from enemies within 2 hexes
+      after attacking. (Shadowsteps in and disables the most dangerous
+      enemy cluster.)
+    Other outcome: Gain the "Shrapnel Rounds" upgrade, which gives
+      Artillery +2 damage (4 -> 6).
+
+* Venture 2 (Tier 2) - Requires Venture 1 + Ironwork 1
+  Location: Enemy Weaver base
+  Required hero: Ironclad or Warlord (evolved Mercenary)
+
+  Decision 1:
+    Hero outcome: Ironclad/Warlord -> Juggernaut; gains +16 HP and
+      "Passive Block 3", which reduces the first 3 instances of damage
+      taken each turn to 0. (Nearly unkillable wall. With 48-56 HP plus
+      Block 3, requires concentrated fire to bring down.)
+    Other outcome: Gain the "Adamantium Plating" upgrade, which
+      increases Golem Armor from 2 to 4.
+
+  Decision 2:
+    Hero outcome: Ironclad/Warlord -> Demolisher; gains +8 DMG and
+      "Onkill Area 2 Strike 6", which deals 6 damage to all enemies
+      within 2 hexes whenever this unit kills. (High-damage brawler
+      with explosive chain potential.)
+    Other outcome: Destroy the base. Gain the "Total War" upgrade,
+      which gives all units +2 damage.
+
+
+-----------------------------------------------------------------------
+Questline B: "Ironwork" (Mercenary)
+-----------------------------------------------------------------------
+
+* Ironwork 1 (Tier 1) - Mercenary
+  Decision 1:
+    Hero outcome: Mercenary -> Ironclad; gains +8 HP and "Passive Armor
+      2". (40 HP + Armor 2 makes this the hardest unit in the game to
+      kill. A true immovable object at range 2.)
+    Other outcome: Gain the "Scrap Recycling" upgrade, which increases
+      Kitboy Heal from 1 to 2. (Doubled healing output from support
+      units.)
+
+  Decision 2:
+    Hero outcome: Mercenary -> Warlord; gains +4 DMG and "Endturn Area
+      2 Strike 3", which deals 3 damage to all enemies within 2 hexes
+      at end of turn. (7 damage attack + 2x random strike 3 + area
+      strike 3. Punishing AoE brawler.)
+    Other outcome: Gain the "Iron Discipline" upgrade, which increases
+      the Speed of all units by 0.4. (Addresses Artificers' mobility
+      weakness.)
+
+* Ironwork 2 (Tier 2) - Requires Ironwork 1 + Foundation 1
+  Location: Enemy Purifier base
+  Required hero: Commander or Cannoneer (evolved Tactician)
+
+  Decision 1:
+    Hero outcome: Commander/Cannoneer -> Marshal; gains +16 HP and
+      "Wounded Global Heal 2", which heals all allied units by 2
+      whenever this unit takes damage. (Tank-support hybrid: absorbs
+      hits and heals the army.)
+    Other outcome: Gain the "Supply Lines" upgrade, which increases
+      income by 3 per turn.
+
+  Decision 2:
+    Hero outcome: Commander/Cannoneer -> Warmaster; gains +8 DMG and
+      "Passive Global Boost 2", which increases the damage of all allied
+      units in combat by 2. (Combined with base Boost 1, that's +3
+      damage to every allied unit. Devastating force multiplier.)
+    Other outcome: Destroy the largest Purifier army, then add 6 Golems
+      and 6 Artillery to the Warmaster's army.
+
+
+-----------------------------------------------------------------------
+Questline C: "Foundation" (Tactician)
+-----------------------------------------------------------------------
+
+* Foundation 1 (Tier 1) - Tactician
+  Decision 1:
+    Hero outcome: Tactician -> Commander; gains +8 HP and "Passive
+      Global Armor 1", which increases the armor of all allied units
+      in combat by 1. (Combined with base Boost 1: all allies get
+      +1 damage AND +1 armor. Total support commander.)
+    Other outcome: Gain the "Fortified Positions" upgrade, which gives
+      defending units +1 armor.
+
+  Decision 2:
+    Hero outcome: Tactician -> Cannoneer; gains +4 DMG and "Endturn
+      Random Strike 4 Range 6", which deals 4 damage to a random enemy
+      within 6 hexes at end of turn. (Boost 1 still helps allies while
+      Cannoneer adds long-range bombardment.)
+    Other outcome: Gain the "Surplus Munitions" upgrade, which gives
+      Artillery a second "Endturn Random Strike 2 Range 6" ability.
+      (Artillery fires twice per turn.)
+
+* Foundation 2 (Tier 2) - Requires Foundation 1 + Venture 1
+  Location: Enemy Custodian base
+  Required hero: Siegebreaker or Saboteur (evolved Outcast)
+
+  Decision 1:
+    Hero outcome: Siegebreaker/Saboteur -> Titan; gains +16 HP and
+      "Passive Aura 3 Undying 2", which prevents allied units within
+      3 hexes from dying up to 2 times per combat. (Makes the already
+      durable Artificer frontline nearly impossible to break through.)
+    Other outcome: Gain the "Automated Repairs" upgrade, which makes
+      winning a combat bring all your units that died in the combat
+      back to life on the overworld.
+
+  Decision 2:
+    Hero outcome: Siegebreaker/Saboteur -> Executioner; gains +8 DMG
+      and "Onkill Self Ready", which allows this unit to act again
+      after killing an enemy. (With Shadowstep, teleports in and chains
+      kills through the backline.)
+    Other outcome: Destroy the base. Gain the "Scorched Earth" upgrade,
+      which gives all units "Passive Armor 1".
+
+
+=======================================================================
+PURIFIERS - Fire and blood (healing, benefits from pain and death)
+=======================================================================
+
+Units:
+  Penitent (5/1/1, Wounded Self Ramp 1)
+  Priest (3/1/3, Endturn Random Heal 3)
+  Avenger (20/3/1, Lament Self Ramp 1 Range 1)
+  Herald (6/1/4, Endturn Summon 2 Charge 3)
+
+Heroes:
+  Maiden (8/3/5, Lament Area Strike 1 Charge 2)
+  Aspirant (32/4/1, Onhit Target Splash 4, Passive Armor 1)
+  Apostle (12/2/3, Passive Lament Aura 1 Range 1 Aura R)
+
+
+-----------------------------------------------------------------------
+Questline A: "Suffering" (Maiden)
+-----------------------------------------------------------------------
+
+* Suffering 1 (Tier 1) - Maiden
+  Decision 1:
+    Hero outcome: Maiden -> Martyr; gains +8 HP and "Lament Area
+      [Range] Heal 2", which heals all allies within attack range by 2
+      whenever an allied unit dies. (Heals the army through sacrifice.
+      Combined with base Lament Strike, she both heals and damages on
+      ally death.)
+    Other outcome: Gain the "Blood Rites" upgrade, which increases
+      Penitent Wounded Ramp from 1 to 2. (Penitents grow damage twice
+      as fast when hit.)
+
+  Decision 2:
+    Hero outcome: Maiden -> Inquisitor; gains +4 DMG and "Onkill Area 3
+      Heal 3", which heals all allies within 3 hexes by 3 whenever this
+      unit kills an enemy. (Offensive healer - every kill sustains the
+      army. 7 damage at range 5 makes kills achievable.)
+    Other outcome: Gain the "Fanaticism" upgrade, which gives Avengers
+      +4 damage (3 -> 7). (Avengers become serious melee threats that
+      grow even further with Lament Ramp.)
+
+* Suffering 2 (Tier 2) - Requires Suffering 1 + Devotion 1
+  Location: Enemy Artificer base
+  Required hero: Crusader or Zealot (evolved Aspirant)
+
+  Decision 1:
+    Hero outcome: Crusader/Zealot -> Paladin; gains +16 HP and "Passive
+      Aura 4 Undying 2", which prevents allied units within 4 hexes from
+      dying up to 2 times per combat. (Keeps the self-sacrificing army
+      alive long enough for Lament and Wounded triggers to stack.)
+    Other outcome: Gain the "Eternal Flame" upgrade, which gives all
+      units "Wounded Self Heal 1" (heal 1 whenever taking damage). (The
+      entire army self-sustains through pain.)
+
+  Decision 2:
+    Hero outcome: Crusader/Zealot -> Destroyer; gains +8 DMG and
+      "Passive Execute 4 Aura 3", which causes this unit to kill any
+      enemy within 3 hexes that falls to 4 HP or below. (Cleanup
+      specialist that guarantees kills, which feed Lament triggers.)
+    Other outcome: Destroy the base. Gain the "Wrath of the Faithful"
+      upgrade, which gives all units +2 damage.
+
+
+-----------------------------------------------------------------------
+Questline B: "Devotion" (Aspirant)
+-----------------------------------------------------------------------
+
+* Devotion 1 (Tier 1) - Aspirant
+  Decision 1:
+    Hero outcome: Aspirant -> Crusader; gains +8 HP and "Wounded Area 1
+      Strike 4", which deals 4 damage to all enemies within 1 hex
+      whenever this unit takes damage. (40 HP melee tank that punishes
+      anyone who hits it. Synergizes with Purifier identity of
+      benefiting from pain.)
+    Other outcome: Gain the "Sacred Shields" upgrade, which gives
+      Avengers "Passive Armor 1". (Avengers survive longer to stack
+      Lament Ramp.)
+
+  Decision 2:
+    Hero outcome: Aspirant -> Zealot; gains +4 DMG and "Onhit Self
+      Heal 4", which heals this unit by 4 whenever it attacks. (8
+      damage + splash 4 + self-healing. A self-sustaining melee
+      juggernaut that's nearly impossible to trade against.)
+    Other outcome: Gain the "Purifying Flames" upgrade, which gives
+      Penitents +3 HP (5 -> 8). (Penitents survive more hits to stack
+      more Wounded Ramp.)
+
+* Devotion 2 (Tier 2) - Requires Devotion 1 + Penance 1
+  Location: Enemy Weaver base
+  Required hero: High Priest or Flagellant (evolved Apostle)
+
+  Decision 1:
+    Hero outcome: High Priest/Flagellant -> Archbishop; gains +16 HP
+      and "Endturn Global Heal 3", which heals all allied units by 3
+      at the end of every turn. (Ultimate sustain engine. The entire
+      army heals 3 per turn regardless of position.)
+    Other outcome: Gain the "Sanctified Ground" upgrade, which
+      increases income by 3 per turn.
+
+  Decision 2:
+    Hero outcome: High Priest/Flagellant -> Prophet of Flame; gains
+      +8 DMG and "Lament Area 4 Strike 4", which deals 4 damage to all
+      enemies within 4 hexes whenever an allied unit dies (no charge).
+      (Every Penitent and Blade death is a 4-damage AoE. With
+      expendable units constantly dying, devastating sustained damage.)
+    Other outcome: Destroy the largest Weaver army, then add 8 Avengers
+      and 4 Heralds to the Prophet of Flame's army.
+
+
+-----------------------------------------------------------------------
+Questline C: "Penance" (Apostle)
+-----------------------------------------------------------------------
+
+* Penance 1 (Tier 1) - Apostle
+  Decision 1:
+    Hero outcome: Apostle -> High Priest; gains +8 HP and "Endturn Area
+      [Range] Heal 2", which heals all allies within attack range by 2
+      at end of turn. (Dedicated area healer that also passively buffs
+      damage through Lament Aura when allies fall.)
+    Other outcome: Gain the "Congregation" upgrade, which gives Priests
+      +4 HP (3 -> 7). (Priests survive long enough to actually use
+      their powerful Heal 3 repeatedly.)
+
+  Decision 2:
+    Hero outcome: Apostle -> Flagellant; gains +4 DMG and "Lament Self
+      Ramp 3 Range 3", which increases this unit's damage by 3 whenever
+      an ally within 3 hexes dies. (Snowballing damage monster fueled
+      by ally deaths. Combined with base Lament Aura, each death both
+      ramps Flagellant and buffs nearby allies.)
+    Other outcome: Gain the "Righteous Fury" upgrade, which gives all
+      units "Wounded Self Ramp 1". (The entire army grows stronger when
+      taking damage, not just Penitents.)
+
+* Penance 2 (Tier 2) - Requires Penance 1 + Suffering 1
+  Location: Enemy Custodian base
+  Required hero: Martyr or Inquisitor (evolved Maiden)
+
+  Decision 1:
+    Hero outcome: Martyr/Inquisitor -> Saint; gains +16 HP and "Lament
+      Area 4 Fortify 2", which increases the max HP of all allies within
+      4 hexes by 2 whenever an allied unit dies. (The army literally
+      grows stronger through sacrifice. Each fallen Penitent or Blade
+      makes survivors permanently tougher.)
+    Other outcome: Gain the "Martyrdom" upgrade, which makes winning a
+      combat bring all your units that died in the combat back to life
+      on the overworld.
+
+  Decision 2:
+    Hero outcome: Martyr/Inquisitor -> Wrath; gains +8 DMG and
+      "Turnstart Shadowstep", which teleports this unit adjacent to the
+      furthest enemy at the start of each turn. (Aggressive assassination
+      from the backline. 11 damage at range 5 diving into the enemy,
+      with Lament abilities triggering as allies die behind her.)
+    Other outcome: Destroy the base. Gain the "Holy Fire" upgrade,
+      which gives all units "Endturn Area [Range] Strike 1". (The
+      entire army deals 1 damage to all enemies within range every
+      turn, creating unavoidable attrition.)
+
+
+=======================================================================
+SUMMARY: Hero Evolution Trees
+=======================================================================
+
+WEAVERS:
+  Enchantress -> Frostweaver (+8 HP, Endturn Freeze 1)
+                               -> Illusionist (+16 HP, Wounded Freeze 2)
+                               -> Soulreaper (+8 DMG, Harvest Ramp 2)
+              -> Tempest (+4 DMG +1 Rng, Onhit Splash 4)
+                               -> Illusionist (+16 HP, Wounded Freeze 2)
+                               -> Soulreaper (+8 DMG, Harvest Ramp 2)
+
+  Prodigy -> Archmage (+8 HP, Harvest Fortify 1)
+                            -> Sage (+16 HP, Endturn Global Fortify 1)
+                            -> Grand Magus (+8 DMG, Onkill Area Strike 8)
+          -> Elementalist (+4 DMG, Onhit Area Sunder 1)
+                            -> Sage (+16 HP, Endturn Global Fortify 1)
+                            -> Grand Magus (+8 DMG, Onkill Area Strike 8)
+
+  Scholar -> Oracle (+8 HP, Passive Undying 1 Aura 4)
+                          -> Prophet (+16 HP, Global Boost 2)
+                          -> Archon (+8 DMG, Shadowstep)
+          -> Warlock (+4 DMG, Endturn Area Sunder 1)
+                          -> Prophet (+16 HP, Global Boost 2)
+                          -> Archon (+8 DMG, Shadowstep)
+
+ARTIFICERS:
+  Outcast -> Siegebreaker (+8 HP, Wounded Ramp 2)
+                                -> Titan (+16 HP, Undying 2 Aura 3)
+                                -> Executioner (+8 DMG, Onkill Ready)
+          -> Saboteur (+4 DMG, Onhit Area Silence)
+                                -> Titan (+16 HP, Undying 2 Aura 3)
+                                -> Executioner (+8 DMG, Onkill Ready)
+
+  Mercenary -> Ironclad (+8 HP, Passive Armor 2)
+                              -> Juggernaut (+16 HP, Block 3)
+                              -> Demolisher (+8 DMG, Onkill Area Strike 6)
+            -> Warlord (+4 DMG, Endturn Area Strike 3)
+                              -> Juggernaut (+16 HP, Block 3)
+                              -> Demolisher (+8 DMG, Onkill Area Strike 6)
+
+  Tactician -> Commander (+8 HP, Global Armor 1)
+                               -> Marshal (+16 HP, Wounded Global Heal 2)
+                               -> Warmaster (+8 DMG, Global Boost 2)
+            -> Cannoneer (+4 DMG, Endturn Random Strike 4)
+                               -> Marshal (+16 HP, Wounded Global Heal 2)
+                               -> Warmaster (+8 DMG, Global Boost 2)
+
+PURIFIERS:
+  Maiden -> Martyr (+8 HP, Lament Area Heal 2)
+                         -> Saint (+16 HP, Lament Fortify 2)
+                         -> Wrath (+8 DMG, Shadowstep)
+         -> Inquisitor (+4 DMG, Onkill Area Heal 3)
+                         -> Saint (+16 HP, Lament Fortify 2)
+                         -> Wrath (+8 DMG, Shadowstep)
+
+  Aspirant -> Crusader (+8 HP, Wounded Area Strike 4)
+                             -> Paladin (+16 HP, Undying 2 Aura 4)
+                             -> Destroyer (+8 DMG, Execute 4 Aura 3)
+           -> Zealot (+4 DMG, Onhit Self Heal 4)
+                             -> Paladin (+16 HP, Undying 2 Aura 4)
+                             -> Destroyer (+8 DMG, Execute 4 Aura 3)
+
+  Apostle -> High Priest (+8 HP, Endturn Area Heal 2)
+                               -> Archbishop (+16 HP, Global Heal 3)
+                               -> Prophet of Flame (+8 DMG, Lament Strike 4)
+          -> Flagellant (+4 DMG, Lament Self Ramp 3)
+                               -> Archbishop (+16 HP, Global Heal 3)
+                               -> Prophet of Flame (+8 DMG, Lament Strike 4)
