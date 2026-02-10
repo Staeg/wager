@@ -1,45 +1,45 @@
-﻿Heroes for each faction. They use the standard HP/Damage/Range/Value notation, but the Value is usually irrelevant.
+﻿Heroes for each faction. They use the standard HP/Damage/Range/Actions/Value notation, but the Value is usually irrelevant.
 Custodian
 * Watcher
-   * 30/8/1/20
+   * 30/8/1/2/20
    * Passive Armor 3: reduces all damage taken by 3
 * Neophyte
-   * 12/6/4/20
+   * 12/6/4/2/20
    * Harvest R Area R Fortify 1: for every enemy within that dies within attack range, give 1 Max and current HP to all allies within attack range
 * Accursed
-   * 16/8/1/20
+   * 16/8/1/2/20
    * Onkill Self Heal 8: after killing an enemy, heal 8 HP
 Weaver
 * Enchantress
-   * 12/3/5/20
+   * 12/3/5/2/20
    * Onhit Freeze 3/R: exhausts 3 random ready enemies within attack range after attacking
 * Prodigy
-   * 8/8/4/20
+   * 8/8/4/2/20
    * Onhit Target Splash 3: deals 3 damage to all enemies adjacent to attack target after attacking
 * Scholar
-   * 16/3/5/20
+   * 16/3/5/2/20
    * Endturn Area R Strike 1: deal 1 damage to all enemies within attack range at end of turn
 Artificer
 * Outcast
-   * 16/6/2/20
+   * 16/6/2/2/20
    * Charge 4 Turnstart Shadowstep: every 4 turns instead of moving normally move to a hex adjacent to the furthest enemy unit
       * In case of ambiguity, furthest is resolved the same way closest is for normal movement
 * Mercenary
-   * 32/3/2/20
-   * Endturn Random Strike 3/R: at the end of turn, deal 3 damage to a random enemy within attack range 
+   * 32/3/2/2/20
+   * Endturn Random Strike 3/R: at the end of turn, deal 3 damage to a random enemy within attack range
    * Endturn Random Strike 3/R: at the end of turn, deal 3 damage to a random enemy within attack range 
       * Having two copies of an ability means that it should trigger twice, one after the other
 * Tactician
-   * 10/4/4/20
+   * 10/4/4/2/20
    * Passive Global Aura - Boost 1: all allied units in combat have 1 more attack damage
 Purifier
 * Maiden
-   * 8/3/5/20
+   * 8/3/5/2/20
    * Charge 2 Lament R Area R Strike 1: for every 2 allies that die within attack range deal 1 damage to all enemies within attack range 
 * Aspirant
-   * 32/4/1/20
+   * 32/4/1/2/20
    * Onhit Target Splash 4: deals 4 damage to all enemies adjacent to attack target after attacking
    * Passive Armor 1: reduces all damage taken by 1
 * Apostle
-   * 12/2/3/20
+   * 12/2/3/2/20
    * Passive Aura R Lament 1 - Self Ramp 1: allies within attack range gain 1 attack damage whenever an ally within 1 range of them dies

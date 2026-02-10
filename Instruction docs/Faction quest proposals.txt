@@ -10,7 +10,7 @@ Each decision has:
   - Hero outcome: evolution with stat changes + new ability
   - Other outcome: faction upgrade, unit buff, income bonus, or one-time effect
 
-Reference format: UnitName (HP/DMG/Range, abilities)
+Reference format: UnitName (HP/DMG/Range/Actions, abilities)
 
 
 =======================================================================
@@ -18,15 +18,15 @@ WEAVERS - Magic and artistry (fragile, long-ranged)
 =======================================================================
 
 Units:
-  Apprentice (8/1/2, Onhit Push 1)
-  Conduit (11/2/2, Onhit Freeze 1)
-  Seeker (3/1/4, Onhit Self Ramp 1)
-  Savant (6/4/4, Onhit Target Splash 1)
+  Apprentice (8/1/2/2, Onhit Push 1)
+  Conduit (11/2/2/2, Onhit Freeze 1)
+  Seeker (3/1/4/2, Onhit Self Ramp 1)
+  Savant (6/4/4/2, Onhit Target Splash 1)
 
 Heroes:
-  Enchantress (12/3/5, Onhit Random Freeze 3)
-  Prodigy (8/8/4, Onhit Target Splash 3)
-  Scholar (16/3/5, Endturn Area Strike 1)
+  Enchantress (12/3/5/2, Onhit Random Freeze 3)
+  Prodigy (8/8/4/2, Onhit Target Splash 3)
+  Scholar (16/3/5/2, Endturn Area Strike 1)
 
 
 -----------------------------------------------------------------------
@@ -162,15 +162,15 @@ ARTIFICERS - Gunpowder and steel (durable frontline, slow backline)
 =======================================================================
 
 Units:
-  Tincan (11/2/1, none)
-  Golem (16/2/1, Passive Armor 2)
-  Kitboy (6/2/2, Endturn Area 1 Heal 1)
-  Artillery (8/4/4, Endturn Random Strike 2 Range 6)
+  Tincan (11/2/1/2, none)
+  Golem (16/2/1/2, Passive Armor 2)
+  Kitboy (6/2/2/2, Endturn Area 1 Heal 1)
+  Artillery (8/4/4/2, Endturn Random Strike 2 Range 6)
 
 Heroes:
-  Outcast (16/6/2, Turnstart Shadowstep Charge 4)
-  Mercenary (32/3/2, 2x Endturn Random Strike 3)
-  Tactician (10/4/4, Passive Global Boost 1)
+  Outcast (16/6/2/2, Turnstart Shadowstep Charge 4)
+  Mercenary (32/3/2/2, 2x Endturn Random Strike 3)
+  Tactician (10/4/4/2, Passive Global Boost 1)
 
 
 -----------------------------------------------------------------------
@@ -308,15 +308,15 @@ PURIFIERS - Fire and blood (healing, benefits from pain and death)
 =======================================================================
 
 Units:
-  Penitent (5/1/1, Wounded Self Ramp 1)
-  Priest (3/1/3, Endturn Random Heal 3)
-  Avenger (20/3/1, Lament Self Ramp 1 Range 1)
-  Herald (6/1/4, Endturn Summon 2 Charge 3)
+  Penitent (5/1/1/2, Wounded Self Ramp 1)
+  Priest (3/1/3/2, Endturn Random Heal 3)
+  Avenger (20/3/1/2, Lament Self Ramp 1 Range 1)
+  Herald (6/1/4/2, Endturn Summon 2 Charge 3)
 
 Heroes:
-  Maiden (8/3/5, Lament Area Strike 1 Charge 2)
-  Aspirant (32/4/1, Onhit Target Splash 4, Passive Armor 1)
-  Apostle (12/2/3, Passive Lament Aura 1 Range 1 Aura R)
+  Maiden (8/3/5/2, Lament Area Strike 1 Charge 2)
+  Aspirant (32/4/1/2, Onhit Target Splash 4, Passive Armor 1)
+  Apostle (12/2/3/2, Passive Lament Aura 1 Range 1 Aura R)
 
 
 -----------------------------------------------------------------------

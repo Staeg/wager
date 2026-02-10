@@ -1,0 +1,903 @@
+Hero Evolution Proposals - Novel Abilities
+==========================================
+
+Proposals for 4 T2 (first evolution) and 4 T3 (second evolution) hero
+evolutions per starting hero. This is twice the number needed for the final
+game so the best options can be selected. Each tier has 2 tanky (+HP) and
+2 offensive (+DMG) paths.
+
+Focus: novel mechanics and gameplay patterns not yet present in the game.
+Many of these are deliberately ambitious or unhinged; numbers can be tuned.
+
+Stat budget:
+  T2: +8 HP or +4 DMG (occasionally +1 Range)
+  T3: +16 HP or +8 DMG
+
+
+=======================================================================
+CUSTODIANS
+=======================================================================
+
+-----------------------------------------------------------------------
+Watcher (30/8/1/2, Passive Armor 3) - Armored melee wall
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Aegis (+8 HP -> 38/8/1/2)
+     Gains "Passive Redirect Aura 2": all damage that would be dealt to
+     allies within 2 hexes is dealt to this unit instead. (True tank. The
+     38 HP Armor 3 wall absorbs all punishment meant for nearby allies.
+     Creates a positional anchor - the army clusters behind the Aegis and
+     lets it soak everything.)
+
+  2. Thornguard (+4 DMG -> 30/12/1/2)
+     Gains "Passive Reflect 4": whenever this unit is attacked, the
+     attacker takes 4 damage regardless of range. (Punishes anyone who
+     hits the armored wall, even ranged units 5 hexes away. Forces the
+     enemy to choose between hitting a target that bites back or ignoring
+     the dangerous melee tank entirely.)
+
+  3. Obelisk (+8 HP -> 38/8/1/2)
+     Gains "Wounded Adaptive Armor 1": each time this unit takes damage,
+     permanently gain +1 armor for the rest of combat. (Starts at Armor 3
+     and climbs. After absorbing 5 hits: Armor 8, making chip damage
+     meaningless. Punishes attrition strategies and rewards the enemy for
+     ignoring it - which they can't afford to do.)
+
+  4. Undertow (+4 DMG -> 30/12/1/2)
+     Gains "Endturn Vortex 3": at end of turn, pull all enemies within 3
+     hexes 1 hex closer to this unit. (Inverse of Push. Drags enemies
+     into melee where the Watcher excels. Prevents kiting, disrupts
+     formations, and clusters enemies together for allied splash or area
+     effects.)
+
+T3 EVOLUTIONS:
+
+  1. Bastion (+16 HP)
+     Gains "Passive Root Aura 2": enemies within 2 hexes cannot move.
+     They can still attack if targets are in their range, but cannot
+     reposition. (No-escape zone. Once melee enemies engage the 46-54 HP
+     armored wall, they're trapped forever. Ranged enemies caught inside
+     lose all positioning options. Devastating with allied AoE on the
+     immobilized cluster.)
+
+  2. Colossus (+16 HP)
+     Gains "Passive Formation Aura 1": this unit gains +2 armor for each
+     adjacent ally. Each adjacent ally gains +1 damage. (With 3 adjacent
+     allies: +6 armor on top of base Armor 3 = Armor 9, functionally
+     invincible. Rewards tight formations. The Colossus is a fortress
+     that makes everything around it stronger while becoming nearly
+     impervious.)
+
+  3. Cataclysm (+8 DMG)
+     Gains "On Death: Death Nova 3": when this unit dies, deal damage
+     equal to this unit's max HP to all enemies within 3 hexes. (A 38-46
+     HP bomb. Kill it and suffer 38-46 area damage. Leave it alive and
+     eat 12-20 damage per turn from its attacks. The opponent faces a
+     lose-lose dilemma with no clean answer.)
+
+  4. Monolith (+8 DMG)
+     Gains "Endturn Barrier Aura 3": at end of turn, grant all allies
+     within 3 hexes a shield of 4 temporary HP. Shields absorb damage
+     before real HP, don't stack, and refresh each turn. (Renewable
+     buffer that effectively gives nearby allies +4 effective HP per
+     round. Keeps fragile allies alive through one extra hit each turn
+     without permanently inflating their health pools.)
+
+
+-----------------------------------------------------------------------
+Neophyte (12/6/4/2, Harvest Area Fortify 1) - Ranged scavenger
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Curator (+8 HP -> 20/6/4/2)
+     Gains "Harvest Convert 4": when an enemy dies within 4 hexes, raise
+     a copy of that enemy as an allied unit with 1 HP, retaining all of
+     its original abilities. (Quality depends entirely on what you fight.
+     A converted Golem has 1 HP but keeps Armor 2. A converted Savant has
+     1 HP but keeps Splash 1. Wildly variable and chaotic.)
+
+  2. Hexbinder (+4 DMG -> 12/10/4/2)
+     Gains "Onhit Doom 4": the hit enemy is Doomed. After 4 more of its
+     own turns, it instantly dies regardless of HP. Doom is cleansed only
+     if the unit is healed to full HP. One Doom active at a time. (Time
+     bomb. Forces the opponent to either heal to full - nearly impossible
+     for most factions - or accept an inevitable loss. Creates desperate
+     urgency around the marked target.)
+
+  3. Archivist (+4 DMG, +1 Range -> 12/10/5/2)
+     Gains "Onhit Mark": the hit enemy is Marked until end of round. All
+     damage Marked enemies take from any source is increased by 3. (Focus
+     fire coordinator. The Archivist tags a priority target from range 5,
+     then every ally that hits it deals +3 bonus damage. Turns the whole
+     army into a precision kill squad.)
+
+  4. Antiquarian (+8 HP -> 20/6/4/2)
+     Gains "Endturn Wither [Range]": at end of turn, all enemies within
+     attack range permanently lose 1 max HP. Current HP drops too if
+     above new max. (Slow but inevitable decay. After 5 turns, every
+     enemy in range has lost 5 max HP. Combined with Harvest Fortify
+     growing YOUR army's HP, the health gap widens relentlessly in both
+     directions.)
+
+T3 EVOLUTIONS:
+
+  1. Gravewarden (+16 HP)
+     Gains "Harvest 3 Resurrect 6": for every 3 enemies that die within
+     6 hexes, resurrect a random dead ally at half HP adjacent to this
+     unit. (Reverses army attrition. As the battle grinds and enemies
+     fall, your own casualties return. Incredibly powerful in prolonged
+     fights. The longer the battle, the more the Gravewarden tilts it.)
+
+  2. Usurper (+8 DMG)
+     Gains "Onkill Assimilate": when this unit kills an enemy, permanently
+     gain all of that enemy's abilities for the rest of combat. (Kill a
+     Golem, gain Armor 2. Kill a Savant, gain Splash 1. Kill a Priest,
+     gain Heal 3. The Usurper becomes a chimera of stolen power,
+     increasingly versatile and dangerous with each kill.)
+
+  3. Chronarch (+16 HP)
+     Gains "Endturn Cascade 4": at end of turn, trigger the endturn
+     abilities of all allied units within 4 hexes an additional time.
+     (Doubles every nearby endturn effect. Librarian sunders twice. Kitboy
+     heals twice. Artillery fires twice. A meta-ability that amplifies
+     the entire army's existing endturn toolkit without doing anything
+     on its own.)
+
+  4. Dirge (+8 DMG)
+     Gains "Passive Soul Accumulator 6": track all enemy deaths within
+     6 hexes - total across all turns, never resets. At end of each turn,
+     deal 1 damage per accumulated soul to a random enemy within range.
+     (Starts at 0 and snowballs. By turn 6, if 8 enemies have died
+     nearby, the Dirge deals 8 random damage per turn. A ticking death
+     toll that accelerates as the enemy army thins.)
+
+
+-----------------------------------------------------------------------
+Accursed (16/8/1/2, Onkill Self Heal 8) - Melee lifesteal duelist
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Ghoul (+8 HP -> 24/8/1/2)
+     Gains "Onkill Devour": when this unit kills an enemy, permanently
+     add the killed unit's max HP to this unit's max HP and heal for that
+     amount. (Kill a 16 HP Golem, become 40 HP. Kill a 32 HP Mercenary,
+     become 72 HP. Each kill makes the Ghoul dramatically harder to bring
+     down. Combined with Onkill Heal 8 for double recovery on every
+     kill.)
+
+  2. Corruptor (+4 DMG -> 16/12/1/2)
+     Gains "Onhit Siphon 2": when attacking, permanently steal 2 base
+     damage from the target. Target's damage decreases by 2, this unit's
+     damage increases by 2. (Double swing. After 3 hits on the same
+     target: +6 damage gained, target has -6 damage. The Corruptor grows
+     monstrous while its victim becomes harmless. Devastating in extended
+     melee duels.)
+
+  3. Spectre (+8 HP -> 24/8/1/2)
+     Gains "Wounded Phase": after taking damage, this unit becomes
+     untargetable until its next turn. Can only be hit once per round.
+     (One hit per round maximum. With 24 HP and Onkill Heal 8, the
+     Spectre is nearly immortal: it absorbs one hit, heals by killing,
+     and repeats. Forces the enemy to make their one shot count with
+     a devastating single blow.)
+
+  4. Blightbringer (+4 DMG -> 16/12/1/2)
+     Gains "Onhit Burn 3x3": when attacking, the target gains Burn that
+     deals 3 damage at the start of each of its turns for 3 turns. Burns
+     from multiple attacks stack. (9 guaranteed DOT damage per attack,
+     bypassing armor entirely. Hit a target twice and it takes 6 burn
+     per turn. The Blightbringer doesn't even need to stay alive - the
+     burns persist and finish the job.)
+
+T3 EVOLUTIONS:
+
+  1. Sovereign (+16 HP)
+     Gains "Onkill Possess": killed enemy is raised as an ally at half
+     its max HP retaining all abilities. (Every kill is a double swing.
+     The enemy loses a unit, you gain one at half health. Kill a healer
+     and it heals YOUR army. Kill a tank and it blocks for YOUR side.
+     The Sovereign assembles an army from conquered enemies.)
+
+  2. Abomination (+8 DMG)
+     Gains "Endturn Parasitic Drain 2": at end of turn, deal 2 damage to
+     every enemy within 2 hexes and heal this unit for 2 per enemy hit.
+     (Area vampirism. With 3 enemies in melee: 6 damage dealt, 6 HP
+     healed per turn on top of Onkill Heal. Combined with melee attacks,
+     the Abomination is virtually unkillable in close quarters unless
+     burst down in a single round.)
+
+  3. Dreadlord (+16 HP)
+     Gains "Wounded Curse 2": when taking damage, the attacker
+     permanently loses 2 base damage (minimum 0). (Cripples anyone who
+     attacks it. Three different enemies swing at the Dreadlord and each
+     loses 2 damage forever. Over several rounds, the entire enemy army
+     is neutered. A unit that makes opponents weaker by existing.)
+
+  4. Void Knight (+8 DMG)
+     Gains "Onhit Soulbind": when this unit attacks, link with the target
+     for the rest of combat. When either linked unit takes damage, the
+     other takes half that damage too. Only one link at a time. (Mutual
+     destruction pact. Bind to the enemy's strongest unit. Your army
+     focuses the linked enemy - the Void Knight takes half the damage but
+     heals through Onkill Heal. The linked enemy takes half of everything
+     aimed at the Void Knight. A shared death spiral.)
+
+
+=======================================================================
+WEAVERS
+=======================================================================
+
+-----------------------------------------------------------------------
+Enchantress (12/3/5/2, Onhit Random Freeze 3) - Long-range freeze control
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Rime Witch (+8 HP -> 20/3/5/2)
+     Gains "Endturn Shatter [Range]": at end of turn, deal 4 damage to
+     every frozen enemy within attack range. (Freeze-and-shatter combo.
+     Hit to freeze 3 enemies, then shatter deals 4 to each frozen target
+     = up to 12 bonus damage per turn. The Enchantress becomes a self-
+     contained freeze-punish loop that rewards controlling more enemies.)
+
+  2. Glacialist (+4 DMG, +1 Range -> 12/7/6/2)
+     Gains "Onhit Root 2": target cannot move for 2 turns. Can still
+     attack and use abilities if enemies are in range. (Different from
+     Freeze: frozen units skip their turn entirely, rooted units can
+     still fight but can't reposition. Pin a Shadowstep assassin and
+     neutralize its mobility. Pin a tank and walk your army around it.)
+
+  3. Wisp (+8 HP -> 20/3/5/2)
+     Gains "Wounded Blink": when this unit takes damage, teleport to a
+     random empty hex at least 4 hexes from the attacker. (The fragile
+     Enchantress becomes untouchable. Every hit makes it vanish and
+     reappear elsewhere. With range 5, it can usually still shoot from
+     its new position. Assassins can reach it, but can never hold it.)
+
+  4. Spellthief (+4 DMG -> 12/7/5/2)
+     Gains "Onhit Dispel": remove all accumulated positive effects from
+     the target - ramp damage, fortify HP, armor buffs, block charges.
+     Target is reset to its base stats. (Anti-scaling. One hit undoes
+     turns of careful stacking. Devastating against Ramp-heavy Purifier
+     Penitents or Fortify armies. The ultimate counter to late-game
+     scaling strategies.)
+
+T3 EVOLUTIONS:
+
+  1. Permafrost (+16 HP)
+     Gains "Passive Chill Aura [Range]": enemies within attack range
+     cannot move more than 1 hex per turn (speed bonuses are suppressed).
+     Additionally, at end of this unit's turn, deal 1 damage to all
+     enemies within range. (Slow field. The entire enemy army crawls
+     through the Permafrost's zone while taking guaranteed chip damage.
+     Combined with Freeze, creates an inescapable control zone that
+     stalls aggression indefinitely.)
+
+  2. Dreamweaver (+16 HP)
+     Gains "Endturn Polymorph": at end of turn, transform the lowest-HP
+     enemy within range into a Husk (0 damage, retains current HP, loses
+     all abilities) for 2 turns. After 2 turns, the original unit
+     returns with its original stats. One Polymorph active at a time.
+     (Removes a threat entirely for 2 turns. Polymorphing a wounded hero
+     is devastating - it contributes nothing for 2 turns while its body
+     blocks its own team. Creates rolling threat neutralization.)
+
+  3. Fateweaver (+8 DMG)
+     Gains "Onhit Trigger Allies 3": when this unit attacks, all allies
+     within 3 hexes immediately fire their onhit abilities against a
+     random enemy in their range. No actual attack occurs - only the
+     onhit effect. (Orchestra conductor. One Fateweaver attack causes
+     nearby Conduits to freeze, Seekers to ramp, Savants to splash.
+     Allies get bonus onhit triggers without using their turn. Scales
+     with how many onhit allies are nearby.)
+
+  4. Phantom Queen (+8 DMG)
+     Gains "Onkill Summon Phantom": when this unit kills an enemy, summon
+     a Phantom at the dead enemy's location. Phantoms have 1 HP, 0 DMG,
+     Range 6, and "Endturn Random Freeze 2". (Creates freeze turrets
+     from kills. Each kill leaves a persistent freeze source deep in
+     enemy lines. Even though Phantoms die to any hit, they fire their
+     freeze before being cleaned up, creating persistent crowd control
+     from behind enemy lines.)
+
+
+-----------------------------------------------------------------------
+Prodigy (8/8/4/2, Onhit Target Splash 3) - Glass cannon splash dealer
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Resonator (+8 HP -> 16/8/4/2)
+     Gains "Onhit Chain 4": after the initial attack, damage bounces to
+     up to 2 additional enemies within 2 hexes of each previous target,
+     dealing 4 damage per bounce. (Different from Splash. Splash hits
+     everything adjacent to one target. Chain bounces sequentially to
+     NEW targets further away. Combined with Splash 3, creates both wide
+     and deep damage spread from a single attack.)
+
+  2. Detonator (+4 DMG -> 8/12/4/2)
+     Gains "Onkill Detonate": when killing an enemy, deal damage equal
+     to half the killed unit's max HP to all enemies within 2 hexes of
+     the corpse. (Enemies explode on death. Kill a 32 HP Mercenary and
+     everything nearby takes 16 damage. Kill a 5 HP Penitent and the
+     explosion is tiny. Devastating against clustered armies with high-HP
+     units. Rewards targeting the biggest enemy first.)
+
+  3. Hexshot (+4 DMG, +1 Range -> 8/12/5/2)
+     Gains "Onhit Ricochet 2": after attacking, deal this unit's full
+     damage to one additional random enemy within 2 hexes of the target.
+     The ricochet hit also triggers Splash. (Two splash epicenters per
+     attack. Primary target: 12 damage, neighbors take Splash 3.
+     Ricochet target: 12 damage, ITS neighbors take Splash 3. Up to 8
+     enemies damaged from a single attack at range 5.)
+
+  4. Graviton (+8 HP -> 16/8/4/2)
+     Gains "Onhit Pull 2": after attacking, pull the target 2 hexes
+     closer to this unit. (Inverse of Push. A range-4 enemy is dragged
+     to range 2 where most units can't retaliate. Pulls enemies out of
+     formation, creates gaps in frontlines, and drags ranged enemies
+     into uncomfortable close range.)
+
+T3 EVOLUTIONS:
+
+  1. Worldbreaker (+8 DMG)
+     Gains "Passive Double Strike": this unit attacks twice per turn,
+     targeting a different random enemy each time. Each attack triggers
+     all onhit abilities. (Two full attacks = two Splash triggers, two
+     Chain bounces, two Pull effects. Doubles all offensive output. A
+     16 DMG unit hitting twice with Splash 3 each time is 32 base damage
+     plus up to 6 splash per turn.)
+
+  2. Singularity (+8 DMG)
+     Gains "Onhit Implosion 3": when attacking, pull all enemies within
+     3 hexes of the TARGET 1 hex closer to the target's position.
+     (Groups enemies around the impact point. Hit → enemies cluster
+     around target → Splash 3 hits more of them. Self-setting combo.
+     Each turn, the pack gets tighter, and the Splash gets deadlier.)
+
+  3. Virtuoso (+16 HP)
+     Gains "Passive Communion 4": this unit's damage increases by +1 for
+     each allied unit within 4 hexes. (Scales with army density. With 6
+     allies nearby: 14-16 damage plus Splash 3. Rewards keeping units
+     alive and grouped. Creates an unusual tension: you want to cluster
+     for damage, but clustering makes your army vulnerable to enemy AoE.)
+
+  4. Stormcaller (+16 HP)
+     Gains "Passive Lightning Rod 4": whenever an ally within 4 hexes
+     takes damage from an attack, deal 2 damage to the attacker
+     regardless of range. (Passive retribution field. Any enemy that
+     attacks a nearby ally takes 2 automatic damage. At range 4, covers
+     most of the army. Creates a dual threat: the Prodigy's own attacks
+     deal splash offense, while the aura punishes enemies for attacking
+     at all.)
+
+
+-----------------------------------------------------------------------
+Scholar (16/3/5/2, Endturn Area Strike 1) - Long-range area chip damage
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Occultist (+8 HP -> 24/3/5/2)
+     Gains "Endturn Burn [Range] 2": at end of turn, all enemies within
+     attack range gain Burn 2 (take 2 damage at the start of their next
+     turn). Burns from multiple applications stack. (Compounding DOT.
+     After 3 turns, enemies in range take 6 burn per turn on top of
+     Area Strike 1. The Occultist creates an expanding fog of inevitable
+     damage that armor cannot reduce.)
+
+  2. Chronomancer (+4 DMG -> 16/7/5/2)
+     Gains "Endturn Swap [Range]": at end of turn, swap positions with
+     a random enemy within attack range. The swap occurs before Area
+     Strike resolves. (Chaotic repositioning. The Scholar teleports into
+     the enemy cluster, fires Area Strike 1 from inside it, and the
+     displaced enemy is now stranded among your allies. Destabilizes
+     both formations every single turn.)
+
+  3. Nullifier (+4 DMG -> 16/7/5/2)
+     Gains "Endturn Dispel Area [Range]": at end of turn, strip all
+     accumulated buffs from enemies within range. Ramp damage, fortify
+     HP, armor from abilities, and block charges are all removed. (Area
+     anti-scaling. Ramp units return to base damage. Fortified units
+     lose bonus HP. Resets every enemy in range to baseline every turn,
+     making scaling strategies completely futile.)
+
+  4. Channeler (+8 HP -> 24/3/5/2)
+     Gains "Endturn Leech [Range]": at end of turn, drain 1 HP from
+     each enemy within attack range and heal this unit for the total.
+     (Area vampirism. With 5 enemies in range: 5 damage dealt, 5 HP
+     healed per turn. Combined with Area Strike 1, each enemy takes
+     2 per turn while the Scholar sustains itself indefinitely. Becomes
+     nearly impossible to kill through attrition.)
+
+T3 EVOLUTIONS:
+
+  1. Worldshaper (+16 HP)
+     Gains "Endturn Create Pillar": create an impassable Pillar (10 HP,
+     0 DMG, counts as neither ally nor enemy, blocks all movement) at a
+     random empty hex adjacent to this unit. Max 3 Pillars at a time.
+     (Terraforming. Builds walls that channel enemy movement, protect
+     flanks, and create chokepoints. Over several turns, the battlefield
+     geometry is reshaped entirely. Melee-heavy armies are funneled into
+     kill zones.)
+
+  2. Void Scholar (+8 DMG)
+     Gains "Passive Magnetize Aura [Range]": enemies within attack range
+     can only move TOWARD this unit, never away or laterally. (Absolute
+     directional control. Once inside the 5-hex range, enemies are drawn
+     inexorably inward with no possibility of retreat. Combined with
+     Area Strike 1, enemies march into the damage field and can never
+     escape it. A black hole.)
+
+  3. Entropy Lord (+8 DMG)
+     Gains "Endturn Decay [Range]": at end of turn, all enemies within
+     range permanently lose 1 max HP AND 1 base damage. Current HP drops
+     if above new max. (Combined wither and cripple. After 4 turns,
+     every enemy in range has -4 HP and -4 damage. With Area Strike
+     ticking simultaneously, the Scholar creates an area of total
+     deterioration where enemies crumble in every dimension at once.)
+
+  4. Aberration (+16 HP)
+     Gains "Passive Mirror [Range]": whenever an enemy within attack
+     range uses a triggered ability (onhit, endturn, onkill, wounded,
+     lament, harvest), this unit copies that ability and fires it against
+     a random enemy. (Turns enemy abilities against them. Enemy uses
+     Freeze? You freeze them. Enemy uses Splash? You splash them. Enemy
+     uses Heal? You heal an ally. Becomes more powerful the more ability-
+     dense the enemy army is. The opponent's greatest strength becomes
+     their worst liability.)
+
+
+=======================================================================
+ARTIFICERS
+=======================================================================
+
+-----------------------------------------------------------------------
+Outcast (16/6/2/2, Turnstart Shadowstep Charge 4) - Mobile dive assassin
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Bladedancer (+8 HP -> 24/6/2/2)
+     Gains "Passive Riposte": when an adjacent enemy attacks this unit,
+     automatically counter-attack that enemy for full damage. Triggers
+     onhit abilities. Does not cost an action. (Shadowstep in, get
+     attacked by surrounding enemies, counter-attack each one for free.
+     With 24 HP, survives long enough to riposte several times. Turns
+     the assassin into a melee deterrent that punishes engagement.)
+
+  2. Infiltrator (+4 DMG, +1 Range -> 16/10/3/2)
+     Gains "Onkill Vanish": after killing, become untargetable until this
+     unit's next turn. (Kill and disappear. Shadowstep in, eliminate a
+     fragile target, vanish from retaliation. If the kill attempt fails,
+     you're fully exposed. Pure high-risk, high-reward assassination
+     that rewards precision targeting and punishes bad reads.)
+
+  3. Trapper (+4 DMG -> 16/10/2/2)
+     Gains "Onhit Plant Mine": after attacking, place a Mine on a random
+     empty hex adjacent to this unit. If an enemy starts its turn on a
+     Mine hex, it detonates for 8 damage. Mines persist until triggered.
+     Max 3 Mines active. (Creates a web of danger zones. Shadowstep
+     around the battlefield leaving mines. Over time, movement becomes
+     treacherous. Forces the enemy to track mine locations or suffer
+     devastating surprise damage.)
+
+  4. Brawler (+8 HP -> 24/6/2/2)
+     Gains "Passive Momentum": if this unit moved this turn (including
+     Shadowstep), its attack deals +4 bonus damage. (Shadowstep counts
+     as movement. Every teleport-attack hits for 10 instead of 6. Turns
+     that start without movement hit at base 6. Creates a clear rhythm:
+     Shadowstep turns are devastating 10-damage strikes, stationary
+     turns are normal attacks.)
+
+T3 EVOLUTIONS:
+
+  1. Shade (+16 HP)
+     Gains "Passive Phase Shift": after this unit acts each turn, teleport
+     to a random empty hex at least 3 hexes from current position.
+     (Automatic reposition after every action. Shadowstep IN -> attack ->
+     teleport OUT. Nearly impossible to pin down or retaliate against.
+     A ghost that materializes, strikes, and vanishes without any
+     possibility of counterplay.)
+
+  2. Reaver (+8 DMG)
+     Gains "Onkill Chain Kill": when killing, immediately Shadowstep to
+     the nearest enemy and attack again. Can chain up to 3 kills per
+     turn. (Kill-chain assassin. Teleport, kill, teleport to next,
+     kill, repeat. With high damage, cleans up 3 wounded enemies in a
+     single turn. The ultimate snowball turn that can shatter an entire
+     weakened army in one sequence.)
+
+  3. Ghostblade (+8 DMG)
+     Gains "Passive Phase Strike": this unit's attacks ignore all armor,
+     Block, and damage reduction effects entirely. Full damage always
+     lands. (Simple but devastating. A 14+ damage attack that cuts
+     through Armor 5, Block 3, Damage Cap, everything. The Ghostblade
+     is the ultimate answer to heavy defensive compositions. No amount
+     of tanking protects against it.)
+
+  4. Jailer (+16 HP)
+     Gains "Onhit Shackle 3": target cannot move or use movement
+     abilities (including Shadowstep, Blink, Phase Shift) for 3 turns.
+     (Absolute pin. Shadowstep to an enemy hero, shackle it for 3 turns,
+     and your army has a stationary target to focus down. Shuts down
+     mobility heroes and prevents any form of retreat or repositioning.)
+
+
+-----------------------------------------------------------------------
+Mercenary (32/3/2/2, 2x Endturn Random Strike 3) - Tanky bombarder
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Ironhide (+8 HP -> 40/3/2/2)
+     Gains "Passive Damage Cap 4": no single attack can deal more than
+     4 damage to this unit after all reductions. Excess damage is simply
+     ignored. (Immune to burst. A 20-damage hit deals only 4. Requires
+     minimum 10 separate attacks to kill from full HP. The Ironhide can
+     only be brought down through sustained chip damage across many
+     turns, never a single devastating blow.)
+
+  2. Disperser (+4 DMG -> 32/7/2/2)
+     Gains "Endturn Scatter 3": at end of turn, push all enemies within
+     3 hexes 1 hex away from this unit. (Mass displacement every turn.
+     Keeps melee enemies at arm's length while Random Strikes chip them
+     from afar. Disrupts enemy formations and prevents melee dogpiling.
+     A breathing tank that maintains its space.)
+
+  3. Siegemaster (+8 HP -> 40/3/2/2)
+     Gains "Passive Ablative Shield 4": start combat with 4 Block
+     charges. When all 4 charges are consumed, permanently gain +4
+     damage for the rest of combat. (Two-phase tank. Phase 1: absorbs
+     the first 4 hits completely. Phase 2: transforms into a damage
+     dealer at 7 DMG + 2x Random Strike 3. A dramatic mid-combat power
+     shift from shield wall to berserker.)
+
+  4. Harpooner (+4 DMG -> 32/7/2/2)
+     Gains "Endturn Grapple 6": at end of turn, pull the furthest enemy
+     within 6 hexes 2 hexes closer to this unit. (Long-range hook. Drags
+     backline ranged enemies toward the dangerous frontline where they're
+     vulnerable. No one is safe at range. Combined with Random Strikes
+     softening targets, the Harpooner reels in the wounded for the kill.)
+
+T3 EVOLUTIONS:
+
+  1. Fortress (+16 HP)
+     Gains "Passive Anchor Aura 3": allied units within 3 hexes cannot
+     be pushed, pulled, swapped, displaced, or affected by any movement-
+     altering abilities from enemies. (Anti-displacement zone. Protects
+     your army's formation from Push, Pull, Vortex, Shadowstep chaos,
+     Swap, and any other repositioning tricks. The Fortress makes your
+     army formation permanent and unbreakable.)
+
+  2. Marksman (+8 DMG)
+     Gains "Endturn Guided Strike 6": at end of turn, deal 8 damage to
+     the lowest-HP enemy within 6 hexes. (Targeted finisher on top of
+     the existing Random Strikes. Random Strikes soften the field,
+     Guided Strike executes the most wounded enemy. Creates a reliable
+     kill pipeline every single turn. Nobody hides at low HP.)
+
+  3. Bulwark (+16 HP)
+     Gains "Lament Retaliate 2": when an allied unit within 2 hexes
+     dies, this unit immediately attacks a random enemy in range. Triggers
+     onhit abilities if any. (Death-triggered bonus attacks. Allies fall
+     → Bulwark retaliates automatically. Combined with 2x Random Strike
+     already firing each endturn, the Mercenary becomes a torrent of
+     damage output when allies die nearby. Rewards expendable frontlines.)
+
+  4. Devastator (+8 DMG)
+     Gains "Endturn Global Strike 1": at end of turn, deal 1 damage to
+     ALL enemies on the battlefield regardless of range or position.
+     (Unavoidable. Unreduceable by armor. 1 damage to literally every
+     enemy every turn. With 20 enemies, that's 20 total damage per turn.
+     Combined with 2x Random Strike 3, creates inescapable attrition
+     from any position. Nowhere on the map is safe.)
+
+
+-----------------------------------------------------------------------
+Tactician (10/4/4/2, Passive Global Boost 1) - Ranged global support
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Strategist (+8 HP -> 18/4/4/2)
+     Gains "Passive Overwatch 4": whenever an enemy moves within this
+     unit's attack range, deal 3 damage to that enemy. Triggers once per
+     enemy per turn. (Defensive fire zone. Every approaching enemy takes
+     free damage before it can even engage. Combined with Boost 1 for
+     allies, creates a layered defense: enemies are softened by Overwatch,
+     then hit harder by boosted allies.)
+
+  2. Signaleer (+4 DMG -> 10/8/4/2)
+     Gains "Passive Echo Boost": all allied triggered abilities (onhit,
+     endturn, onkill, wounded, lament, harvest) have their effect values
+     increased by +1. (Meta-buff. Freeze 3 becomes Freeze 4. Strike 3
+     becomes Strike 4. Heal 2 becomes Heal 3. Armor Aura 2 becomes
+     Armor Aura 3. A subtle but devastating force multiplier that makes
+     every ability in the army slightly better.)
+
+  3. Coordinator (+4 DMG, +1 Range -> 10/8/5/2)
+     Gains "Endturn Reposition [Range]": at end of turn, swap the
+     positions of any two allied units within attack range. (Formation
+     manipulation without costing unit actions. Pull the injured tank
+     to the back, push a fresh unit forward. Move the carry to optimal
+     range. The Coordinator perfects army positioning every single turn.)
+
+  4. Engineer (+8 HP -> 18/4/4/2)
+     Gains "Endturn Deploy Turret": at end of turn, create a Turret
+     adjacent to this unit. Turrets: 5 HP, 3 DMG, Range 4, no abilities,
+     cannot move, act like normal units. Max 2 Turrets active at a time.
+     (Creates static fire platforms. Combined with Boost 1, Turrets deal
+     4 damage each. Two Turrets = 8 bonus damage per turn from protected
+     positions. The Engineer builds an army within the army.)
+
+T3 EVOLUTIONS:
+
+  1. Grandmaster (+16 HP)
+     Gains "Passive Master Plan": at the start of combat, all allied
+     units permanently gain +1 to every ability value: Freeze count,
+     Strike damage, Heal amount, Armor value, Sunder amount, Splash
+     damage, Summon count, Ramp value, etc. One-time buff. (Army-wide
+     upgrade. Every single ability becomes strictly better. Combined with
+     Boost 1 and Echo Boost if also present, creates an army where every
+     unit significantly overperforms its stat line.)
+
+  2. Fieldmarshal (+8 DMG)
+     Gains "Passive Coordinated Assault": whenever this unit attacks an
+     enemy, all other allies that have that same enemy within their
+     attack range deal +2 damage to it until end of round. (Focus-fire
+     coordinator. The Tactician shoots a target, painting it for the
+     army. Every subsequent ally that can reach it hits +2 harder.
+     Rewards concentration of fire and army-wide targeting coordination.)
+
+  3. Architect (+16 HP)
+     Gains "Endturn Construct Barricade": at end of turn, create a
+     Barricade at a random empty hex within 3 hexes. Barricades are
+     impassable, have 15 HP, can be attacked and destroyed, and count as
+     neither ally nor enemy. Max 3 Barricades at a time. (Battlefield
+     engineering. Build walls to channel enemy movement, protect flanks,
+     and create chokepoints. Over several turns, the Architect creates
+     a defensible position from nothing.)
+
+  4. Warsmith (+8 DMG)
+     Gains "Passive Range Aura 4": all allied units within 4 hexes gain
+     +1 attack range. (Range extension. Melee units attack at range 2.
+     Range-2 units attack at range 3. Range-4 units attack at range 5.
+     Combined with Boost 1, the entire nearby army hits harder from
+     further away. Transforms the army's engagement geometry.)
+
+
+=======================================================================
+PURIFIERS
+=======================================================================
+
+-----------------------------------------------------------------------
+Maiden (8/3/5/2, Lament Area Strike 1 Charge 2) - Death-triggered ranged
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Mourner (+8 HP -> 16/3/5/2)
+     Gains "Lament Resurrect [Range]": when an allied unit dies within
+     attack range, immediately resurrect it at 1 HP adjacent to this
+     unit. Triggers once per round. (Instant rebirth. A Penitent dies,
+     triggers Lament Strike charges, then is resurrected at 1 HP to
+     fight again. Creates a loop of sacrifice and rebirth that maximizes
+     the value of every Lament trigger.)
+
+  2. Banshee (+4 DMG -> 8/7/5/2)
+     Gains "Lament Wail [Range]": when an ally dies, all enemies within
+     attack range permanently lose 1 base damage (minimum 0). (Each
+     ally death weakens the entire enemy army. After 5 Penitent/Blade
+     deaths, all enemies in range deal 5 less damage. The Purifier
+     sacrifice engine doesn't just fuel your offense - it systematically
+     dismantles theirs.)
+
+  3. Seeress (+8 HP -> 16/3/5/2)
+     Gains "Passive Sacrificial Aura [Range]": allied units within range
+     that have 3 or fewer HP instantly die at the start of their turn,
+     triggering all death effects (Lament, Harvest, etc.). (Accelerates
+     the death engine. Low-HP Penitents and Blades don't waste turns
+     attacking for 1 damage - they die immediately to fuel Lament
+     triggers faster. Morbidly efficient. The Seeress culls the weak
+     to empower the strong.)
+
+  4. Prophetess (+4 DMG, +1 Range -> 8/7/6/2)
+     Gains "Lament Chain 3 [Range]": when an ally dies, deal 3 damage to
+     a random enemy within range. If that enemy dies, deal 3 to another
+     random enemy, and so on until a target survives or none remain.
+     (Chain reaction from death. Unlikely to chain far alone, but
+     devastating against wounded armies. A single Penitent death could
+     cascade into 2-3 additional kills if the enemy is softened, each
+     kill potentially triggering further Lament effects.)
+
+T3 EVOLUTIONS:
+
+  1. Matriarch (+16 HP)
+     Gains "Lament Fortify Aura [Range] 2": when an ally dies within
+     range, all OTHER allies within range gain +2 max HP permanently
+     and heal 2. (Each death makes survivors tankier. After 5 ally
+     deaths, all nearby allies have +10 max HP. The army becomes harder
+     to attrition with every loss - you can never grind the Purifiers
+     down because each loss makes the remainder tougher to kill.)
+
+  2. Wrathqueen (+8 DMG)
+     Gains "Lament Ready": when an allied unit dies (no charge), this
+     unit becomes readied and can act again this round. No limit per
+     round. (Unlimited extra actions from deaths. In a Purifier army
+     where Blades and Penitents die constantly, the Wrathqueen could
+     attack 3-5 times per round from range 5-6. A machine gun powered
+     by sacrifice.)
+
+  3. Deathmother (+16 HP)
+     Gains "Lament Fission [Range]": when an ally within range dies,
+     summon a 1-HP copy of that ally (retaining all abilities) adjacent
+     to this unit. Copies created by Fission cannot trigger Fission on
+     their own death. (Death creates replacements. Penitents die and
+     respawn as 1-HP glass cannons with Wounded Ramp. Creates a steady
+     stream of expendable bodies that each trigger Lament when they
+     inevitably die again - without causing infinite loops.)
+
+  4. Deathsinger (+8 DMG)
+     Gains "Lament Drain [Range]": when an ally dies, deal 2 damage to
+     every enemy within range and heal this unit for 2 per enemy hit.
+     (Each ally death sprays area damage and heals the Deathsinger. With
+     5 enemies in range, each death deals 10 total damage and heals 10.
+     Combined with Lament Strike from charges, creates massive burst
+     output per death event. Sacrifice fuels both offense and sustain.)
+
+
+-----------------------------------------------------------------------
+Aspirant (32/4/1/2, Onhit Splash 4, Passive Armor 1) - Armored melee splash
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Berserker (+4 DMG -> 32/8/1/2)
+     Gains "Passive Blood Frenzy": at the start of each of this unit's
+     turns, take 2 self-damage and permanently gain +1 damage. (Self-
+     destructing powerhouse. After 10 turns: 12 HP remaining but 18 DMG
+     with Splash 4. Eventually kills itself but becomes monstrous before
+     it does. Self-damage may also trigger Wounded abilities from T3 or
+     upgrades, creating further synergy.)
+
+  2. Templar (+8 HP -> 40/4/1/2)
+     Gains "Onhit Shockwave 1": after attacking, push ALL enemies within
+     1 hex of this unit 1 hex away. (AoE knockback on every attack.
+     The 40 HP tank clears space around itself each hit, shattering
+     enemy clusters and preventing dogpiling. Different from Push:
+     Push displaces the target, Shockwave scatters everyone nearby.)
+
+  3. Vindicator (+8 HP -> 40/4/1/2)
+     Gains "Passive Retaliation 3": whenever an adjacent enemy attacks
+     this unit, deal 3 damage to that enemy automatically. Does not cost
+     an action. (Passive counter-attacks. Every melee enemy that swings
+     at the Vindicator takes 3 damage for free. With 40 HP and Armor 1,
+     it survives long enough to retaliate many times. A thorny wall that
+     makes melee engagement painful.)
+
+  4. Shieldbreaker (+4 DMG -> 32/8/1/2)
+     Gains "Onhit Shatter": if the target has armor, deal bonus damage
+     equal to double the target's total effective armor, then reduce
+     their armor to 0. (Anti-tank specialist. A Golem with Armor 2
+     takes +4 bonus and loses all armor. A Watcher with Armor 5 takes
+     +10 bonus and is stripped bare. Combined with Splash 4, devastates
+     armored formations.)
+
+T3 EVOLUTIONS:
+
+  1. Judicator (+16 HP)
+     Gains "Passive Gravity Well 2": enemies within 2 hexes cannot move
+     away from this unit. They can move laterally or closer but never
+     increase their distance. (Inescapable. The 48-56 HP armored tank
+     locks down everything in melee range permanently. Combined with
+     Splash 4, trapped enemies eat splash damage every turn with zero
+     possibility of retreat. Engage the Judicator and you're committed.)
+
+  2. Doomguard (+8 DMG)
+     Gains "Onhit Condemn": the target takes 2 damage at the end of each
+     of its turns for the rest of combat. Multiple Condemn applications
+     on the same target stack. (Permanent DOT. Hit a target twice and
+     it takes 4 burn per turn forever. Combined with Splash 4, the
+     primary target rots from accumulated DOT while neighbors take splash.
+     Kills through patience.)
+
+  3. Annihilator (+8 DMG)
+     Gains "Passive Cleave": this unit's basic attack hits ALL adjacent
+     enemies for full damage, not just a random target. Each hit triggers
+     onhit abilities. (Full damage to everyone in melee range. At 12+
+     DMG with T3 stats, that's 12 damage to every adjacent enemy every
+     turn. Splash 4 still applies to each hit target's neighbors. A
+     melee blender that punishes any clustering near it.)
+
+  4. Immortal (+16 HP)
+     Gains "Passive Adaptation": the first time this unit takes damage
+     each round, permanently gain +1 armor. The second time, permanently
+     gain +1 damage. The third time and beyond, heal 4. (Rewards being
+     focused. Getting hit 3 times in a round gives +1 armor, +1 damage,
+     AND 4 healing. The Aspirant's massive HP pool ensures it survives
+     long enough to stack many times. A unit that grows stronger the
+     more it is attacked.)
+
+
+-----------------------------------------------------------------------
+Apostle (12/2/3/2, Passive Lament Aura 1 Range 1 Aura R) - Death aura support
+-----------------------------------------------------------------------
+
+T2 EVOLUTIONS:
+
+  1. Confessor (+8 HP -> 20/2/3/2)
+     Gains "Passive Life Link Aura [Range]": damage dealt to allies
+     within aura range is split: the ally takes half (rounded down), this
+     unit takes the other half (rounded up). (Damage sharing tank. Keeps
+     allies alive longer by absorbing half their incoming damage. Creates
+     an interesting tension with Lament Aura: protecting allies delays
+     their deaths and thus delays Lament triggers. The player must choose
+     when to shield and when to let allies fall.)
+
+  2. Inciter (+4 DMG -> 12/6/3/2)
+     Gains "Lament Frenzy 3": when an ally within 3 hexes dies, all
+     OTHER allies within 3 hexes immediately make a bonus attack against
+     a random enemy in their range. (Death triggers army-wide retaliation.
+     A Penitent dies -> every nearby ally swings immediately. Combined
+     with Lament Aura giving +1 damage per death, creates cascading
+     violence where each death is answered by a boosted volley of
+     retaliatory strikes.)
+
+  3. Vessel (+4 DMG -> 12/6/3/2)
+     Gains "Endturn Leech Aura [Range]": at end of turn, steal 1 HP from
+     each enemy within attack range (deal 1 damage and heal 1 per enemy).
+     (Passive area drain. With 4 enemies in range: 4 damage dealt, 4 HP
+     healed per turn. The Vessel steadily drains life from enemies while
+     Lament Aura powers up allies from deaths. Sustain through vampirism
+     that doesn't depend on kills or deaths.)
+
+  4. Beacon (+8 HP -> 20/2/3/2)
+     Gains "Passive Lament Echo Aura [Range]": whenever a Lament ability
+     triggers on ANY unit within aura range, it triggers a second time.
+     (Meta-amplifier. Avenger's Lament Ramp 1 becomes effectively Ramp
+     2 per death. Maiden's Lament Strike triggers twice per death. The
+     Apostle's own Lament Aura applies twice. The Beacon does nothing
+     by itself but doubles the output of the entire Purifier death
+     engine.)
+
+T3 EVOLUTIONS:
+
+  1. Absolver (+16 HP)
+     Gains "Lament Full Heal [Range]": when an ally within aura range
+     dies, all OTHER allies within range are healed to full HP. (Massive
+     restoration from each death. A Penitent dies and every nearby ally
+     is completely restored. Makes the army impossible to grind down:
+     every death undoes all accumulated damage on the survivors. Only
+     burst kills can stick.)
+
+  2. Hierophant (+8 DMG)
+     Gains "Lament Convert 3": track ally deaths within aura range.
+     After every 3rd death, the nearest enemy within 3 hexes permanently
+     switches sides (becomes allied at full HP with all abilities).
+     Counter resets after conversion. (Enemies defect when they witness
+     enough sacrifice. Lose 3 expendable Penitents, gain a full-strength
+     enemy unit. In a Blade/Penitent-heavy army, conversions happen
+     disturbingly often.)
+
+  3. Arch-Prelate (+16 HP)
+     Gains "Passive Death Clock Aura [Range]": track total ally deaths
+     within aura range (accumulates, never resets). When the count
+     reaches 5, deal 20 damage to ALL enemies on the battlefield and
+     reset the counter. (Doomsday device. 5 ally deaths = army-wide
+     nuke. In a Purifier army with expendable Blades and Penitents,
+     reaching 5 is easy. Then 20 damage to EVERYTHING. Can trigger
+     multiple times per combat if enough allies keep dying.)
+
+  4. Soulkeeper (+8 DMG)
+     Gains "Passive Soul Harvest Aura [Range]": when an allied unit
+     within aura range dies, this unit permanently gains all of that
+     dead ally's abilities for the rest of combat. (Accumulates power
+     from the fallen. Penitent dies -> gain Wounded Ramp 1. Priest dies
+     -> gain Endturn Heal 3. Avenger dies -> gain Lament Ramp 1. Herald
+     dies -> gain Endturn Summon. The Soulkeeper becomes a repository of
+     every fallen ally's power, growing more versatile with each death.)

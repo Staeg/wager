@@ -1,50 +1,50 @@
 ﻿Wager of War units
-Baselines, before considering variation and faction strengths using HP/Damage/Range/Value notation:
+Baselines, before considering variation and faction strengths using HP/Damage/Range/Actions/Value notation:
 * Tier 0
-   * 8/2/1/5
-   * 3/1/4/5
+   * 8/2/1/2/5
+   * 3/1/4/2/5
 * Tier 1
-   * 20/4/1/12
-   * 6/2/5/10
-   * 4/1/3/10 + ability
+   * 20/4/1/2/12
+   * 6/2/5/2/10
+   * 4/1/3/2/10 + ability
 * Tier 2
-   * 40/8/1/25
-   * 8/6/6/25
-   * 6/4/4/25 + ability
+   * 40/8/1/2/25
+   * 8/6/6/2/25
+   * 6/4/4/2/25 + ability
 
 
 Custodian
-* Page: 3/1/1/2
+* Page: 3/1/1/2/2
    * Speed 1.2: 20% of the time the unit can move an additional hex
-* Librarian: 2/0/3/12
+* Librarian: 2/0/3/2/12
    * Endturn Random Sunder 1: at the end of turn, reduce the Armor of a random enemy in range by 1
-* Steward: 20/3/1/10
-* Gatekeeper: 32/4/2/25
+* Steward: 20/3/1/2/10
+* Gatekeeper: 32/4/2/2/25
    * Passive Aura R Undying 2: if an ally within attack range would die and has >0 attack damage, it loses 2 attack damage instead of taking damage
 Weaver
-* Apprentice: 8/1/2/5
+* Apprentice: 8/1/2/2/5
    * Onhit Push 1: moves the attack target back 1 hex horizontally if possible after attacking
-* Conduit: 11/2/2/10
+* Conduit: 11/2/2/2/10
    * Onhit Freeze 1/R: exhausts 1 random ready enemy within attack range after attacking
-* Seeker: 3/1/4/10
+* Seeker: 3/1/4/2/10
    * Onhit Self Ramp 1: increases attack damage by 1 after successful attacks
-* Savant: 6/4/4/25
+* Savant: 6/4/4/2/25
    * Onhit Splash 1: deals 1 damage to all enemies adjacent to attack target after attacking
 Artificer
-* Tincan: 11/2/1/6
-* Golem: 16/2/1/14
+* Tincan: 11/2/1/2/6
+* Golem: 16/2/1/2/14
    * Passive Armor 2: reduces all damage taken by 2
-* Kitboy: 6/2/2/10
+* Kitboy: 6/2/2/2/10
    * Endturn Area 1 Heal 1: at the end of turn, heal all allies within 1 range for 1 HP
-* Artillery: 8/4/4/25
+* Artillery: 8/4/4/2/25
    * Endturn Random Strike 2/6: at the end of turn, additionally deal 2 damage to a random enemy within 6 range
 Purifier
-* Penitent: 5/1/1/5
+* Penitent: 5/1/1/2/5
    * Wounded Self Ramp 1: gain 1 attack damage after taking damage
-* Priest: 3/1/3/10
+* Priest: 3/1/3/2/10
    * Endturn Random Heal 3: at the end of turn, heal random ally in range for 3
-* Avenger: 20/3/1/12
+* Avenger: 20/3/1/2/12
    * Lament 1 Self Ramp 1: for every ally in range 1 that dies, gain 1 attack damage
-* Herald: 6/1/4/25
+* Herald: 6/1/4/2/25
    * Charge 3 Endturn Summon 2 Blades: Every 3 turns summons 2 Blades
-      * Blade: 1/2/1/1 unit, created adjacent to its summoner exhausted
+      * Blade: 1/2/1/2/1 unit, created adjacent to its summoner exhausted

@@ -207,6 +207,7 @@ class Unit:
         abilities=None,
         armor=0,
         speed=1.0,
+        actions=2,
         *,
         unit_id,
         display_name=None,
@@ -222,6 +223,8 @@ class Unit:
         self.abilities = abilities or []
         self.armor = armor
         self.speed = speed
+        self.actions = actions
+        self._actions_remaining = actions
         self._ramp_accumulated = 0  # Tracks all damage gained (ramp, lament aura, etc.)
         self._frozen_turns = 0
         self._ability_counters = {}
@@ -307,6 +310,7 @@ class Battle:
                 "_frozen_turns": u._frozen_turns,
                 "_ability_counters": dict(u._ability_counters),
                 "armor": u.armor,
+                "_actions_remaining": u._actions_remaining,
             }
             unit_states[u.id] = state
         snapshot = BattleSnapshot(
@@ -350,6 +354,7 @@ class Battle:
             u._frozen_turns = state.get("_frozen_turns", 0)
             u._ability_counters = dict(state.get("_ability_counters", {}))
             u.armor = state.get("armor", u.armor)
+            u._actions_remaining = state.get("_actions_remaining", u.actions)
         self.turn_order = [
             id_to_unit[uid] for uid in snapshot.turn_ids if uid in id_to_unit
         ]
@@ -655,6 +660,7 @@ class Battle:
         abilities = spec.get("abilities", [])
         armor = spec.get("armor", 0)
         speed = spec.get("speed", 1.0)
+        actions = spec.get("actions", 2)
         for _ in range(count):
             unit = Unit(
                 name,
@@ -665,6 +671,7 @@ class Battle:
                 abilities=abilities,
                 armor=armor,
                 speed=speed,
+                actions=actions,
                 unit_id=self._next_unit_id(),
                 display_name=display_name,
             )
@@ -722,12 +729,16 @@ class Battle:
         self._prev_round_state = snap
 
         alive = [u for u in self.units if u.alive]
-        self.rng.shuffle(alive)
-        self.turn_order = alive
+        entries = []
+        for u in alive:
+            entries.extend([u] * u.actions)
+        self.rng.shuffle(entries)
+        self.turn_order = entries
         self.current_index = 0
         self.round_num += 1
         for u in alive:
             u.has_acted = False
+            u._actions_remaining = u.actions
             u._block_used = 0  # Reset block counter each round
         self.log.append(f"--- Round {self.round_num} ---")
 
@@ -955,8 +966,11 @@ class Battle:
             # Apply deep freeze damage if upgrade is active
             if deep_freeze_damage > 0:
                 self._queue_event(
-                    EVENT_STRIKE, unit, enemy, deep_freeze_damage,
-                    {"source_pos": unit.pos}
+                    EVENT_STRIKE,
+                    unit,
+                    enemy,
+                    deep_freeze_damage,
+                    {"source_pos": unit.pos},
                 )
 
     def _apply_summon(self, unit, count, ability):
@@ -991,6 +1005,7 @@ class Battle:
                 1,
                 unit.player,
                 abilities=[],
+                actions=2,
                 unit_id=self._next_unit_id(),
             )
             blade.pos = pos
@@ -1245,14 +1260,15 @@ class Battle:
             self.log.append("Player 1 wins!")
             return False
 
-        # advance to next living unit
+        # advance to next living unit with actions remaining
         while self.current_index < len(self.turn_order):
             unit = self.turn_order[self.current_index]
-            if not unit.alive:
+            if not unit.alive or unit._actions_remaining <= 0:
                 self.current_index += 1
                 continue
             if unit._frozen_turns > 0:
                 unit._frozen_turns -= 1
+                unit._actions_remaining = 0
                 unit.has_acted = True
                 self.log.append(f"{unit} is frozen and skips a turn")
                 self.current_index += 1
@@ -1314,11 +1330,12 @@ class Battle:
         # End-of-turn abilities
         self._trigger_abilities(unit, "endturn", {"target": None})
 
-        # Check if ready was triggered (allows acting again)
+        unit._actions_remaining -= 1
+        # Check if ready was triggered (grants an extra action)
         if unit._ready_triggered:
             unit._ready_triggered = False
-            # Don't mark as acted, allowing another turn this round
-        else:
+            unit._actions_remaining += 1
+        if unit._actions_remaining <= 0:
             unit.has_acted = True
         self.current_index += 1
         return True
