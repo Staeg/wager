@@ -488,9 +488,3 @@ Units are positioned by range tier:
 
 P1 deploys in columns 0-5 (front at col 5, back at col 0)
 P2 deploys in columns 11-16 (front at col 11, back at col 16)
-
----
-
-## Known Issues
-
-- Abolisher onkill self-heal not triggering in actual gameplay (isolated tests pass) - see commit 9e4374a

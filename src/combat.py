@@ -1279,8 +1279,11 @@ class Battle:
             return self.step()
 
         unit._attacked_this_turn = False
-        # Start-of-turn abilities
-        self._trigger_abilities(unit, "turnstart", {"target": None})
+        # Start-of-turn abilities (first action only)
+        if unit._actions_remaining == unit.actions:
+            self._trigger_abilities(unit, "turnstart", {"target": None})
+        # Pre-action abilities (every action)
+        self._trigger_abilities(unit, "preaction", {"target": None})
         enemies = [u for u in self.units if u.alive and u.player != unit.player]
         if not enemies:
             self.winner = unit.player
@@ -1327,10 +1330,14 @@ class Battle:
             else:
                 self.last_action = {"type": "move", "from": old, "to": moved_to}
 
-        # End-of-turn abilities
-        self._trigger_abilities(unit, "endturn", {"target": None})
+        # Post-action abilities (every action)
+        self._trigger_abilities(unit, "postaction", {"target": None})
 
         unit._actions_remaining -= 1
+
+        # End-of-turn abilities only fire on the unit's last action
+        if unit._actions_remaining <= 0:
+            self._trigger_abilities(unit, "endturn", {"target": None})
         # Check if ready was triggered (grants an extra action)
         if unit._ready_triggered:
             unit._ready_triggered = False

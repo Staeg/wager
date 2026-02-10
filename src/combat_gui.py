@@ -67,6 +67,8 @@ def describe_ability(ability):
     if charge:
         if trigger in ("endturn", "turnstart"):
             prefix = f"Every {charge} turns, "
+        elif trigger in ("preaction", "postaction"):
+            prefix = f"Every {charge} actions, "
         elif trigger == "onhit":
             prefix = f"Every {charge} hits, "
         elif trigger == "onkill":
@@ -84,6 +86,10 @@ def describe_ability(ability):
             prefix = "At end of turn, "
         elif trigger == "turnstart":
             prefix = "At start of turn, "
+        elif trigger == "preaction":
+            prefix = "Before each action, "
+        elif trigger == "postaction":
+            prefix = "After each action, "
         elif trigger == "onhit":
             prefix = "After attacking, "
         elif trigger == "onkill":
